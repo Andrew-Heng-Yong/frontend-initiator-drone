@@ -1,0 +1,14 @@
+:root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #08111f; color: #edf5ff; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: radial-gradient(circle at 18% 0%, #19365b, transparent 42rem), #08111f; }
+main { width: min(100% - 2rem, 62rem); margin: 0 auto; padding: 3rem 0 4rem; }
+header, .viewer-heading, .controls { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+h1, h2, p { margin: 0; } h1 { font-size: clamp(2rem, 6vw, 3.4rem); letter-spacing: -.06em; } h2 { font-size: 1.15rem; }.eyebrow { color: #8da4c3; font-size: .72rem; letter-spacing: .13em; text-transform: uppercase; margin-bottom: .4rem; }
+.status { display: flex; align-items: center; gap: .5rem; color: #aebdd2; font-weight: 700; }.status span:first-child { width: .65rem; height: .65rem; border-radius: 50%; background: #66758b; }.status span.running { background: #38d996; box-shadow: 0 0 1rem #38d996; }
+.controls { margin: 2.4rem 0; justify-content: flex-start; flex-wrap: wrap; }.controls p { color: #9fb0c9; flex: 1; min-width: 14rem; }
+button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; font: inherit; font-weight: 750; cursor: pointer; }.start { background: #148560; }.stop { background: #bd3544; }button:disabled { opacity: .43; cursor: not-allowed; }
+.viewer, .log-panel { background: rgba(11, 26, 46, .78); border: 1px solid #264463; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 1.5rem 4rem rgba(0,0,0,.22); }.viewer-heading { align-items: flex-start; }.viewer-heading #range { color: #f9ce62; font-variant-numeric: tabular-nums; font-weight: 700; }
+canvas { display: block; image-rendering: pixelated; width: 100%; max-width: 48rem; aspect-ratio: 4 / 3; margin: 1.3rem auto .7rem; background: #111d2d; border-radius: .45rem; }
+.legend { display: flex; align-items: center; justify-content: center; gap: .65rem; font-size: .75rem; color: #8da4c3; }.legend div { height: .55rem; width: 10rem; border-radius: 1rem; background: linear-gradient(90deg, #141c41, #2568b7, #25c297, #fbbf24, #dc2626); }
+#empty-state { color: #9fb0c9; text-align: center; margin-top: 1rem; }.log-panel { margin-top: 1.25rem; }.log-panel h2 { margin-bottom: .7rem; }pre { max-height: 12rem; overflow: auto; white-space: pre-wrap; color: #aabbd1; font: .78rem/1.45 ui-monospace, Consolas, monospace; margin: 0; }
+@media (max-width: 560px) { main { width: min(100% - 1.25rem, 62rem); padding-top: 1.7rem; } header { align-items: flex-start; }.status { margin-top: .5rem; }.controls p { order: 3; flex-basis: 100%; } }

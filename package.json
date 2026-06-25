@@ -1,0 +1,12 @@
+{
+  "name": "thermal-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Start, stop, and view the ROS 2 MLX90640 thermal node.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
