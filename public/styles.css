@@ -29,5 +29,5 @@ canvas { display: block; image-rendering: pixelated; width: 100%; max-width: 36r
 .log-header { display: flex; justify-content: space-between; align-items: center; }
 .log-header .clear { background: transparent; border: 1px solid #2e445a; color: #aabbd1; padding: .45rem .7rem; border-radius: .5rem; cursor: pointer; font-weight: 700; }
 .log-header .clear:hover { border-color: #496b86; }
-pre { height: 100%; overflow: auto; white-space: pre-wrap; color: #aabbd1; font: .78rem/1.45 ui-monospace, Consolas, monospace; margin: 0; padding: .6rem; border-radius: .5rem; background: rgba(3,12,20,.2); }
+pre { height: 100%; overflow: auto; white-space: pre; word-break: normal; color: #aabbd1; font: .78rem/1.45 ui-monospace, Consolas, monospace; margin: 0; padding: .6rem; border-radius: .5rem; background: rgba(3,12,20,.2); }
 @media (max-width: 560px) { main { width: min(100% - 1.25rem, 62rem); padding-top: 1.7rem; } header { align-items: flex-start; }.status { margin-top: .5rem; }.controls p { order: 3; flex-basis: 100%; } }
