@@ -13,8 +13,6 @@ const logs = document.querySelector('#logs');
 const cpuCores = document.querySelector('#cpu-cores');
 let rosSocket;
 const clearButton = document.querySelector('#clear-logs');
-let logsCleared = false;
-let lastLogCount = 0;
 
 function setRunning(running) {
   statusText.textContent = running ? 'Running' : 'Stopped';
@@ -126,18 +124,7 @@ async function refresh() {
     setRunning(state.running);
     renderCpu(state.cpu);
     const serverLogs = state.logs || [];
-    if (!logsCleared) {
-      logs.textContent = serverLogs.join('\n') || 'No launch output yet.';
-      lastLogCount = serverLogs.length;
-    } else {
-      // keep cleared until new log lines appear; when they do, show only the new lines
-      if (serverLogs.length > lastLogCount) {
-        const newLines = serverLogs.slice(lastLogCount).join('\n');
-        logs.textContent = newLines;
-        logsCleared = false;
-        lastLogCount = serverLogs.length;
-      }
-    }
+    logs.textContent = serverLogs.join('\n') || 'No launch output yet.';
     logs.scrollTop = logs.scrollHeight;
     if (state.running) connectRosbridge();
   } catch (_) { connection.textContent = 'Dashboard service unavailable.'; }
@@ -159,11 +146,13 @@ refresh();
 setInterval(refresh, 2000);
 
 if (clearButton) {
-  clearButton.addEventListener('click', () => {
-    logs.textContent = '';
-    logsCleared = true;
-    // lastLogCount remains the server's current log count so we can detect new lines
-    // lastLogCount is updated by refresh; leaving it unchanged here ensures cleared state persists
-    logs.scrollTop = 0;
+  clearButton.addEventListener('click', async () => {
+    try {
+      await request('/api/logs/clear');
+      logs.textContent = 'No launch output yet.';
+      logs.scrollTop = 0;
+    } catch (error) {
+      connection.textContent = error.message;
+    }
   });
 }

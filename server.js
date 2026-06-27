@@ -62,6 +62,11 @@ function state() {
   return { running: launchProcess !== null, logs, cpu: cpuLoads() };
 }
 
+function clearLogs() {
+  logs = [];
+  return { ok: true };
+}
+
 function startLaunch() {
   if (launchProcess) return { ok: true, alreadyRunning: true };
 
@@ -116,6 +121,7 @@ const server = http.createServer((request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/state') return sendJson(response, 200, state());
     if (request.method === 'POST' && url.pathname === '/api/start') return sendJson(response, 200, startLaunch());
     if (request.method === 'POST' && url.pathname === '/api/stop') return sendJson(response, 200, stopLaunch());
+    if (request.method === 'POST' && url.pathname === '/api/logs/clear') return sendJson(response, 200, clearLogs());
 
     const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
     const filePath = path.resolve(__dirname, 'public', file);
