@@ -9,7 +9,7 @@ const { spawn } = require('node:child_process');
 
 const PORT = Number(process.env.PORT || 4173);
 const ROS_WORKSPACE = path.resolve(process.env.ROS2_WORKSPACE || path.join(__dirname, '..', 'ros2-initiator-drone'));
-const ROS_DISTRO = process.env.ROS_DISTRO || 'humble';
+const ROS_DISTRO = process.env.ROS_DISTRO || 'jazzy';
 const MAX_LOG_LINES = 160;
 
 let launchProcess = null;
@@ -30,9 +30,11 @@ function startLaunch() {
   const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
   const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
   const command = [
+    `if [ ! -f "${setupFile}" ]; then echo "Missing ROS setup file: ${setupFile}"; exit 1; fi`,
     `source "${setupFile}"`,
-    `[ -f "${installSetup}" ] && source "${installSetup}"`,
-    'ros2 launch mlx90640_node drone_launch.py',
+    `if [ ! -f "${installSetup}" ]; then echo "Missing workspace setup file: ${installSetup}. Run colcon build first."; exit 1; fi`,
+    `source "${installSetup}"`,
+    'ros2 launch drone_control drone_launch.py start_rosbridge:=true',
   ].join(' && ');
 
   launchProcess = spawn('bash', ['-lc', command], {
@@ -40,7 +42,8 @@ function startLaunch() {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  addLog(`Starting thermal launch (PID ${launchProcess.pid}).`);
+  addLog(`Starting thermal launch with rosbridge (PID ${launchProcess.pid}).`);
+  addLog(`ROS distro: ${ROS_DISTRO}; workspace: ${ROS_WORKSPACE}`);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.on('error', (error) => addLog(`Launch error: ${error.message}`));
