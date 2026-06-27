@@ -10,6 +10,8 @@ const emptyState = document.querySelector('#empty-state');
 const logs = document.querySelector('#logs');
 const cpuCores = document.querySelector('#cpu-cores');
 let rosSocket;
+const clearButton = document.querySelector('#clear-logs');
+let logsSuppressedUntil = 0;
 
 function setRunning(running) {
   statusText.textContent = running ? 'Running' : 'Stopped';
@@ -106,7 +108,9 @@ async function refresh() {
     const state = await response.json();
     setRunning(state.running);
     renderCpu(state.cpu);
-    logs.textContent = state.logs.join('\n') || 'No launch output yet.';
+    if (Date.now() >= logsSuppressedUntil) {
+      logs.textContent = state.logs.join('\n') || 'No launch output yet.';
+    }
     logs.scrollTop = logs.scrollHeight;
     if (state.running) connectRosbridge();
   } catch (_) { connection.textContent = 'Dashboard service unavailable.'; }
@@ -116,3 +120,11 @@ startButton.addEventListener('click', async () => { try { await request('/api/st
 stopButton.addEventListener('click', async () => { try { await request('/api/stop'); await refresh(); } catch (error) { connection.textContent = error.message; } });
 refresh();
 setInterval(refresh, 2000);
+
+if (clearButton) {
+  clearButton.addEventListener('click', () => {
+    logs.textContent = '';
+    logsSuppressedUntil = Date.now() + 5000;
+    logs.scrollTop = 0;
+  });
+}

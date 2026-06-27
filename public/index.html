@@ -9,9 +9,10 @@
   <body>
     <main>
       <header>
-        <div><p class="eyebrow">ROS 2 / MLX90640</p><h1>Thermal node</h1></div>
+        <div class="header-left"></div>
         <div class="status"><span id="status-dot"></span><span id="status-text">Stopped</span></div>
       </header>
+      <div class="content">
       <section class="controls" aria-label="Thermal node controls">
         <button id="start-button" class="start">Start node</button>
         <button id="stop-button" class="stop" disabled>Stop node</button>
@@ -27,7 +28,11 @@
         <div class="legend"><span>cool</span><div></div><span>hot</span></div>
         <p id="empty-state">Start the node to receive frames.</p>
       </section>
-      <section class="log-panel"><h2>Launch output</h2><pre id="logs">No launch output yet.</pre></section>
+      </div>
+      <section class="log-panel">
+        <div class="log-header"><h2>Launch output</h2><button id="clear-logs" class="clear">Clear</button></div>
+        <pre id="logs">No launch output yet.</pre>
+      </section>
     </main>
     <script src="/app.js"></script>
   </body>
