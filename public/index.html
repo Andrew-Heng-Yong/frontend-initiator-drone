@@ -21,15 +21,11 @@
         <button id="start-button" class="start" style="display:none">Start node</button>
         <button id="stop-button" class="stop" disabled style="display:none">Stop node</button>
       </section>
-      <section class="cpu-panel" aria-labelledby="cpu-heading">
-        <div class="viewer-heading"><div><p class="eyebrow">raspberry pi</p><h2 id="cpu-heading">CPU core load</h2></div></div>
-        <div id="cpu-cores" class="cpu-cores" aria-live="polite"></div>
-      </section>
+      <!-- Large CPU panel removed; compact CPU shown in header -->
       <section class="viewer" aria-labelledby="thermal-heading">
         <div class="viewer-heading"><div><p class="eyebrow">thermal/image_raw</p><h2 id="thermal-heading">Live thermal image</h2></div><div id="range">--</div></div>
         <canvas id="thermal-canvas" width="32" height="24" aria-label="Thermal image from MLX90640"></canvas>
         <div class="legend"><span>cool</span><div></div><span>hot</span></div>
-        <p id="empty-state">Start the node to receive frames.</p>
       </section>
       </div>
       <section class="log-panel">

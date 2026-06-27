@@ -69,7 +69,7 @@ function drawFrame(image) {
   });
   context.putImageData(pixels, 0, 0);
   range.textContent = `${low.toFixed(1)}–${high.toFixed(1)} °C`;
-  emptyState.hidden = true;
+  if (typeof emptyState !== 'undefined' && emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
 function heatColor(value) {
@@ -81,11 +81,12 @@ function heatColor(value) {
 
 function renderCpu(cores) {
   if (!cores || !cores.length) {
-    cpuCores.innerHTML = '<p class="cpu-empty">CPU data unavailable.</p>';
+    if (cpuCores) cpuCores.innerHTML = '<p class="cpu-empty">CPU data unavailable.</p>';
     if (cpuMini) cpuMini.innerHTML = '';
     return;
   }
-  cpuCores.replaceChildren(...cores.map(({ core, load }) => {
+  if (cpuCores) {
+    cpuCores.replaceChildren(...cores.map(({ core, load }) => {
     const row = document.createElement('div');
     row.className = 'cpu-core';
 
@@ -103,7 +104,8 @@ function renderCpu(cores) {
 
     row.append(label, meter, value);
     return row;
-  }));
+    }));
+  }
   // render compact mini cpu display (first 4 cores or aggregate)
   if (cpuMini) {
     const items = cores.slice(0, 4).map(({ core, load }) => {
