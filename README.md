@@ -7,9 +7,8 @@ This is a single-page dashboard for the `mlx90640_node` ROS 2 package. It starts
 Build the workspace and install rosbridge once:
 
 ```bash
-cd ../ros2-initiator-drone
+cd /ros2-initiator-drone
 source /opt/ros/jazzy/setup.bash
-sudo apt install ros-jazzy-rosbridge-server
 colcon build --packages-up-to drone_control
 
 cd ../frontend-initiator-drone

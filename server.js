@@ -14,14 +14,52 @@ const MAX_LOG_LINES = 160;
 
 let launchProcess = null;
 let logs = [];
+let previousCpuStats = null;
 
 function addLog(message) {
   logs.push(`[${new Date().toLocaleTimeString()}] ${message}`);
   logs = logs.slice(-MAX_LOG_LINES);
 }
 
+function readCpuStats() {
+  try {
+    return fs.readFileSync('/proc/stat', 'utf8')
+      .split('\n')
+      .filter((line) => /^cpu\d+\s/.test(line))
+      .map((line) => {
+        const [name, ...values] = line.trim().split(/\s+/);
+        const numbers = values.map(Number);
+        const idle = numbers[3] + (numbers[4] || 0);
+        const total = numbers.reduce((sum, value) => sum + value, 0);
+        return { name, idle, total };
+      });
+  } catch (_) {
+    return [];
+  }
+}
+
+function cpuLoads() {
+  const current = readCpuStats();
+  if (!current.length) return [];
+
+  if (!previousCpuStats || previousCpuStats.length !== current.length) {
+    previousCpuStats = current;
+    return current.map((core) => ({ core: core.name, load: 0 }));
+  }
+
+  const loads = current.map((core, index) => {
+    const previous = previousCpuStats[index];
+    const totalDelta = core.total - previous.total;
+    const idleDelta = core.idle - previous.idle;
+    const load = totalDelta > 0 ? Math.round(((totalDelta - idleDelta) / totalDelta) * 100) : 0;
+    return { core: core.name, load: Math.max(0, Math.min(100, load)) };
+  });
+  previousCpuStats = current;
+  return loads;
+}
+
 function state() {
-  return { running: launchProcess !== null, logs };
+  return { running: launchProcess !== null, logs, cpu: cpuLoads() };
 }
 
 function startLaunch() {

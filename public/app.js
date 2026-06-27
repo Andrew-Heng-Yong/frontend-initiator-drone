@@ -8,6 +8,7 @@ const context = canvas.getContext('2d');
 const range = document.querySelector('#range');
 const emptyState = document.querySelector('#empty-state');
 const logs = document.querySelector('#logs');
+const cpuCores = document.querySelector('#cpu-cores');
 let rosSocket;
 
 function setRunning(running) {
@@ -73,11 +74,38 @@ function heatColor(value) {
   return start.map((component, index) => Math.round(component + (end[index] - component) * mix));
 }
 
+function renderCpu(cores) {
+  if (!cores || !cores.length) {
+    cpuCores.innerHTML = '<p class="cpu-empty">CPU data unavailable.</p>';
+    return;
+  }
+  cpuCores.replaceChildren(...cores.map(({ core, load }) => {
+    const row = document.createElement('div');
+    row.className = 'cpu-core';
+
+    const label = document.createElement('span');
+    label.textContent = core;
+
+    const meter = document.createElement('div');
+    meter.className = 'cpu-meter';
+    const fill = document.createElement('div');
+    fill.style.width = `${load}%`;
+    meter.append(fill);
+
+    const value = document.createElement('strong');
+    value.textContent = String(load);
+
+    row.append(label, meter, value);
+    return row;
+  }));
+}
+
 async function refresh() {
   try {
     const response = await fetch('/api/state');
     const state = await response.json();
     setRunning(state.running);
+    renderCpu(state.cpu);
     logs.textContent = state.logs.join('\n') || 'No launch output yet.';
     logs.scrollTop = logs.scrollHeight;
     if (state.running) connectRosbridge();
