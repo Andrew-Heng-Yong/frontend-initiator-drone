@@ -13,6 +13,8 @@ const logs = document.querySelector('#logs');
 const cpuCores = document.querySelector('#cpu-cores');
 let rosSocket;
 const clearButton = document.querySelector('#clear-logs');
+const logPanel = document.querySelector('.log-panel');
+const logResizeHandle = document.querySelector('#log-resize-handle');
 
 function setRunning(running) {
   statusText.textContent = running ? 'Running' : 'Stopped';
@@ -78,10 +80,16 @@ function heatColor(value) {
   return start.map((component, index) => Math.round(component + (end[index] - component) * mix));
 }
 
-function renderCpu(cores) {
+function coreLabel(core) {
+  return core.replace(/^cpu/i, 'c');
+}
+
+function renderCpu(cores, temperature) {
   if (!cores || !cores.length) {
     if (cpuCores) cpuCores.innerHTML = '<p class="cpu-empty">CPU data unavailable.</p>';
-    if (cpuMini) cpuMini.innerHTML = '';
+    if (cpuMini) {
+      cpuMini.textContent = temperature == null ? '' : `temp: ${temperature}`;
+    }
     return;
   }
   if (cpuCores) {
@@ -110,9 +118,15 @@ function renderCpu(cores) {
     const items = cores.slice(0, 4).map(({ core, load }) => {
       const el = document.createElement('div');
       el.className = 'mini-core';
-      el.textContent = `${core}: ${Math.round(load)}%`;
+      el.textContent = `${coreLabel(core)}: ${Math.round(load)}`;
       return el;
     });
+    if (temperature != null) {
+      const temp = document.createElement('div');
+      temp.className = 'mini-core cpu-temp';
+      temp.textContent = `temp: ${temperature}`;
+      items.unshift(temp);
+    }
     cpuMini.replaceChildren(...items);
   }
 }
@@ -122,7 +136,7 @@ async function refresh() {
     const response = await fetch('/api/state');
     const state = await response.json();
     setRunning(state.running);
-    renderCpu(state.cpu);
+    renderCpu(state.cpu, state.cpuTemp);
     const serverLogs = state.logs || [];
     logs.textContent = serverLogs.join('\n') || 'No launch output yet.';
     logs.scrollTop = logs.scrollHeight;
@@ -154,5 +168,32 @@ if (clearButton) {
     } catch (error) {
       connection.textContent = error.message;
     }
+  });
+}
+
+if (logPanel && logResizeHandle) {
+  logResizeHandle.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    logResizeHandle.setPointerCapture(event.pointerId);
+
+    const startY = event.clientY;
+    const startHeight = logPanel.getBoundingClientRect().height;
+    const minHeight = 96;
+    const maxHeight = Math.round(window.innerHeight * 0.8);
+
+    function resizeLog(moveEvent) {
+      const nextHeight = Math.max(minHeight, Math.min(maxHeight, startHeight + startY - moveEvent.clientY));
+      logPanel.style.height = `${nextHeight}px`;
+    }
+
+    function stopResize() {
+      logResizeHandle.removeEventListener('pointermove', resizeLog);
+      logResizeHandle.removeEventListener('pointerup', stopResize);
+      logResizeHandle.removeEventListener('pointercancel', stopResize);
+    }
+
+    logResizeHandle.addEventListener('pointermove', resizeLog);
+    logResizeHandle.addEventListener('pointerup', stopResize);
+    logResizeHandle.addEventListener('pointercancel', stopResize);
   });
 }

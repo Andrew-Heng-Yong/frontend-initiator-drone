@@ -58,8 +58,27 @@ function cpuLoads() {
   return loads;
 }
 
+function cpuTemperature() {
+  const thermalPaths = [
+    '/sys/class/thermal/thermal_zone0/temp',
+    '/sys/class/hwmon/hwmon0/temp1_input',
+  ];
+
+  for (const thermalPath of thermalPaths) {
+    try {
+      const raw = fs.readFileSync(thermalPath, 'utf8').trim();
+      const value = Number(raw);
+      if (Number.isFinite(value)) return Math.round(value / 1000);
+    } catch (_) {
+      // Try the next common Linux thermal sensor path.
+    }
+  }
+
+  return null;
+}
+
 function state() {
-  return { running: launchProcess !== null, logs, cpu: cpuLoads() };
+  return { running: launchProcess !== null, logs, cpu: cpuLoads(), cpuTemp: cpuTemperature() };
 }
 
 function clearLogs() {
