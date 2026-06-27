@@ -3,6 +3,8 @@ const stopButton = document.querySelector('#stop-button');
 const statusDot = document.querySelector('#status-dot');
 const statusText = document.querySelector('#status-text');
 const connection = document.querySelector('#connection');
+const startToggle = document.querySelector('#start-toggle');
+const cpuMini = document.querySelector('#cpu-mini');
 const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
 const range = document.querySelector('#range');
@@ -19,6 +21,7 @@ function setRunning(running) {
   startButton.disabled = running;
   stopButton.disabled = !running;
   if (!running) closeRosbridge();
+  if (startToggle) startToggle.textContent = running ? 'Stop node' : 'Start node';
 }
 
 async function request(path) {
@@ -79,6 +82,7 @@ function heatColor(value) {
 function renderCpu(cores) {
   if (!cores || !cores.length) {
     cpuCores.innerHTML = '<p class="cpu-empty">CPU data unavailable.</p>';
+    if (cpuMini) cpuMini.innerHTML = '';
     return;
   }
   cpuCores.replaceChildren(...cores.map(({ core, load }) => {
@@ -100,6 +104,16 @@ function renderCpu(cores) {
     row.append(label, meter, value);
     return row;
   }));
+  // render compact mini cpu display (first 4 cores or aggregate)
+  if (cpuMini) {
+    const items = cores.slice(0, 4).map(({ core, load }) => {
+      const el = document.createElement('div');
+      el.className = 'mini-core';
+      el.textContent = `${core}: ${Math.round(load)}%`;
+      return el;
+    });
+    cpuMini.replaceChildren(...items);
+  }
 }
 
 async function refresh() {
@@ -114,6 +128,16 @@ async function refresh() {
     logs.scrollTop = logs.scrollHeight;
     if (state.running) connectRosbridge();
   } catch (_) { connection.textContent = 'Dashboard service unavailable.'; }
+}
+
+if (startToggle) {
+  startToggle.addEventListener('click', async () => {
+    try {
+      const running = statusDot.classList.contains('running');
+      if (running) await request('/api/stop'); else await request('/api/start');
+      await refresh();
+    } catch (error) { connection.textContent = error.message; }
+  });
 }
 
 startButton.addEventListener('click', async () => { try { await request('/api/start'); await refresh(); } catch (error) { connection.textContent = error.message; } });
