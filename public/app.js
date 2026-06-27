@@ -13,7 +13,8 @@ const logs = document.querySelector('#logs');
 const cpuCores = document.querySelector('#cpu-cores');
 let rosSocket;
 const clearButton = document.querySelector('#clear-logs');
-let logsSuppressedUntil = 0;
+let logsCleared = false;
+let lastLogCount = 0;
 
 function setRunning(running) {
   statusText.textContent = running ? 'Running' : 'Stopped';
@@ -124,8 +125,18 @@ async function refresh() {
     const state = await response.json();
     setRunning(state.running);
     renderCpu(state.cpu);
-    if (Date.now() >= logsSuppressedUntil) {
-      logs.textContent = state.logs.join('\n') || 'No launch output yet.';
+    const serverLogs = state.logs || [];
+    if (!logsCleared) {
+      logs.textContent = serverLogs.join('\n') || 'No launch output yet.';
+      lastLogCount = serverLogs.length;
+    } else {
+      // keep cleared until new log lines appear; when they do, show only the new lines
+      if (serverLogs.length > lastLogCount) {
+        const newLines = serverLogs.slice(lastLogCount).join('\n');
+        logs.textContent = newLines;
+        logsCleared = false;
+        lastLogCount = serverLogs.length;
+      }
     }
     logs.scrollTop = logs.scrollHeight;
     if (state.running) connectRosbridge();
@@ -150,7 +161,9 @@ setInterval(refresh, 2000);
 if (clearButton) {
   clearButton.addEventListener('click', () => {
     logs.textContent = '';
-    logsSuppressedUntil = Date.now() + 5000;
+    logsCleared = true;
+    // lastLogCount remains the server's current log count so we can detect new lines
+    // lastLogCount is updated by refresh; leaving it unchanged here ensures cleared state persists
     logs.scrollTop = 0;
   });
 }

@@ -25,9 +25,9 @@ button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; f
 canvas { display: block; image-rendering: pixelated; width: 100%; max-width: 36rem; aspect-ratio: 4 / 3; margin: 1.3rem auto .7rem; background: #111d2d; border-radius: .45rem; }
 .legend { display: flex; align-items: center; justify-content: center; gap: .65rem; font-size: .75rem; color: #8da4c3; }.legend div { height: .55rem; width: 10rem; border-radius: 1rem; background: linear-gradient(90deg, #141c41, #2568b7, #25c297, #fbbf24, #dc2626); }
 #empty-state { color: #9fb0c9; text-align: center; margin-top: 1rem; }
-.log-panel { margin-top: 1rem; flex: 0 0 14rem; display: flex; flex-direction: column; gap: .5rem; }
+.log-panel { margin-top: 1rem; height: 14rem; display: flex; flex-direction: column; gap: .5rem; resize: vertical; min-height: 6rem; max-height: 60vh; }
 .log-header { display: flex; justify-content: space-between; align-items: center; }
 .log-header .clear { background: transparent; border: 1px solid #2e445a; color: #aabbd1; padding: .45rem .7rem; border-radius: .5rem; cursor: pointer; font-weight: 700; }
 .log-header .clear:hover { border-color: #496b86; }
-pre { flex: 1; overflow: auto; white-space: pre-wrap; color: #aabbd1; font: .78rem/1.45 ui-monospace, Consolas, monospace; margin: 0; padding: .6rem; border-radius: .5rem; background: rgba(3,12,20,.2); }
+pre { height: 100%; overflow: auto; white-space: pre-wrap; color: #aabbd1; font: .78rem/1.45 ui-monospace, Consolas, monospace; margin: 0; padding: .6rem; border-radius: .5rem; background: rgba(3,12,20,.2); }
 @media (max-width: 560px) { main { width: min(100% - 1.25rem, 62rem); padding-top: 1.7rem; } header { align-items: flex-start; }.status { margin-top: .5rem; }.controls p { order: 3; flex-basis: 100%; } }
