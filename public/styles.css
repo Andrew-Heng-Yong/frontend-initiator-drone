@@ -30,8 +30,7 @@ button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; f
 .cpu-mini { display:flex; gap:.5rem; align-items:center; justify-content:center; min-width:10rem; margin-left: auto; }
 .cpu-mini .mini-core { color:#8da4c3; font-size:.7rem; background: rgba(2,10,18,.3); padding:.2rem .4rem; border-radius:.35rem; border:1px solid rgba(46,68,90,.3); }
 .cpu-mini .cpu-temp { color: #f9ce62; border-color: rgba(249, 206, 98, .32); }
-canvas { display: block; image-rendering: auto; width: 100%; max-width: 56rem; aspect-ratio: 16 / 9; margin: 1.3rem auto .7rem; background: #111d2d; border-radius: .45rem; }
-.legend { display: flex; align-items: center; justify-content: center; gap: .65rem; font-size: .75rem; color: #8da4c3; }.legend div { height: .55rem; width: 10rem; border-radius: 1rem; background: linear-gradient(90deg, #141c41, #2568b7, #25c297, #fbbf24, #dc2626); }
+canvas { display: block; image-rendering: auto; width: 100%; max-width: 56rem; aspect-ratio: 16 / 9; margin: 1.3rem auto 0; background: #111d2d; border-radius: .45rem; }
 #empty-state { color: #9fb0c9; text-align: center; margin-top: 1rem; }
 .log-panel { width: 100vw; margin: 1rem 0 0 calc(50% - 50vw); height: 25vh; flex: 0 0 auto; display: flex; flex-direction: column; gap: .35rem; overflow: hidden; min-height: 6rem; max-height: 80vh; border-radius: 0; border-left: 0; border-right: 0; padding: 0 .75rem .6rem; }
 .log-resize-handle { height: .55rem; margin: 0 -.75rem .05rem; cursor: ns-resize; display: flex; align-items: center; justify-content: center; touch-action: none; }
@@ -39,6 +38,7 @@ canvas { display: block; image-rendering: auto; width: 100%; max-width: 56rem; a
 .log-resize-handle:hover::before { background: #6f8aa9; }
 .log-header { display: flex; justify-content: space-between; align-items: center; }
 .log-header h2 { font-size: .92rem; line-height: 1.15; }
+.log-actions { display: flex; align-items: center; gap: .4rem; }
 .log-header .clear { background: transparent; border: 1px solid #2e445a; color: #aabbd1; padding: .28rem .48rem; border-radius: .4rem; cursor: pointer; font-size: .78rem; line-height: 1.1; font-weight: 700; }
 .log-header .clear:hover { border-color: #496b86; }
 pre { flex: 1 1 auto; min-height: 0; overflow: auto; white-space: pre; word-break: normal; color: #aabbd1; font: .72rem/1.35 ui-monospace, Consolas, monospace; margin: 0; padding: .4rem .5rem; border-radius: .4rem; background: rgba(3,12,20,.2); }

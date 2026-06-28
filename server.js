@@ -129,12 +129,20 @@ function applyOverlayAlpha(alpha) {
     let stderr = '';
     child.stdout.on('data', (data) => { stdout += data.toString(); });
     child.stderr.on('data', (data) => { stderr += data.toString(); });
-    child.on('error', reject);
+    child.on('error', (error) => {
+      addLog(`Overlay alpha not applied yet: ${error.message}`);
+      resolve({ ok: true, applied: false, overlayAlpha });
+    });
     child.on('exit', (code) => {
       const output = `${stdout}${stderr}`.trim();
-      if (output) addLog(`Overlay alpha: ${output}`);
-      if (code === 0) resolve({ ok: true, applied: true, overlayAlpha });
-      else reject(new Error(output || `ros2 param set exited with code ${code}`));
+      if (code === 0) {
+        if (output) addLog(`Overlay alpha: ${output}`);
+        resolve({ ok: true, applied: true, overlayAlpha });
+        return;
+      }
+
+      addLog(`Overlay alpha not applied yet: ${output || `ros2 param set exited with code ${code}`}`);
+      resolve({ ok: true, applied: false, overlayAlpha });
     });
   });
 }

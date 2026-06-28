@@ -35,12 +35,17 @@
           </div>
         </div>
         <canvas id="thermal-canvas" width="32" height="24" aria-label="Thermal image from MLX90640"></canvas>
-        <div class="legend"><span>cool</span><div></div><span>hot</span></div>
       </section>
       </div>
       <section class="log-panel">
         <div id="log-resize-handle" class="log-resize-handle" title="Drag to resize launch output"></div>
-        <div class="log-header"><h2>Launch output</h2><button id="clear-logs" class="clear">Clear</button></div>
+        <div class="log-header">
+          <h2>Launch output</h2>
+          <div class="log-actions">
+            <button id="copy-logs" class="clear">Copy</button>
+            <button id="clear-logs" class="clear">Clear</button>
+          </div>
+        </div>
         <pre id="logs">No launch output yet.</pre>
       </section>
     </main>

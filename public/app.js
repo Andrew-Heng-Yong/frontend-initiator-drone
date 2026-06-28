@@ -12,6 +12,7 @@ const emptyState = document.querySelector('#empty-state');
 const logs = document.querySelector('#logs');
 const cpuCores = document.querySelector('#cpu-cores');
 const clearButton = document.querySelector('#clear-logs');
+const copyButton = document.querySelector('#copy-logs');
 const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
 const overlayAlphaInput = document.querySelector('#overlay-alpha');
@@ -217,6 +218,24 @@ function setOverlayAlphaUi(alpha) {
   overlayAlphaValue.textContent = String(percent);
 }
 
+async function copyLogsToClipboard() {
+  const text = logs.textContent || '';
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.setAttribute('readonly', '');
+  textArea.style.position = 'fixed';
+  textArea.style.opacity = '0';
+  document.body.append(textArea);
+  textArea.select();
+  document.execCommand('copy');
+  textArea.remove();
+}
+
 async function refresh() {
   try {
     const response = await fetch('/api/state');
@@ -274,6 +293,19 @@ if (clearButton) {
       logs.scrollTop = 0;
     } catch (error) {
       connection.textContent = error.message;
+    }
+  });
+}
+
+if (copyButton) {
+  copyButton.addEventListener('click', async () => {
+    const originalText = copyButton.textContent;
+    try {
+      await copyLogsToClipboard();
+      copyButton.textContent = 'Copied';
+      setTimeout(() => { copyButton.textContent = originalText; }, 1200);
+    } catch (error) {
+      connection.textContent = `Copy failed: ${error.message}`;
     }
   });
 }
