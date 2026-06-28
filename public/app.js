@@ -11,10 +11,14 @@ const range = document.querySelector('#range');
 const emptyState = document.querySelector('#empty-state');
 const logs = document.querySelector('#logs');
 const cpuCores = document.querySelector('#cpu-cores');
-let rosSocket;
 const clearButton = document.querySelector('#clear-logs');
 const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
+const overlayAlphaInput = document.querySelector('#overlay-alpha');
+const overlayAlphaValue = document.querySelector('#overlay-alpha-value');
+
+let rosSocket;
+let overlayAlphaTimer;
 
 function setRunning(running) {
   statusText.textContent = running ? 'Running' : 'Stopped';
@@ -25,14 +29,21 @@ function setRunning(running) {
   if (startToggle) startToggle.textContent = running ? 'Stop node' : 'Start node';
 }
 
-async function request(path) {
-  const response = await fetch(path, { method: 'POST' });
+async function request(path, body) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
   if (!response.ok) throw new Error((await response.json()).error || 'Request failed');
   return response.json();
 }
 
 function closeRosbridge() {
-  if (rosSocket) { rosSocket.close(); rosSocket = null; }
+  if (rosSocket) {
+    rosSocket.close();
+    rosSocket = null;
+  }
   connection.textContent = 'Thermal stream disconnected.';
 }
 
@@ -40,16 +51,25 @@ function connectRosbridge() {
   if (rosSocket || !statusDot.classList.contains('running')) return;
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   rosSocket = new WebSocket(`${protocol}://${location.hostname}:9090`);
-  connection.textContent = 'Connecting to thermal stream…';
+  connection.textContent = 'Connecting to camera overlay...';
   rosSocket.onopen = () => {
-    connection.textContent = 'Receiving thermal/image_raw';
-    rosSocket.send(JSON.stringify({ op: 'subscribe', topic: '/thermal/image_raw', type: 'sensor_msgs/msg/Image', compression: 'none' }));
+    connection.textContent = 'Receiving camera/thermal_overlay/image_raw';
+    rosSocket.send(JSON.stringify({
+      op: 'subscribe',
+      topic: '/camera/thermal_overlay/image_raw',
+      type: 'sensor_msgs/msg/Image',
+      compression: 'none',
+    }));
   };
   rosSocket.onmessage = (event) => {
     const message = JSON.parse(event.data);
-    if (message.op === 'publish' && message.topic === '/thermal/image_raw') drawFrame(message.msg);
+    if (message.op === 'publish' && message.topic === '/camera/thermal_overlay/image_raw') {
+      drawFrame(message.msg);
+    }
   };
-  rosSocket.onerror = () => { connection.textContent = 'Waiting for rosbridge on port 9090…'; };
+  rosSocket.onerror = () => {
+    connection.textContent = 'Waiting for rosbridge on port 9090...';
+  };
   rosSocket.onclose = () => {
     rosSocket = null;
     if (statusDot.classList.contains('running')) setTimeout(connectRosbridge, 1500);
@@ -57,26 +77,86 @@ function connectRosbridge() {
 }
 
 function drawFrame(image) {
+  if (['rgb8', 'bgr8', 'rgba8', 'bgra8', 'mono8'].includes(image.encoding)) {
+    drawCameraFrame(image);
+    return;
+  }
+  drawThermalFrame(image);
+}
+
+function drawCameraFrame(image) {
+  const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
+  const width = image.width;
+  const height = image.height;
+  const output = context.createImageData(width, height);
+  const channels = image.encoding === 'mono8' ? 1 : image.encoding.endsWith('a8') ? 4 : 3;
+  const step = image.step || width * channels;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const source = y * step + x * channels;
+      const target = (y * width + x) * 4;
+      if (image.encoding === 'mono8') {
+        const value = bytes[source];
+        output.data[target] = value;
+        output.data[target + 1] = value;
+        output.data[target + 2] = value;
+      } else if (image.encoding === 'bgr8' || image.encoding === 'bgra8') {
+        output.data[target] = bytes[source + 2];
+        output.data[target + 1] = bytes[source + 1];
+        output.data[target + 2] = bytes[source];
+      } else {
+        output.data[target] = bytes[source];
+        output.data[target + 1] = bytes[source + 1];
+        output.data[target + 2] = bytes[source + 2];
+      }
+      output.data[target + 3] = 255;
+    }
+  }
+
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  context.putImageData(output, 0, 0);
+  range.textContent = `${width}x${height}`;
+  if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
+}
+
+function drawThermalFrame(image) {
   const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
   const temperatures = new Float32Array(bytes.buffer);
   const values = [...temperatures].filter(Number.isFinite);
   if (!values.length) return;
-  const low = Math.min(...values), high = Math.max(...values), span = Math.max(high - low, 0.5);
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  const span = Math.max(high - low, 0.5);
   const pixels = context.createImageData(32, 24);
+
   temperatures.forEach((temperature, index) => {
     const [red, green, blue] = heatColor((temperature - low) / span);
     const offset = index * 4;
-    pixels.data[offset] = red; pixels.data[offset + 1] = green; pixels.data[offset + 2] = blue; pixels.data[offset + 3] = 255;
+    pixels.data[offset] = red;
+    pixels.data[offset + 1] = green;
+    pixels.data[offset + 2] = blue;
+    pixels.data[offset + 3] = 255;
   });
+
+  if (canvas.width !== 32 || canvas.height !== 24) {
+    canvas.width = 32;
+    canvas.height = 24;
+  }
   context.putImageData(pixels, 0, 0);
-  range.textContent = `${low.toFixed(1)}–${high.toFixed(1)} °C`;
-  if (typeof emptyState !== 'undefined' && emptyState && 'hidden' in emptyState) emptyState.hidden = true;
+  range.textContent = `${low.toFixed(1)}-${high.toFixed(1)} C`;
+  if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
 function heatColor(value) {
   const stops = [[20, 28, 65], [37, 104, 183], [37, 194, 151], [251, 191, 36], [220, 38, 38]];
   const position = Math.max(0, Math.min(0.999, value)) * (stops.length - 1);
-  const start = stops[Math.floor(position)], end = stops[Math.ceil(position)], mix = position % 1;
+  const start = stops[Math.floor(position)];
+  const end = stops[Math.ceil(position)];
+  const mix = position % 1;
   return start.map((component, index) => Math.round(component + (end[index] - component) * mix));
 }
 
@@ -87,33 +167,32 @@ function coreLabel(core) {
 function renderCpu(cores, temperature) {
   if (!cores || !cores.length) {
     if (cpuCores) cpuCores.innerHTML = '<p class="cpu-empty">CPU data unavailable.</p>';
-    if (cpuMini) {
-      cpuMini.textContent = temperature == null ? '' : `temp: ${temperature}`;
-    }
+    if (cpuMini) cpuMini.textContent = temperature == null ? '' : `temp: ${temperature}`;
     return;
   }
+
   if (cpuCores) {
     cpuCores.replaceChildren(...cores.map(({ core, load }) => {
-    const row = document.createElement('div');
-    row.className = 'cpu-core';
+      const row = document.createElement('div');
+      row.className = 'cpu-core';
 
-    const label = document.createElement('span');
-    label.textContent = core;
+      const label = document.createElement('span');
+      label.textContent = core;
 
-    const meter = document.createElement('div');
-    meter.className = 'cpu-meter';
-    const fill = document.createElement('div');
-    fill.style.width = `${load}%`;
-    meter.append(fill);
+      const meter = document.createElement('div');
+      meter.className = 'cpu-meter';
+      const fill = document.createElement('div');
+      fill.style.width = `${load}%`;
+      meter.append(fill);
 
-    const value = document.createElement('strong');
-    value.textContent = String(load);
+      const value = document.createElement('strong');
+      value.textContent = String(load);
 
-    row.append(label, meter, value);
-    return row;
+      row.append(label, meter, value);
+      return row;
     }));
   }
-  // render compact mini cpu display (first 4 cores or aggregate)
+
   if (cpuMini) {
     const items = cores.slice(0, 4).map(({ core, load }) => {
       const el = document.createElement('div');
@@ -131,33 +210,61 @@ function renderCpu(cores, temperature) {
   }
 }
 
+function setOverlayAlphaUi(alpha) {
+  if (!overlayAlphaInput || !overlayAlphaValue) return;
+  const percent = Math.round(alpha * 100);
+  overlayAlphaInput.value = String(percent);
+  overlayAlphaValue.textContent = String(percent);
+}
+
 async function refresh() {
   try {
     const response = await fetch('/api/state');
     const state = await response.json();
     setRunning(state.running);
     renderCpu(state.cpu, state.cpuTemp);
+    if (typeof state.overlayAlpha === 'number' && document.activeElement !== overlayAlphaInput) {
+      setOverlayAlphaUi(state.overlayAlpha);
+    }
     const serverLogs = state.logs || [];
     logs.textContent = serverLogs.join('\n') || 'No launch output yet.';
     logs.scrollTop = logs.scrollHeight;
     if (state.running) connectRosbridge();
-  } catch (_) { connection.textContent = 'Dashboard service unavailable.'; }
+  } catch (_) {
+    connection.textContent = 'Dashboard service unavailable.';
+  }
 }
 
 if (startToggle) {
   startToggle.addEventListener('click', async () => {
     try {
       const running = statusDot.classList.contains('running');
-      if (running) await request('/api/stop'); else await request('/api/start');
+      if (running) await request('/api/stop');
+      else await request('/api/start');
       await refresh();
-    } catch (error) { connection.textContent = error.message; }
+    } catch (error) {
+      connection.textContent = error.message;
+    }
   });
 }
 
-startButton.addEventListener('click', async () => { try { await request('/api/start'); await refresh(); } catch (error) { connection.textContent = error.message; } });
-stopButton.addEventListener('click', async () => { try { await request('/api/stop'); await refresh(); } catch (error) { connection.textContent = error.message; } });
-refresh();
-setInterval(refresh, 2000);
+startButton.addEventListener('click', async () => {
+  try {
+    await request('/api/start');
+    await refresh();
+  } catch (error) {
+    connection.textContent = error.message;
+  }
+});
+
+stopButton.addEventListener('click', async () => {
+  try {
+    await request('/api/stop');
+    await refresh();
+  } catch (error) {
+    connection.textContent = error.message;
+  }
+});
 
 if (clearButton) {
   clearButton.addEventListener('click', async () => {
@@ -168,6 +275,21 @@ if (clearButton) {
     } catch (error) {
       connection.textContent = error.message;
     }
+  });
+}
+
+if (overlayAlphaInput) {
+  overlayAlphaInput.addEventListener('input', () => {
+    const alpha = Number(overlayAlphaInput.value) / 100;
+    if (overlayAlphaValue) overlayAlphaValue.textContent = overlayAlphaInput.value;
+    clearTimeout(overlayAlphaTimer);
+    overlayAlphaTimer = setTimeout(async () => {
+      try {
+        await request('/api/overlay-alpha', { alpha });
+      } catch (error) {
+        connection.textContent = error.message;
+      }
+    }, 150);
   });
 }
 
@@ -197,3 +319,6 @@ if (logPanel && logResizeHandle) {
     logResizeHandle.addEventListener('pointercancel', stopResize);
   });
 }
+
+refresh();
+setInterval(refresh, 2000);
