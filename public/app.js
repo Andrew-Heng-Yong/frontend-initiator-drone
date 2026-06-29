@@ -31,7 +31,6 @@ let overlayAlpha = 0.45;
 let latestThermal = null;
 let latestColor = null;
 let drawScheduled = false;
-let rgbFallbackTimer = null;
 let cameraFrameToken = 0;
 let subscribedTopics = new Set();
 
@@ -63,7 +62,6 @@ function closeRosbridge() {
   latestColor = null;
   latestThermal = null;
   subscribedTopics = new Set();
-  clearTimeout(rgbFallbackTimer);
   connection.textContent = 'Camera stream disconnected.';
 }
 
@@ -75,43 +73,20 @@ function connectRosbridge() {
   rosSocket.onopen = () => {
     connection.textContent = `Waiting for RGB frames: ${imageTopics.color}`;
     subscribeImageTopic(imageTopics.color);
-    clearTimeout(rgbFallbackTimer);
-    rgbFallbackTimer = setTimeout(() => {
-      if (activeImageTopic !== imageTopics.color && rosSocket) {
-        subscribeImageTopic(imageTopics.thermal);
-        connection.textContent = `Waiting for RGB; fallback armed: ${imageTopics.thermal}`;
-      }
-    }, 7000);
   };
   rosSocket.onmessage = (event) => {
     const message = JSON.parse(event.data);
     if (message.op !== 'publish') return;
 
     if (message.topic === imageTopics.color) {
-      clearTimeout(rgbFallbackTimer);
       latestColor = message.msg;
       scheduleDraw();
-      subscribeImageTopic(imageTopics.thermal);
       return;
     }
 
     if (message.topic === imageTopics.thermal) {
       updateThermalFrame(message.msg);
       if (activeImageTopic === imageTopics.color) scheduleDraw();
-    }
-
-    if (message.topic === imageTopics.thermal && activeImageTopic !== imageTopics.color) {
-      if (activeImageTopic !== imageTopics.thermal) {
-        activeImageTopic = imageTopics.thermal;
-        connection.textContent = `Receiving fallback ${imageTopics.thermal}`;
-        clearTimeout(rgbFallbackTimer);
-        rgbFallbackTimer = setTimeout(() => {
-          if (activeImageTopic === imageTopics.thermal) {
-            connection.textContent = `Waiting for RGB; showing fallback ${imageTopics.thermal}`;
-          }
-        }, 2500);
-      }
-      drawThermalFrame();
     }
   };
   rosSocket.onerror = () => {
@@ -206,6 +181,7 @@ async function drawCameraFrame(image) {
   range.textContent = `${width}x${height}`;
   activeImageTopic = imageTopics.color;
   connection.textContent = `Receiving RGB with thermal overlay: ${imageTopics.color}`;
+  subscribeImageTopic(imageTopics.thermal);
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
@@ -239,6 +215,7 @@ async function drawCompressedCameraFrame(image) {
   range.textContent = `${width}x${height}`;
   activeImageTopic = imageTopics.color;
   connection.textContent = `Receiving RGB with thermal overlay: ${imageTopics.color}`;
+  subscribeImageTopic(imageTopics.thermal);
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
@@ -257,32 +234,6 @@ function updateThermalFrame(image) {
     low,
     high,
   };
-}
-
-function drawThermalFrame() {
-  if (!latestThermal) return;
-  const { temperatures, width, height, low, high } = latestThermal;
-  const span = Math.max(high - low, 0.5);
-  const pixels = context.createImageData(width, height);
-
-  temperatures.forEach((temperature, index) => {
-    const [red, green, blue] = heatColor((temperature - low) / span);
-    const offset = index * 4;
-    pixels.data[offset] = red;
-    pixels.data[offset + 1] = green;
-    pixels.data[offset + 2] = blue;
-    pixels.data[offset + 3] = 255;
-  });
-
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-  }
-  canvas.dataset.stream = 'thermal';
-  context.imageSmoothingEnabled = false;
-  context.putImageData(pixels, 0, 0);
-  range.textContent = `${low.toFixed(1)}-${high.toFixed(1)} C`;
-  if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
 function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {

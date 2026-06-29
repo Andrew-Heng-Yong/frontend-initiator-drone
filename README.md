@@ -1,6 +1,6 @@
 # Thermal dashboard
 
-This is a single-page dashboard for the drone camera stack. It starts and stops the drone launch file, starts rosbridge for the browser stream, then renders `/camera/color/image_raw` as the window and blends `/thermal/image_raw` into the center using the MLX90640 55 x 35 degree field of view. If the Orbbec camera setup is missing, it falls back to a crisp `/thermal/image_raw` MLX90640 view.
+This is a single-page dashboard for the drone camera stack. It starts and stops the drone launch file, starts rosbridge for the browser stream, then renders `/camera/color/image_raw` as the window and blends `/thermal/image_raw` into the center using the MLX90640 55 x 35 degree field of view. The Orbbec RGB camera is required; the dashboard does not start thermal-only mode.
 
 ## Run on the ROS 2 machine
 
@@ -21,7 +21,7 @@ Open `http://<robot-ip>:4173`. The Start button sources ROS 2, sources the built
 ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_thermal_overlay:=false
 ```
 
-If the Orbbec setup is missing, the server logs that and launches thermal-only mode instead.
+If the Orbbec setup is missing, the server logs the missing setup path and exits instead of launching thermal-only mode.
 
 Stop sends SIGINT to the launch process and all of its ROS nodes.
 
@@ -36,7 +36,7 @@ colcon build --packages-up-to drone_control
 source install/setup.bash
 ```
 
-If the dashboard connects but no image appears, check the launch output. A healthy RGB overlay launch should include `component_container`, `mlx90640_node`, and `rosbridge_websocket`. A thermal fallback launch includes only `mlx90640_node` and `rosbridge_websocket`. If the launch package is missing new arguments, rebuild and source the ROS workspace on the Pi:
+If the dashboard connects but no image appears, check the launch output. A healthy RGB overlay launch should include `component_container`, `mlx90640_node`, and `rosbridge_websocket`. If the launch package is missing new arguments, rebuild and source the ROS workspace on the Pi:
 
 ```bash
 cd ~/ros2-initiator-drone
