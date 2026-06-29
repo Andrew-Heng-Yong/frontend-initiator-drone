@@ -29,6 +29,9 @@ let activeImageTopic = null;
 let overlayAlphaTimer;
 let overlayAlpha = 0.45;
 let latestThermal = null;
+let latestColor = null;
+let drawScheduled = false;
+let rgbFallbackTimer = null;
 
 function setRunning(running) {
   statusText.textContent = running ? 'Running' : 'Stopped';
@@ -79,24 +82,33 @@ function connectRosbridge() {
     if (message.op !== 'publish') return;
 
     if (message.topic === imageTopics.color) {
+      clearTimeout(rgbFallbackTimer);
       if (activeImageTopic !== imageTopics.color) {
         activeImageTopic = imageTopics.color;
         connection.textContent = `Receiving RGB with thermal overlay: ${imageTopics.color}`;
       }
-      drawCameraFrame(message.msg);
+      latestColor = message.msg;
+      scheduleDraw();
       return;
     }
 
     if (message.topic === imageTopics.thermal) {
       updateThermalFrame(message.msg);
+      if (activeImageTopic === imageTopics.color) scheduleDraw();
     }
 
     if (message.topic === imageTopics.thermal && activeImageTopic !== imageTopics.color) {
       if (activeImageTopic !== imageTopics.thermal) {
         activeImageTopic = imageTopics.thermal;
         connection.textContent = `Receiving fallback ${imageTopics.thermal}`;
+        clearTimeout(rgbFallbackTimer);
+        rgbFallbackTimer = setTimeout(() => {
+          if (activeImageTopic === imageTopics.thermal) {
+            connection.textContent = `Waiting for RGB; showing fallback ${imageTopics.thermal}`;
+          }
+        }, 2500);
       }
-      drawThermalFrame(message.msg);
+      drawThermalFrame();
     }
   };
   rosSocket.onerror = () => {
@@ -106,6 +118,15 @@ function connectRosbridge() {
     rosSocket = null;
     if (statusDot.classList.contains('running')) setTimeout(connectRosbridge, 1500);
   };
+}
+
+function scheduleDraw() {
+  if (drawScheduled) return;
+  drawScheduled = true;
+  requestAnimationFrame(() => {
+    drawScheduled = false;
+    if (latestColor) drawCameraFrame(latestColor);
+  });
 }
 
 function fovFraction(innerDegrees, outerDegrees) {
@@ -174,8 +195,7 @@ function updateThermalFrame(image) {
   };
 }
 
-function drawThermalFrame(image) {
-  updateThermalFrame(image);
+function drawThermalFrame() {
   if (!latestThermal) return;
   const { temperatures, width, height, low, high } = latestThermal;
   const span = Math.max(high - low, 0.5);
