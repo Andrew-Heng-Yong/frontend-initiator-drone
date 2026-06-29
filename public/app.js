@@ -278,7 +278,7 @@ function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
   for (let y = top; y < bottom; y += 1) {
     const thermalY = Math.max(0, Math.min(height - 1, Math.floor(((y - top) / Math.max(1, bottom - top)) * height)));
     for (let x = left; x < right; x += 1) {
-      const thermalX = Math.max(0, Math.min(width - 1, Math.floor(((x - left) / Math.max(1, right - left)) * width)));
+      const thermalX = width - 1 - Math.max(0, Math.min(width - 1, Math.floor(((x - left) / Math.max(1, right - left)) * width)));
       const temperature = temperatures[thermalY * width + thermalX];
       if (!Number.isFinite(temperature)) continue;
 
