@@ -33,6 +33,7 @@ let latestColor = null;
 let drawScheduled = false;
 let cameraFrameToken = 0;
 let subscribedTopics = new Set();
+const messageFragments = new Map();
 
 function setRunning(running) {
   statusText.textContent = running ? 'Running' : 'Stopped';
@@ -75,7 +76,8 @@ function connectRosbridge() {
     subscribeImageTopic(imageTopics.color);
   };
   rosSocket.onmessage = (event) => {
-    const message = JSON.parse(event.data);
+    const message = parseRosbridgeMessage(event.data);
+    if (!message) return;
     if (message.op !== 'publish') return;
 
     if (message.topic === imageTopics.color) {
@@ -106,8 +108,34 @@ function subscribeImageTopic(topic) {
     topic,
     type: 'sensor_msgs/msg/Image',
     compression: 'none',
+    fragment_size: 8000000,
   }));
   subscribedTopics.add(topic);
+}
+
+function parseRosbridgeMessage(data) {
+  const message = JSON.parse(data);
+  if (message.op !== 'fragment') return message;
+
+  const fragment = messageFragments.get(message.id) || {
+    parts: [],
+    received: 0,
+    total: message.total,
+  };
+
+  if (fragment.parts[message.num] == null) {
+    fragment.parts[message.num] = message.data;
+    fragment.received += 1;
+  }
+  fragment.total = message.total;
+
+  if (fragment.received < fragment.total) {
+    messageFragments.set(message.id, fragment);
+    return null;
+  }
+
+  messageFragments.delete(message.id);
+  return JSON.parse(fragment.parts.join(''));
 }
 
 function scheduleDraw() {
