@@ -15,6 +15,9 @@ header { justify-content: flex-start; }
 button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; font: inherit; font-weight: 750; cursor: pointer; }.start { background: #148560; }.stop { background: #bd3544; }button:disabled { opacity: .43; cursor: not-allowed; }
 .viewer, .cpu-panel, .log-panel { background: rgba(11, 26, 46, .78); border: 1px solid #264463; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 1.5rem 4rem rgba(0,0,0,.22); }.viewer-heading { align-items: flex-start; }.viewer-heading #range { color: #f9ce62; font-variant-numeric: tabular-nums; font-weight: 700; }
 .viewer-tools { display: flex; align-items: center; gap: .85rem; flex-wrap: wrap; justify-content: flex-end; }
+.overlay-alpha { display: flex; align-items: center; gap: .45rem; color: #aabbd1; font-size: .75rem; font-weight: 700; }
+.overlay-alpha input { width: 7.5rem; accent-color: #f9ce62; }
+.overlay-alpha output { min-width: 1.4rem; color: #f9ce62; font-variant-numeric: tabular-nums; text-align: right; }
 .cpu-panel { margin-bottom: 1.25rem; }
 .cpu-cores { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .5rem .6rem; margin-top: .6rem; }
 .cpu-core { display: grid; grid-template-columns: 2.2rem minmax(3rem, 1fr) 1.6rem; align-items: center; gap: .4rem; color: #b8c8dc; font-variant-numeric: tabular-nums; font-size: .85rem; }
@@ -28,6 +31,7 @@ button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; f
 .cpu-mini .mini-core { color:#8da4c3; font-size:.7rem; background: rgba(2,10,18,.3); padding:.2rem .4rem; border-radius:.35rem; border:1px solid rgba(46,68,90,.3); }
 .cpu-mini .cpu-temp { color: #f9ce62; border-color: rgba(249, 206, 98, .32); }
 canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; width: 100%; max-width: 56rem; aspect-ratio: 4 / 3; margin: 1.3rem auto 0; background: #111d2d; border-radius: .45rem; }
+canvas[data-stream="overlay"] { image-rendering: auto; aspect-ratio: 16 / 9; }
 #empty-state { color: #9fb0c9; text-align: center; margin-top: 1rem; }
 .log-panel { width: 100vw; margin: 1rem 0 0 calc(50% - 50vw); height: 25vh; flex: 0 0 auto; display: flex; flex-direction: column; gap: .35rem; overflow: hidden; min-height: 6rem; max-height: 80vh; border-radius: 0; border-left: 0; border-right: 0; padding: 0 .75rem .6rem; }
 .log-resize-handle { height: .55rem; margin: 0 -.75rem .05rem; cursor: ns-resize; display: flex; align-items: center; justify-content: center; touch-action: none; }
