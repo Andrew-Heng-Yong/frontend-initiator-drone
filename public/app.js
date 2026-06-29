@@ -17,9 +17,20 @@ const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
 const overlayAlphaInput = document.querySelector('#overlay-alpha');
 const overlayAlphaValue = document.querySelector('#overlay-alpha-value');
+const imageTopics = [
+  {
+    name: '/camera/thermal_overlay/image_raw',
+    label: 'camera overlay',
+  },
+  {
+    name: '/thermal/image_raw',
+    label: 'thermal fallback',
+  },
+];
 
 let rosSocket;
 let overlayAlphaTimer;
+let activeImageTopic = null;
 
 function setRunning(running) {
   statusText.textContent = running ? 'Running' : 'Stopped';
@@ -45,6 +56,7 @@ function closeRosbridge() {
     rosSocket.close();
     rosSocket = null;
   }
+  activeImageTopic = null;
   connection.textContent = 'Thermal stream disconnected.';
 }
 
@@ -52,19 +64,26 @@ function connectRosbridge() {
   if (rosSocket || !statusDot.classList.contains('running')) return;
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   rosSocket = new WebSocket(`${protocol}://${location.hostname}:9090`);
-  connection.textContent = 'Connecting to camera overlay...';
+  connection.textContent = 'Connecting to thermal stream...';
   rosSocket.onopen = () => {
-    connection.textContent = 'Receiving camera/thermal_overlay/image_raw';
-    rosSocket.send(JSON.stringify({
-      op: 'subscribe',
-      topic: '/camera/thermal_overlay/image_raw',
-      type: 'sensor_msgs/msg/Image',
-      compression: 'none',
-    }));
+    connection.textContent = 'Waiting for thermal frames...';
+    imageTopics.forEach((topic) => {
+      rosSocket.send(JSON.stringify({
+        op: 'subscribe',
+        topic: topic.name,
+        type: 'sensor_msgs/msg/Image',
+        compression: 'none',
+      }));
+    });
   };
   rosSocket.onmessage = (event) => {
     const message = JSON.parse(event.data);
-    if (message.op === 'publish' && message.topic === '/camera/thermal_overlay/image_raw') {
+    const topic = imageTopics.find((candidate) => candidate.name === message.topic);
+    if (message.op === 'publish' && topic) {
+      if (activeImageTopic !== topic.name) {
+        activeImageTopic = topic.name;
+        connection.textContent = `Receiving ${topic.label}: ${topic.name}`;
+      }
       drawFrame(message.msg);
     }
   };
