@@ -121,37 +121,7 @@ function readJson(request) {
 
 function applyOverlayAlpha(alpha) {
   overlayAlpha = alpha;
-  if (!launchProcess || !ENABLE_RGB_OVERLAY) return Promise.resolve({ ok: true, applied: false, overlayAlpha });
-
-  const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
-  const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
-  const command = [
-    `source "${setupFile}"`,
-    `source "${installSetup}"`,
-    `ros2 param set /thermal_overlay_node alpha ${alpha.toFixed(2)}`,
-  ].join(' && ');
-
-  return new Promise((resolve) => {
-    const child = spawn('bash', ['-lc', command], { cwd: ROS_WORKSPACE, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (data) => { stdout += data.toString(); });
-    child.stderr.on('data', (data) => { stderr += data.toString(); });
-    child.on('error', (error) => {
-      addLog(`Overlay alpha not applied yet: ${error.message}`);
-      resolve({ ok: true, applied: false, overlayAlpha });
-    });
-    child.on('exit', (code) => {
-      const output = `${stdout}${stderr}`.trim();
-      if (code === 0) {
-        if (output) addLog(`Overlay alpha: ${output}`);
-        resolve({ ok: true, applied: true, overlayAlpha });
-        return;
-      }
-      addLog(`Overlay alpha not applied yet: ${output || `ros2 param set exited with code ${code}`}`);
-      resolve({ ok: true, applied: false, overlayAlpha });
-    });
-  });
+  return Promise.resolve({ ok: true, applied: true, overlayAlpha });
 }
 
 async function setOverlayAlpha(request) {
@@ -168,11 +138,10 @@ function startLaunch() {
 
   const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
   const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
-  const overlayExecutable = path.join(ROS_WORKSPACE, 'install', 'mlx90640_node', 'lib', 'mlx90640_node', 'thermal_overlay_node');
-  const overlayLaunch = `ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_thermal_overlay:=true overlay_alpha:=${overlayAlpha.toFixed(2)}`;
+  const rgbLaunch = 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_thermal_overlay:=false';
   const thermalOnlyLaunch = 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=false start_thermal_overlay:=false';
   const launchCommand = ENABLE_RGB_OVERLAY
-    ? `if [ -x "${overlayExecutable}" ] && [ -f "${ORBBEC_SETUP}" ]; then ${overlayLaunch}; else echo "RGB overlay requested, but thermal_overlay_node or Orbbec setup is missing. Falling back to /thermal/image_raw. Rebuild with -DBUILD_THERMAL_OVERLAY=ON for RGB overlay."; ${thermalOnlyLaunch}; fi`
+    ? `if [ -f "${ORBBEC_SETUP}" ]; then ${rgbLaunch}; else echo "RGB overlay requested, but Orbbec setup is missing. Falling back to /thermal/image_raw."; ${thermalOnlyLaunch}; fi`
     : thermalOnlyLaunch;
   const command = [
     `if [ ! -f "${setupFile}" ]; then echo "Missing ROS setup file: ${setupFile}"; exit 1; fi`,

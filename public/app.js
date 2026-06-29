@@ -18,13 +18,17 @@ const logResizeHandle = document.querySelector('#log-resize-handle');
 const overlayAlphaInput = document.querySelector('#overlay-alpha');
 const overlayAlphaValue = document.querySelector('#overlay-alpha-value');
 const imageTopics = {
-  overlay: '/camera/thermal_overlay/image_raw',
+  color: '/camera/color/image_raw',
   thermal: '/thermal/image_raw',
 };
+const thermalFov = { horizontal: 55, vertical: 35 };
+const cameraFov = { horizontal: 67, vertical: 53.6 };
 
 let rosSocket;
 let activeImageTopic = null;
 let overlayAlphaTimer;
+let overlayAlpha = 0.45;
+let latestThermal = null;
 
 function setRunning(running) {
   statusText.textContent = running ? 'Running' : 'Stopped';
@@ -74,16 +78,20 @@ function connectRosbridge() {
     const message = JSON.parse(event.data);
     if (message.op !== 'publish') return;
 
-    if (message.topic === imageTopics.overlay) {
-      if (activeImageTopic !== imageTopics.overlay) {
-        activeImageTopic = imageTopics.overlay;
-        connection.textContent = `Receiving ${imageTopics.overlay}`;
+    if (message.topic === imageTopics.color) {
+      if (activeImageTopic !== imageTopics.color) {
+        activeImageTopic = imageTopics.color;
+        connection.textContent = `Receiving RGB with thermal overlay: ${imageTopics.color}`;
       }
       drawCameraFrame(message.msg);
       return;
     }
 
-    if (message.topic === imageTopics.thermal && activeImageTopic !== imageTopics.overlay) {
+    if (message.topic === imageTopics.thermal) {
+      updateThermalFrame(message.msg);
+    }
+
+    if (message.topic === imageTopics.thermal && activeImageTopic !== imageTopics.color) {
       if (activeImageTopic !== imageTopics.thermal) {
         activeImageTopic = imageTopics.thermal;
         connection.textContent = `Receiving fallback ${imageTopics.thermal}`;
@@ -98,6 +106,12 @@ function connectRosbridge() {
     rosSocket = null;
     if (statusDot.classList.contains('running')) setTimeout(connectRosbridge, 1500);
   };
+}
+
+function fovFraction(innerDegrees, outerDegrees) {
+  const inner = Math.tan((innerDegrees * Math.PI / 180) / 2);
+  const outer = Math.tan((outerDegrees * Math.PI / 180) / 2);
+  return outer > 0 ? Math.max(0, Math.min(1, inner / outer)) : 1;
 }
 
 function drawCameraFrame(image) {
@@ -130,6 +144,7 @@ function drawCameraFrame(image) {
       output.data[target + 3] = 255;
     }
   }
+  overlayThermalOnCamera(output, width, height);
 
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
@@ -142,7 +157,7 @@ function drawCameraFrame(image) {
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
-function drawThermalFrame(image) {
+function updateThermalFrame(image) {
   if (image.encoding !== '32FC1') return;
   const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
   const temperatures = new Float32Array(bytes.buffer);
@@ -150,8 +165,21 @@ function drawThermalFrame(image) {
   if (!values.length) return;
   const low = Math.min(...values);
   const high = Math.max(...values);
+  latestThermal = {
+    temperatures,
+    width: image.width || 32,
+    height: image.height || 24,
+    low,
+    high,
+  };
+}
+
+function drawThermalFrame(image) {
+  updateThermalFrame(image);
+  if (!latestThermal) return;
+  const { temperatures, width, height, low, high } = latestThermal;
   const span = Math.max(high - low, 0.5);
-  const pixels = context.createImageData(32, 24);
+  const pixels = context.createImageData(width, height);
 
   temperatures.forEach((temperature, index) => {
     const [red, green, blue] = heatColor((temperature - low) / span);
@@ -162,9 +190,9 @@ function drawThermalFrame(image) {
     pixels.data[offset + 3] = 255;
   });
 
-  if (canvas.width !== 32 || canvas.height !== 24) {
-    canvas.width = 32;
-    canvas.height = 24;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
   }
   canvas.dataset.stream = 'thermal';
   context.imageSmoothingEnabled = false;
@@ -173,9 +201,37 @@ function drawThermalFrame(image) {
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
+function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
+  if (!latestThermal) return;
+  const { temperatures, width, height, low, high } = latestThermal;
+  const span = Math.max(high - low, 0.5);
+  const overlayWidth = Math.max(width, Math.round(cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal)));
+  const overlayHeight = Math.max(height, Math.round(cameraHeight * fovFraction(thermalFov.vertical, cameraFov.vertical)));
+  const left = Math.max(0, Math.round((cameraWidth - overlayWidth) / 2));
+  const top = Math.max(0, Math.round((cameraHeight - overlayHeight) / 2));
+  const right = Math.min(cameraWidth, left + overlayWidth);
+  const bottom = Math.min(cameraHeight, top + overlayHeight);
+
+  for (let y = top; y < bottom; y += 1) {
+    const thermalY = Math.max(0, Math.min(height - 1, Math.floor(((y - top) / Math.max(1, bottom - top)) * height)));
+    for (let x = left; x < right; x += 1) {
+      const thermalX = Math.max(0, Math.min(width - 1, Math.floor(((x - left) / Math.max(1, right - left)) * width)));
+      const temperature = temperatures[thermalY * width + thermalX];
+      if (!Number.isFinite(temperature)) continue;
+
+      const [red, green, blue] = heatColor((temperature - low) / span);
+      const target = (y * cameraWidth + x) * 4;
+      output.data[target] = Math.round((1 - overlayAlpha) * output.data[target] + overlayAlpha * red);
+      output.data[target + 1] = Math.round((1 - overlayAlpha) * output.data[target + 1] + overlayAlpha * green);
+      output.data[target + 2] = Math.round((1 - overlayAlpha) * output.data[target + 2] + overlayAlpha * blue);
+    }
+  }
+}
+
 function setOverlayAlphaUi(alpha) {
   if (!overlayAlphaInput || !overlayAlphaValue) return;
   const percent = Math.round(alpha * 100);
+  overlayAlpha = percent / 100;
   overlayAlphaInput.value = String(percent);
   overlayAlphaValue.textContent = String(percent);
 }
@@ -333,12 +389,12 @@ if (copyButton) {
 
 if (overlayAlphaInput) {
   overlayAlphaInput.addEventListener('input', () => {
-    const alpha = Number(overlayAlphaInput.value) / 100;
+    overlayAlpha = Number(overlayAlphaInput.value) / 100;
     if (overlayAlphaValue) overlayAlphaValue.textContent = overlayAlphaInput.value;
     clearTimeout(overlayAlphaTimer);
     overlayAlphaTimer = setTimeout(async () => {
       try {
-        await request('/api/overlay-alpha', { alpha });
+        await request('/api/overlay-alpha', { alpha: overlayAlpha });
       } catch (error) {
         connection.textContent = error.message;
       }
