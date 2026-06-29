@@ -15,22 +15,10 @@ const clearButton = document.querySelector('#clear-logs');
 const copyButton = document.querySelector('#copy-logs');
 const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
-const overlayAlphaInput = document.querySelector('#overlay-alpha');
-const overlayAlphaValue = document.querySelector('#overlay-alpha-value');
-const imageTopics = [
-  {
-    name: '/camera/thermal_overlay/image_raw',
-    label: 'camera overlay',
-  },
-  {
-    name: '/thermal/image_raw',
-    label: 'thermal fallback',
-  },
-];
+const imageTopic = '/thermal/image_raw';
 
 let rosSocket;
-let overlayAlphaTimer;
-let activeImageTopic = null;
+let hasThermalFrame = false;
 
 function setRunning(running) {
   statusText.textContent = running ? 'Running' : 'Stopped';
@@ -56,7 +44,7 @@ function closeRosbridge() {
     rosSocket.close();
     rosSocket = null;
   }
-  activeImageTopic = null;
+  hasThermalFrame = false;
   connection.textContent = 'Thermal stream disconnected.';
 }
 
@@ -67,24 +55,21 @@ function connectRosbridge() {
   connection.textContent = 'Connecting to thermal stream...';
   rosSocket.onopen = () => {
     connection.textContent = 'Waiting for thermal frames...';
-    imageTopics.forEach((topic) => {
-      rosSocket.send(JSON.stringify({
-        op: 'subscribe',
-        topic: topic.name,
-        type: 'sensor_msgs/msg/Image',
-        compression: 'none',
-      }));
-    });
+    rosSocket.send(JSON.stringify({
+      op: 'subscribe',
+      topic: imageTopic,
+      type: 'sensor_msgs/msg/Image',
+      compression: 'none',
+    }));
   };
   rosSocket.onmessage = (event) => {
     const message = JSON.parse(event.data);
-    const topic = imageTopics.find((candidate) => candidate.name === message.topic);
-    if (message.op === 'publish' && topic) {
-      if (activeImageTopic !== topic.name) {
-        activeImageTopic = topic.name;
-        connection.textContent = `Receiving ${topic.label}: ${topic.name}`;
+    if (message.op === 'publish' && message.topic === imageTopic) {
+      if (!hasThermalFrame) {
+        hasThermalFrame = true;
+        connection.textContent = `Receiving ${imageTopic}`;
       }
-      drawFrame(message.msg);
+      drawThermalFrame(message.msg);
     }
   };
   rosSocket.onerror = () => {
@@ -96,54 +81,8 @@ function connectRosbridge() {
   };
 }
 
-function drawFrame(image) {
-  if (['rgb8', 'bgr8', 'rgba8', 'bgra8', 'mono8'].includes(image.encoding)) {
-    drawCameraFrame(image);
-    return;
-  }
-  drawThermalFrame(image);
-}
-
-function drawCameraFrame(image) {
-  const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
-  const width = image.width;
-  const height = image.height;
-  const output = context.createImageData(width, height);
-  const channels = image.encoding === 'mono8' ? 1 : image.encoding.endsWith('a8') ? 4 : 3;
-  const step = image.step || width * channels;
-
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const source = y * step + x * channels;
-      const target = (y * width + x) * 4;
-      if (image.encoding === 'mono8') {
-        const value = bytes[source];
-        output.data[target] = value;
-        output.data[target + 1] = value;
-        output.data[target + 2] = value;
-      } else if (image.encoding === 'bgr8' || image.encoding === 'bgra8') {
-        output.data[target] = bytes[source + 2];
-        output.data[target + 1] = bytes[source + 1];
-        output.data[target + 2] = bytes[source];
-      } else {
-        output.data[target] = bytes[source];
-        output.data[target + 1] = bytes[source + 1];
-        output.data[target + 2] = bytes[source + 2];
-      }
-      output.data[target + 3] = 255;
-    }
-  }
-
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-  }
-  context.putImageData(output, 0, 0);
-  range.textContent = `${width}x${height}`;
-  if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
-}
-
 function drawThermalFrame(image) {
+  if (image.encoding !== '32FC1') return;
   const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
   const temperatures = new Float32Array(bytes.buffer);
   const values = [...temperatures].filter(Number.isFinite);
@@ -166,6 +105,7 @@ function drawThermalFrame(image) {
     canvas.width = 32;
     canvas.height = 24;
   }
+  context.imageSmoothingEnabled = false;
   context.putImageData(pixels, 0, 0);
   range.textContent = `${low.toFixed(1)}-${high.toFixed(1)} C`;
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
@@ -230,13 +170,6 @@ function renderCpu(cores, temperature) {
   }
 }
 
-function setOverlayAlphaUi(alpha) {
-  if (!overlayAlphaInput || !overlayAlphaValue) return;
-  const percent = Math.round(alpha * 100);
-  overlayAlphaInput.value = String(percent);
-  overlayAlphaValue.textContent = String(percent);
-}
-
 async function copyLogsToClipboard() {
   const text = logs.textContent || '';
   if (navigator.clipboard && window.isSecureContext) {
@@ -261,9 +194,6 @@ async function refresh() {
     const state = await response.json();
     setRunning(state.running);
     renderCpu(state.cpu, state.cpuTemp);
-    if (typeof state.overlayAlpha === 'number' && document.activeElement !== overlayAlphaInput) {
-      setOverlayAlphaUi(state.overlayAlpha);
-    }
     const serverLogs = state.logs || [];
     logs.textContent = serverLogs.join('\n') || 'No launch output yet.';
     logs.scrollTop = logs.scrollHeight;
@@ -326,21 +256,6 @@ if (copyButton) {
     } catch (error) {
       connection.textContent = `Copy failed: ${error.message}`;
     }
-  });
-}
-
-if (overlayAlphaInput) {
-  overlayAlphaInput.addEventListener('input', () => {
-    const alpha = Number(overlayAlphaInput.value) / 100;
-    if (overlayAlphaValue) overlayAlphaValue.textContent = overlayAlphaInput.value;
-    clearTimeout(overlayAlphaTimer);
-    overlayAlphaTimer = setTimeout(async () => {
-      try {
-        await request('/api/overlay-alpha', { alpha });
-      } catch (error) {
-        connection.textContent = error.message;
-      }
-    }, 150);
   });
 }
 

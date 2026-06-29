@@ -10,14 +10,11 @@ const { spawn } = require('node:child_process');
 const PORT = Number(process.env.PORT || 4173);
 const ROS_WORKSPACE = path.resolve(process.env.ROS2_WORKSPACE || path.join(__dirname, '..', 'ros2-initiator-drone'));
 const ROS_DISTRO = process.env.ROS_DISTRO || 'jazzy';
-const ORBBEC_SETUP = process.env.ORBBEC_SETUP || path.join(process.env.HOME || '', 'orbbec_ws', 'install', 'setup.bash');
 const MAX_LOG_LINES = 160;
 
 let launchProcess = null;
 let logs = [];
 let previousCpuStats = null;
-let overlayAlpha = Number(process.env.THERMAL_OVERLAY_ALPHA || 0.45);
-if (!Number.isFinite(overlayAlpha) || overlayAlpha < 0 || overlayAlpha > 1) overlayAlpha = 0.45;
 
 function addLog(message) {
   logs.push(`[${new Date().toLocaleTimeString()}] ${message}`);
@@ -81,79 +78,12 @@ function cpuTemperature() {
 }
 
 function state() {
-  return { running: launchProcess !== null, logs, cpu: cpuLoads(), cpuTemp: cpuTemperature(), overlayAlpha };
+  return { running: launchProcess !== null, logs, cpu: cpuLoads(), cpuTemp: cpuTemperature() };
 }
 
 function clearLogs() {
   logs = [];
   return { ok: true };
-}
-
-function readJson(request) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    request.on('data', (chunk) => {
-      body += chunk;
-      if (body.length > 4096) {
-        request.destroy();
-        reject(new Error('Request body too large'));
-      }
-    });
-    request.on('end', () => {
-      if (!body.trim()) return resolve({});
-      try {
-        resolve(JSON.parse(body));
-      } catch (_) {
-        reject(new Error('Invalid JSON body'));
-      }
-    });
-    request.on('error', reject);
-  });
-}
-
-function applyOverlayAlpha(alpha) {
-  overlayAlpha = alpha;
-  if (!launchProcess) return Promise.resolve({ ok: true, applied: false, overlayAlpha });
-
-  const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
-  const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
-  const command = [
-    `source "${setupFile}"`,
-    `source "${installSetup}"`,
-    `ros2 param set /thermal_overlay_node alpha ${alpha.toFixed(2)}`,
-  ].join(' && ');
-
-  return new Promise((resolve, reject) => {
-    const child = spawn('bash', ['-lc', command], { cwd: ROS_WORKSPACE, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (data) => { stdout += data.toString(); });
-    child.stderr.on('data', (data) => { stderr += data.toString(); });
-    child.on('error', (error) => {
-      addLog(`Overlay alpha not applied yet: ${error.message}`);
-      resolve({ ok: true, applied: false, overlayAlpha });
-    });
-    child.on('exit', (code) => {
-      const output = `${stdout}${stderr}`.trim();
-      if (code === 0) {
-        if (output) addLog(`Overlay alpha: ${output}`);
-        resolve({ ok: true, applied: true, overlayAlpha });
-        return;
-      }
-
-      addLog(`Overlay alpha not applied yet: ${output || `ros2 param set exited with code ${code}`}`);
-      resolve({ ok: true, applied: false, overlayAlpha });
-    });
-  });
-}
-
-async function setOverlayAlpha(request) {
-  const body = await readJson(request);
-  const alpha = Number(body.alpha);
-  if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) {
-    throw new Error('alpha must be a number from 0.0 to 1.0');
-  }
-  return applyOverlayAlpha(alpha);
 }
 
 function startLaunch() {
@@ -164,10 +94,9 @@ function startLaunch() {
   const command = [
     `if [ ! -f "${setupFile}" ]; then echo "Missing ROS setup file: ${setupFile}"; exit 1; fi`,
     `source "${setupFile}"`,
-    `if [ -f "${ORBBEC_SETUP}" ]; then source "${ORBBEC_SETUP}"; fi`,
     `if [ ! -f "${installSetup}" ]; then echo "Missing workspace setup file: ${installSetup}. Run colcon build first."; exit 1; fi`,
     `source "${installSetup}"`,
-    `ros2 launch drone_control drone_launch.py start_rosbridge:=true overlay_alpha:=${overlayAlpha.toFixed(2)}`,
+    'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=false start_thermal_overlay:=false',
   ].join(' && ');
 
   launchProcess = spawn('bash', ['-lc', command], {
@@ -177,7 +106,6 @@ function startLaunch() {
   });
   addLog(`Starting thermal launch with rosbridge (PID ${launchProcess.pid}).`);
   addLog(`ROS distro: ${ROS_DISTRO}; workspace: ${ROS_WORKSPACE}`);
-  addLog(`Optional Orbbec setup: ${ORBBEC_SETUP}`);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.on('error', (error) => addLog(`Launch error: ${error.message}`));
@@ -213,7 +141,6 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/start') return sendJson(response, 200, startLaunch());
     if (request.method === 'POST' && url.pathname === '/api/stop') return sendJson(response, 200, stopLaunch());
     if (request.method === 'POST' && url.pathname === '/api/logs/clear') return sendJson(response, 200, clearLogs());
-    if (request.method === 'POST' && url.pathname === '/api/overlay-alpha') return sendJson(response, 200, await setOverlayAlpha(request));
 
     const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
     const filePath = path.resolve(__dirname, 'public', file);
