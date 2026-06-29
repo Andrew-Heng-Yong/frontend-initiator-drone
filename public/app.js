@@ -32,6 +32,8 @@ let latestThermal = null;
 let latestColor = null;
 let drawScheduled = false;
 let rgbFallbackTimer = null;
+let cameraFrameToken = 0;
+let subscribedTopics = new Set();
 
 function setRunning(running) {
   statusText.textContent = running ? 'Running' : 'Stopped';
@@ -58,24 +60,28 @@ function closeRosbridge() {
     rosSocket = null;
   }
   activeImageTopic = null;
-  connection.textContent = 'Thermal stream disconnected.';
+  latestColor = null;
+  latestThermal = null;
+  subscribedTopics = new Set();
+  clearTimeout(rgbFallbackTimer);
+  connection.textContent = 'Camera stream disconnected.';
 }
 
 function connectRosbridge() {
   if (rosSocket || !statusDot.classList.contains('running')) return;
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   rosSocket = new WebSocket(`${protocol}://${location.hostname}:9090`);
-  connection.textContent = 'Connecting to thermal stream...';
+  connection.textContent = 'Connecting to RGB camera stream...';
   rosSocket.onopen = () => {
-    connection.textContent = 'Waiting for thermal frames...';
-    Object.values(imageTopics).forEach((topic) => {
-      rosSocket.send(JSON.stringify({
-        op: 'subscribe',
-        topic,
-        type: 'sensor_msgs/msg/Image',
-        compression: 'none',
-      }));
-    });
+    connection.textContent = `Waiting for RGB frames: ${imageTopics.color}`;
+    subscribeImageTopic(imageTopics.color);
+    clearTimeout(rgbFallbackTimer);
+    rgbFallbackTimer = setTimeout(() => {
+      if (activeImageTopic !== imageTopics.color && rosSocket) {
+        subscribeImageTopic(imageTopics.thermal);
+        connection.textContent = `Waiting for RGB; fallback armed: ${imageTopics.thermal}`;
+      }
+    }, 7000);
   };
   rosSocket.onmessage = (event) => {
     const message = JSON.parse(event.data);
@@ -83,12 +89,9 @@ function connectRosbridge() {
 
     if (message.topic === imageTopics.color) {
       clearTimeout(rgbFallbackTimer);
-      if (activeImageTopic !== imageTopics.color) {
-        activeImageTopic = imageTopics.color;
-        connection.textContent = `Receiving RGB with thermal overlay: ${imageTopics.color}`;
-      }
       latestColor = message.msg;
       scheduleDraw();
+      subscribeImageTopic(imageTopics.thermal);
       return;
     }
 
@@ -120,12 +123,30 @@ function connectRosbridge() {
   };
 }
 
+function subscribeImageTopic(topic) {
+  if (!rosSocket || rosSocket.readyState !== WebSocket.OPEN) return;
+  if (subscribedTopics.has(topic)) return;
+  rosSocket.send(JSON.stringify({
+    op: 'subscribe',
+    topic,
+    type: 'sensor_msgs/msg/Image',
+    compression: 'none',
+  }));
+  subscribedTopics.add(topic);
+}
+
 function scheduleDraw() {
   if (drawScheduled) return;
   drawScheduled = true;
-  requestAnimationFrame(() => {
+  requestAnimationFrame(async () => {
     drawScheduled = false;
-    if (latestColor) drawCameraFrame(latestColor);
+    if (latestColor) {
+      try {
+        await drawCameraFrame(latestColor);
+      } catch (error) {
+        connection.textContent = `RGB decode failed: ${error.message}`;
+      }
+    }
   });
 }
 
@@ -135,25 +156,33 @@ function fovFraction(innerDegrees, outerDegrees) {
   return outer > 0 ? Math.max(0, Math.min(1, inner / outer)) : 1;
 }
 
-function drawCameraFrame(image) {
-  if (!['rgb8', 'bgr8', 'rgba8', 'bgra8', 'mono8'].includes(image.encoding)) return;
+async function drawCameraFrame(image) {
+  const encoding = String(image.encoding || '').toLowerCase();
+  if (['mjpeg', 'mjpg', 'jpeg', 'jpg'].includes(encoding)) {
+    await drawCompressedCameraFrame(image);
+    return;
+  }
+  if (!['rgb8', 'bgr8', 'rgba8', 'bgra8', 'mono8'].includes(encoding)) {
+    connection.textContent = `Unsupported RGB encoding: ${image.encoding || 'unknown'}`;
+    return;
+  }
   const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
   const width = image.width;
   const height = image.height;
   const output = context.createImageData(width, height);
-  const channels = image.encoding === 'mono8' ? 1 : image.encoding.endsWith('a8') ? 4 : 3;
+  const channels = encoding === 'mono8' ? 1 : encoding.endsWith('a8') ? 4 : 3;
   const step = image.step || width * channels;
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const source = y * step + x * channels;
       const target = (y * width + x) * 4;
-      if (image.encoding === 'mono8') {
+      if (encoding === 'mono8') {
         const value = bytes[source];
         output.data[target] = value;
         output.data[target + 1] = value;
         output.data[target + 2] = value;
-      } else if (image.encoding === 'bgr8' || image.encoding === 'bgra8') {
+      } else if (encoding === 'bgr8' || encoding === 'bgra8') {
         output.data[target] = bytes[source + 2];
         output.data[target + 1] = bytes[source + 1];
         output.data[target + 2] = bytes[source];
@@ -175,6 +204,41 @@ function drawCameraFrame(image) {
   context.imageSmoothingEnabled = true;
   context.putImageData(output, 0, 0);
   range.textContent = `${width}x${height}`;
+  activeImageTopic = imageTopics.color;
+  connection.textContent = `Receiving RGB with thermal overlay: ${imageTopics.color}`;
+  if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
+}
+
+async function drawCompressedCameraFrame(image) {
+  const token = cameraFrameToken + 1;
+  cameraFrameToken = token;
+  const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
+  const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }));
+  if (token !== cameraFrameToken) {
+    bitmap.close();
+    return;
+  }
+
+  const width = image.width || bitmap.width;
+  const height = image.height || bitmap.height;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  canvas.dataset.stream = 'overlay';
+  context.imageSmoothingEnabled = true;
+  context.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+
+  if (latestThermal) {
+    const output = context.getImageData(0, 0, width, height);
+    overlayThermalOnCamera(output, width, height);
+    context.putImageData(output, 0, 0);
+  }
+
+  range.textContent = `${width}x${height}`;
+  activeImageTopic = imageTopics.color;
+  connection.textContent = `Receiving RGB with thermal overlay: ${imageTopics.color}`;
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 

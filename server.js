@@ -157,7 +157,7 @@ function startLaunch() {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  addLog(`Starting thermal launch with rosbridge (PID ${launchProcess.pid}).`);
+  addLog(`Starting ${ENABLE_RGB_OVERLAY ? 'RGB overlay' : 'thermal-only'} launch with rosbridge (PID ${launchProcess.pid}).`);
   addLog(`ROS distro: ${ROS_DISTRO}; workspace: ${ROS_WORKSPACE}`);
   addLog(`RGB overlay: ${ENABLE_RGB_OVERLAY ? 'enabled' : 'disabled'}; Orbbec setup: ${ORBBEC_SETUP}`);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
