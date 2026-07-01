@@ -16,7 +16,7 @@ const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
 
 const imageTopic = '/human_pose/debug_image';
-const imageSubscription = { throttleRate: 120 };
+const imageSubscription = { throttleRate: 200 };
 
 let rosSocket;
 let latestFrame = null;
