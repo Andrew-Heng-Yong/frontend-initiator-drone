@@ -23,6 +23,11 @@ const imageTopics = {
 };
 const thermalFov = { horizontal: 55, vertical: 35 };
 const cameraFov = { horizontal: 67, vertical: 53.6 };
+const query = new URLSearchParams(location.search);
+const thermalXOffset = Number(query.get('thermal_x') || 24);
+const thermalAlignment = {
+  horizontalOffsetPixels: Number.isFinite(thermalXOffset) ? thermalXOffset : 24,
+};
 
 let rosSocket;
 let activeImageTopic = null;
@@ -270,7 +275,7 @@ function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
   const span = Math.max(high - low, 0.5);
   const overlayWidth = Math.max(width, Math.round(cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal)));
   const overlayHeight = Math.max(height, Math.round(cameraHeight * fovFraction(thermalFov.vertical, cameraFov.vertical)));
-  const left = Math.max(0, Math.round((cameraWidth - overlayWidth) / 2));
+  const left = Math.max(0, Math.round((cameraWidth - overlayWidth) / 2 + thermalAlignment.horizontalOffsetPixels));
   const top = Math.max(0, Math.round((cameraHeight - overlayHeight) / 2));
   const right = Math.min(cameraWidth, left + overlayWidth);
   const bottom = Math.min(cameraHeight, top + overlayHeight);
