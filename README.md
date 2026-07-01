@@ -15,6 +15,13 @@ cd ../frontend-initiator-drone
 MOVENET_MODEL_PATH=/path/to/movenet_lightning_int8.tflite npm start
 ```
 
+If `MOVENET_MODEL_PATH` is not set, the dashboard checks these default names:
+
+- `~/models/movenet_lightning_int8.tflite`
+- `~/models/lite-model_movenet_singlepose_lightning_tflite_int8_4.tflite`
+- `~/ros2-initiator-drone/models/movenet_lightning_int8.tflite`
+- `~/ros2-initiator-drone/models/lite-model_movenet_singlepose_lightning_tflite_int8_4.tflite`
+
 The ROS machine also needs a TensorFlow Lite interpreter importable from
 `python3`, such as `tflite_runtime`, `ai-edge-litert`, or TensorFlow.
 

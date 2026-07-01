@@ -11,8 +11,24 @@ const PORT = Number(process.env.PORT || 4173);
 const ROS_WORKSPACE = path.resolve(process.env.ROS2_WORKSPACE || path.join(__dirname, '..', 'ros2-initiator-drone'));
 const ROS_DISTRO = process.env.ROS_DISTRO || 'jazzy';
 const ORBBEC_SETUP = process.env.ORBBEC_SETUP || path.join(process.env.HOME || '', 'orbbec_ws', 'install', 'setup.bash');
-const MOVENET_MODEL_PATH = process.env.MOVENET_MODEL_PATH || '';
 const MAX_LOG_LINES = 160;
+
+function firstExistingPath(paths) {
+  return paths.find((candidate) => {
+    try {
+      return fs.existsSync(candidate) && fs.statSync(candidate).isFile();
+    } catch (_) {
+      return false;
+    }
+  }) || '';
+}
+
+const MOVENET_MODEL_PATH = process.env.MOVENET_MODEL_PATH || firstExistingPath([
+  path.join(process.env.HOME || '', 'models', 'movenet_lightning_int8.tflite'),
+  path.join(process.env.HOME || '', 'models', 'lite-model_movenet_singlepose_lightning_tflite_int8_4.tflite'),
+  path.join(ROS_WORKSPACE, 'models', 'movenet_lightning_int8.tflite'),
+  path.join(ROS_WORKSPACE, 'models', 'lite-model_movenet_singlepose_lightning_tflite_int8_4.tflite'),
+]);
 
 let launchProcess = null;
 let logs = [];
