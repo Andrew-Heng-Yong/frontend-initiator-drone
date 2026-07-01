@@ -25,6 +25,23 @@ If `MOVENET_MODEL_PATH` is not set, the dashboard checks these default names:
 The ROS machine also needs a TensorFlow Lite interpreter importable from
 `python3`, such as `tflite_runtime`, `ai-edge-litert`, or TensorFlow.
 
+## Tune Without Rebuild
+
+After one rebuild that installs the settings file, edit:
+
+```bash
+/home/andrew/ros2-initiator-drone/install/drone_control/share/drone_control/config/drone_settings.yaml
+```
+
+Then restart the dashboard launch. No `colcon build` is needed for changes such
+as camera FPS, confidence threshold, or inference FPS.
+
+To keep your own editable copy elsewhere:
+
+```bash
+DRONE_SETTINGS_FILE=/home/andrew/drone_settings.yaml npm start
+```
+
 Open `http://<robot-ip>:4173`. The Start button sources ROS 2, sources the built workspace, then launches the RGB camera, MoveNet pose node, and rosbridge:
 
 ```bash

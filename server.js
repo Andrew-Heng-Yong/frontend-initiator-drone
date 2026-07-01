@@ -11,6 +11,7 @@ const PORT = Number(process.env.PORT || 4173);
 const ROS_WORKSPACE = path.resolve(process.env.ROS2_WORKSPACE || path.join(__dirname, '..', 'ros2-initiator-drone'));
 const ROS_DISTRO = process.env.ROS_DISTRO || 'jazzy';
 const ORBBEC_SETUP = process.env.ORBBEC_SETUP || path.join(process.env.HOME || '', 'orbbec_ws', 'install', 'setup.bash');
+const DRONE_SETTINGS_FILE = process.env.DRONE_SETTINGS_FILE || '';
 const MAX_LOG_LINES = 160;
 
 function firstExistingPath(paths) {
@@ -141,6 +142,7 @@ function startLaunch() {
   addLog(`ROS distro: ${ROS_DISTRO}; workspace: ${ROS_WORKSPACE}`);
   addLog(`RGB camera required; Orbbec setup: ${ORBBEC_SETUP}`);
   addLog(`MoveNet model path: ${MOVENET_MODEL_PATH || '(not set)'}`);
+  if (DRONE_SETTINGS_FILE) addLog(`Settings file: ${DRONE_SETTINGS_FILE}`);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.on('error', (error) => addLog(`Launch error: ${error.message}`));
