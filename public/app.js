@@ -21,6 +21,10 @@ const imageTopics = {
   color: '/camera/color/image_raw',
   thermal: '/thermal/image_raw',
 };
+const imageSubscriptionOptions = {
+  color: { throttleRate: 120 },
+  thermal: { throttleRate: 250 },
+};
 const thermalFov = { horizontal: 55, vertical: 35 };
 const cameraFov = { horizontal: 67, vertical: 53.6 };
 const query = new URLSearchParams(location.search);
@@ -78,7 +82,7 @@ function connectRosbridge() {
   connection.textContent = 'Connecting to RGB camera stream...';
   rosSocket.onopen = () => {
     connection.textContent = `Waiting for RGB frames: ${imageTopics.color}`;
-    subscribeImageTopic(imageTopics.color);
+    subscribeImageTopic(imageTopics.color, imageSubscriptionOptions.color);
   };
   rosSocket.onmessage = (event) => {
     const message = parseRosbridgeMessage(event.data);
@@ -105,7 +109,7 @@ function connectRosbridge() {
   };
 }
 
-function subscribeImageTopic(topic) {
+function subscribeImageTopic(topic, options = {}) {
   if (!rosSocket || rosSocket.readyState !== WebSocket.OPEN) return;
   if (subscribedTopics.has(topic)) return;
   rosSocket.send(JSON.stringify({
@@ -113,6 +117,8 @@ function subscribeImageTopic(topic) {
     topic,
     type: 'sensor_msgs/msg/Image',
     compression: 'none',
+    throttle_rate: options.throttleRate || 0,
+    queue_length: 1,
     fragment_size: 8000000,
   }));
   subscribedTopics.add(topic);
@@ -214,7 +220,7 @@ async function drawCameraFrame(image) {
   range.textContent = `${width}x${height}`;
   activeImageTopic = imageTopics.color;
   connection.textContent = `Receiving RGB with thermal overlay: ${imageTopics.color}`;
-  subscribeImageTopic(imageTopics.thermal);
+  subscribeImageTopic(imageTopics.thermal, imageSubscriptionOptions.thermal);
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
@@ -248,7 +254,7 @@ async function drawCompressedCameraFrame(image) {
   range.textContent = `${width}x${height}`;
   activeImageTopic = imageTopics.color;
   connection.textContent = `Receiving RGB with thermal overlay: ${imageTopics.color}`;
-  subscribeImageTopic(imageTopics.thermal);
+  subscribeImageTopic(imageTopics.thermal, imageSubscriptionOptions.thermal);
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
