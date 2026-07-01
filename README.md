@@ -15,6 +15,9 @@ cd ../frontend-initiator-drone
 MOVENET_MODEL_PATH=/path/to/movenet_lightning_int8.tflite npm start
 ```
 
+The ROS machine also needs a TensorFlow Lite interpreter importable from
+`python3`, such as `tflite_runtime`, `ai-edge-litert`, or TensorFlow.
+
 Open `http://<robot-ip>:4173`. The Start button sources ROS 2, sources the built workspace, then launches the RGB camera, MoveNet pose node, and rosbridge:
 
 ```bash

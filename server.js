@@ -103,6 +103,7 @@ function startLaunch() {
     'start_rosbridge:=true',
     'start_camera:=true',
     `pose_model_path:="${MOVENET_MODEL_PATH}"`,
+    `orbbec_setup:="${ORBBEC_SETUP}"`,
   ].join(' ');
   const command = [
     `if [ ! -f "${setupFile}" ]; then echo "Missing ROS setup file: ${setupFile}"; exit 1; fi`,
@@ -111,6 +112,7 @@ function startLaunch() {
     `source "${ORBBEC_SETUP}"`,
     `if [ ! -f "${installSetup}" ]; then echo "Missing workspace setup file: ${installSetup}. Run colcon build first."; exit 1; fi`,
     `source "${installSetup}"`,
+    `ros2 run human_pose_detection check_runtime --model "${MOVENET_MODEL_PATH}"`,
     poseLaunch,
   ].join(' && ');
 
