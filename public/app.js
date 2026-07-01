@@ -5,42 +5,23 @@ const statusText = document.querySelector('#status-text');
 const connection = document.querySelector('#connection');
 const startToggle = document.querySelector('#start-toggle');
 const cpuMini = document.querySelector('#cpu-mini');
-const canvas = document.querySelector('#thermal-canvas');
+const canvas = document.querySelector('#pose-canvas');
 const context = canvas.getContext('2d');
 const range = document.querySelector('#range');
-const emptyState = document.querySelector('#empty-state');
 const logs = document.querySelector('#logs');
 const cpuCores = document.querySelector('#cpu-cores');
 const clearButton = document.querySelector('#clear-logs');
 const copyButton = document.querySelector('#copy-logs');
 const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
-const overlayAlphaInput = document.querySelector('#overlay-alpha');
-const overlayAlphaValue = document.querySelector('#overlay-alpha-value');
-const imageTopics = {
-  color: '/camera/color/image_raw',
-  thermal: '/thermal/image_raw',
-};
-const imageSubscriptionOptions = {
-  color: { throttleRate: 120 },
-  thermal: { throttleRate: 250 },
-};
-const thermalFov = { horizontal: 55, vertical: 35 };
-const cameraFov = { horizontal: 67, vertical: 53.6 };
-const query = new URLSearchParams(location.search);
-const thermalXOffset = Number(query.get('thermal_x') || 24);
-const thermalAlignment = {
-  horizontalOffsetPixels: Number.isFinite(thermalXOffset) ? thermalXOffset : 24,
-};
+
+const imageTopic = '/human_pose/debug_image';
+const imageSubscription = { throttleRate: 120 };
 
 let rosSocket;
-let activeImageTopic = null;
-let overlayAlphaTimer;
-let overlayAlpha = 0.45;
-let latestThermal = null;
-let latestColor = null;
+let latestFrame = null;
 let drawScheduled = false;
-let cameraFrameToken = 0;
+let frameToken = 0;
 let subscribedTopics = new Set();
 const messageFragments = new Map();
 
@@ -68,9 +49,7 @@ function closeRosbridge() {
     rosSocket.close();
     rosSocket = null;
   }
-  activeImageTopic = null;
-  latestColor = null;
-  latestThermal = null;
+  latestFrame = null;
   subscribedTopics = new Set();
   connection.textContent = 'Camera stream disconnected.';
 }
@@ -79,26 +58,16 @@ function connectRosbridge() {
   if (rosSocket || !statusDot.classList.contains('running')) return;
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   rosSocket = new WebSocket(`${protocol}://${location.hostname}:9090`);
-  connection.textContent = 'Connecting to RGB camera stream...';
+  connection.textContent = 'Connecting to pose debug stream...';
   rosSocket.onopen = () => {
-    connection.textContent = `Waiting for RGB frames: ${imageTopics.color}`;
-    subscribeImageTopic(imageTopics.color, imageSubscriptionOptions.color);
+    connection.textContent = `Waiting for frames: ${imageTopic}`;
+    subscribeImageTopic(imageTopic, imageSubscription);
   };
   rosSocket.onmessage = (event) => {
     const message = parseRosbridgeMessage(event.data);
-    if (!message) return;
-    if (message.op !== 'publish') return;
-
-    if (message.topic === imageTopics.color) {
-      latestColor = message.msg;
-      scheduleDraw();
-      return;
-    }
-
-    if (message.topic === imageTopics.thermal) {
-      updateThermalFrame(message.msg);
-      if (activeImageTopic === imageTopics.color) scheduleDraw();
-    }
+    if (!message || message.op !== 'publish' || message.topic !== imageTopic) return;
+    latestFrame = message.msg;
+    scheduleDraw();
   };
   rosSocket.onerror = () => {
     connection.textContent = 'Waiting for rosbridge on port 9090...';
@@ -154,20 +123,13 @@ function scheduleDraw() {
   drawScheduled = true;
   requestAnimationFrame(async () => {
     drawScheduled = false;
-    if (latestColor) {
-      try {
-        await drawCameraFrame(latestColor);
-      } catch (error) {
-        connection.textContent = `RGB decode failed: ${error.message}`;
-      }
+    if (!latestFrame) return;
+    try {
+      await drawCameraFrame(latestFrame);
+    } catch (error) {
+      connection.textContent = `Frame decode failed: ${error.message}`;
     }
   });
-}
-
-function fovFraction(innerDegrees, outerDegrees) {
-  const inner = Math.tan((innerDegrees * Math.PI / 180) / 2);
-  const outer = Math.tan((outerDegrees * Math.PI / 180) / 2);
-  return outer > 0 ? Math.max(0, Math.min(1, inner / outer)) : 1;
 }
 
 async function drawCameraFrame(image) {
@@ -177,9 +139,10 @@ async function drawCameraFrame(image) {
     return;
   }
   if (!['rgb8', 'bgr8', 'rgba8', 'bgra8', 'mono8'].includes(encoding)) {
-    connection.textContent = `Unsupported RGB encoding: ${image.encoding || 'unknown'}`;
+    connection.textContent = `Unsupported image encoding: ${image.encoding || 'unknown'}`;
     return;
   }
+
   const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
   const width = image.width;
   const height = image.height;
@@ -208,28 +171,24 @@ async function drawCameraFrame(image) {
       output.data[target + 3] = 255;
     }
   }
-  overlayThermalOnCamera(output, width, height);
 
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
   }
-  canvas.dataset.stream = 'overlay';
+  canvas.dataset.stream = 'camera';
   context.imageSmoothingEnabled = true;
   context.putImageData(output, 0, 0);
   range.textContent = `${width}x${height}`;
-  activeImageTopic = imageTopics.color;
-  connection.textContent = `Receiving RGB with thermal overlay: ${imageTopics.color}`;
-  subscribeImageTopic(imageTopics.thermal, imageSubscriptionOptions.thermal);
-  if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
+  connection.textContent = `Receiving pose debug stream: ${imageTopic}`;
 }
 
 async function drawCompressedCameraFrame(image) {
-  const token = cameraFrameToken + 1;
-  cameraFrameToken = token;
+  const token = frameToken + 1;
+  frameToken = token;
   const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
   const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }));
-  if (token !== cameraFrameToken) {
+  if (token !== frameToken) {
     bitmap.close();
     return;
   }
@@ -240,83 +199,13 @@ async function drawCompressedCameraFrame(image) {
     canvas.width = width;
     canvas.height = height;
   }
-  canvas.dataset.stream = 'overlay';
+  canvas.dataset.stream = 'camera';
   context.imageSmoothingEnabled = true;
   context.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
 
-  if (latestThermal) {
-    const output = context.getImageData(0, 0, width, height);
-    overlayThermalOnCamera(output, width, height);
-    context.putImageData(output, 0, 0);
-  }
-
   range.textContent = `${width}x${height}`;
-  activeImageTopic = imageTopics.color;
-  connection.textContent = `Receiving RGB with thermal overlay: ${imageTopics.color}`;
-  subscribeImageTopic(imageTopics.thermal, imageSubscriptionOptions.thermal);
-  if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
-}
-
-function updateThermalFrame(image) {
-  if (image.encoding !== '32FC1') return;
-  const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
-  const temperatures = new Float32Array(bytes.buffer);
-  const values = [...temperatures].filter(Number.isFinite);
-  if (!values.length) return;
-  const low = Math.min(...values);
-  const high = Math.max(...values);
-  latestThermal = {
-    temperatures,
-    width: image.width || 32,
-    height: image.height || 24,
-    low,
-    high,
-  };
-}
-
-function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
-  if (!latestThermal) return;
-  const { temperatures, width, height, low, high } = latestThermal;
-  const span = Math.max(high - low, 0.5);
-  const overlayWidth = Math.max(width, Math.round(cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal)));
-  const overlayHeight = Math.max(height, Math.round(cameraHeight * fovFraction(thermalFov.vertical, cameraFov.vertical)));
-  const left = Math.max(0, Math.round((cameraWidth - overlayWidth) / 2 + thermalAlignment.horizontalOffsetPixels));
-  const top = Math.max(0, Math.round((cameraHeight - overlayHeight) / 2));
-  const right = Math.min(cameraWidth, left + overlayWidth);
-  const bottom = Math.min(cameraHeight, top + overlayHeight);
-
-  for (let y = top; y < bottom; y += 1) {
-    const thermalY = Math.max(0, Math.min(height - 1, Math.floor(((y - top) / Math.max(1, bottom - top)) * height)));
-    for (let x = left; x < right; x += 1) {
-      const thermalX = width - 1 - Math.max(0, Math.min(width - 1, Math.floor(((x - left) / Math.max(1, right - left)) * width)));
-      const temperature = temperatures[thermalY * width + thermalX];
-      if (!Number.isFinite(temperature)) continue;
-
-      const [red, green, blue] = heatColor((temperature - low) / span);
-      const target = (y * cameraWidth + x) * 4;
-      output.data[target] = Math.round((1 - overlayAlpha) * output.data[target] + overlayAlpha * red);
-      output.data[target + 1] = Math.round((1 - overlayAlpha) * output.data[target + 1] + overlayAlpha * green);
-      output.data[target + 2] = Math.round((1 - overlayAlpha) * output.data[target + 2] + overlayAlpha * blue);
-    }
-  }
-}
-
-function setOverlayAlphaUi(alpha) {
-  if (!overlayAlphaInput || !overlayAlphaValue) return;
-  const percent = Math.round(alpha * 100);
-  overlayAlpha = percent / 100;
-  overlayAlphaInput.value = String(percent);
-  overlayAlphaValue.textContent = String(percent);
-}
-
-function heatColor(value) {
-  const stops = [[20, 28, 65], [37, 104, 183], [37, 194, 151], [251, 191, 36], [220, 38, 38]];
-  const position = Math.max(0, Math.min(0.999, value)) * (stops.length - 1);
-  const start = stops[Math.floor(position)];
-  const end = stops[Math.ceil(position)];
-  const mix = position % 1;
-  return start.map((component, index) => Math.round(component + (end[index] - component) * mix));
+  connection.textContent = `Receiving pose debug stream: ${imageTopic}`;
 }
 
 function coreLabel(core) {
@@ -393,9 +282,6 @@ async function refresh() {
     const state = await response.json();
     setRunning(state.running);
     renderCpu(state.cpu, state.cpuTemp);
-    if (typeof state.overlayAlpha === 'number' && document.activeElement !== overlayAlphaInput) {
-      setOverlayAlphaUi(state.overlayAlpha);
-    }
     const serverLogs = state.logs || [];
     logs.textContent = serverLogs.join('\n') || 'No launch output yet.';
     logs.scrollTop = logs.scrollHeight;
@@ -458,21 +344,6 @@ if (copyButton) {
     } catch (error) {
       connection.textContent = `Copy failed: ${error.message}`;
     }
-  });
-}
-
-if (overlayAlphaInput) {
-  overlayAlphaInput.addEventListener('input', () => {
-    overlayAlpha = Number(overlayAlphaInput.value) / 100;
-    if (overlayAlphaValue) overlayAlphaValue.textContent = overlayAlphaInput.value;
-    clearTimeout(overlayAlphaTimer);
-    overlayAlphaTimer = setTimeout(async () => {
-      try {
-        await request('/api/overlay-alpha', { alpha: overlayAlpha });
-      } catch (error) {
-        connection.textContent = error.message;
-      }
-    }, 150);
   });
 }
 

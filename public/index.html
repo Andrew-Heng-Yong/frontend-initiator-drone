@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Thermal Node</title>
+    <title>Human Pose Node</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -17,23 +17,18 @@
         <div class="status"><span id="status-dot"></span><span id="status-text">Stopped</span></div>
       </header>
       <div class="content">
-      <section class="controls" aria-label="Thermal node controls">
+      <section class="controls" aria-label="Human pose node controls">
         <button id="start-button" class="start" style="display:none">Start node</button>
         <button id="stop-button" class="stop" disabled style="display:none">Stop node</button>
       </section>
       <!-- Large CPU panel removed; compact CPU shown in header -->
-      <section class="viewer" aria-label="RGB camera with thermal overlay">
+      <section class="viewer" aria-label="RGB human pose debug stream">
         <div class="viewer-heading">
           <div class="viewer-tools">
-            <label class="overlay-alpha">
-              <span>Overlay</span>
-              <input id="overlay-alpha" type="range" min="0" max="100" value="45" />
-              <output id="overlay-alpha-value">45</output>
-            </label>
             <div id="range">--</div>
           </div>
         </div>
-        <canvas id="thermal-canvas" width="32" height="24" aria-label="Thermal image from MLX90640"></canvas>
+        <canvas id="pose-canvas" width="640" height="480" aria-label="RGB human pose debug image"></canvas>
       </section>
       </div>
       <section class="log-panel">

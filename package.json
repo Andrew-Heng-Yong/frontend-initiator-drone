@@ -1,8 +1,8 @@
 {
-  "name": "thermal-dashboard",
+  "name": "pose-dashboard",
   "version": "1.0.0",
   "private": true,
-  "description": "Start, stop, and view the ROS 2 MLX90640 thermal node.",
+  "description": "Start, stop, and view the ROS 2 RGB human pose node.",
   "scripts": {
     "start": "node server.js"
   },
