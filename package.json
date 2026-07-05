@@ -1,8 +1,8 @@
 {
-  "name": "pose-dashboard",
+  "name": "thermal-camera-dashboard",
   "version": "1.0.0",
   "private": true,
-  "description": "Start, stop, and view the ROS 2 RGB human pose node.",
+  "description": "Start, stop, and view the ROS 2 thermal camera node.",
   "scripts": {
     "start": "node server.js"
   },

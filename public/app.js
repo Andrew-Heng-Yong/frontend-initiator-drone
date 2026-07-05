@@ -15,7 +15,7 @@ const copyButton = document.querySelector('#copy-logs');
 const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
 
-const imageTopic = '/human_pose/debug_image';
+const imageTopic = '/thermal/image_raw';
 const imageSubscription = { throttleRate: 200 };
 
 let rosSocket;
@@ -51,14 +51,14 @@ function closeRosbridge() {
   }
   latestFrame = null;
   subscribedTopics = new Set();
-  connection.textContent = 'Camera stream disconnected.';
+  connection.textContent = 'Thermal stream disconnected.';
 }
 
 function connectRosbridge() {
   if (rosSocket || !statusDot.classList.contains('running')) return;
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   rosSocket = new WebSocket(`${protocol}://${location.hostname}:9090`);
-  connection.textContent = 'Connecting to pose debug stream...';
+  connection.textContent = 'Connecting to thermal stream...';
   rosSocket.onopen = () => {
     connection.textContent = `Waiting for frames: ${imageTopic}`;
     subscribeImageTopic(imageTopic, imageSubscription);
@@ -138,6 +138,10 @@ async function drawCameraFrame(image) {
     await drawCompressedCameraFrame(image);
     return;
   }
+  if (['yuyv', 'yuyv422', 'yuv422', 'yuv422_yuy2'].includes(encoding)) {
+    drawYuyvCameraFrame(image);
+    return;
+  }
   if (!['rgb8', 'bgr8', 'rgba8', 'bgra8', 'mono8'].includes(encoding)) {
     connection.textContent = `Unsupported image encoding: ${image.encoding || 'unknown'}`;
     return;
@@ -180,7 +184,61 @@ async function drawCameraFrame(image) {
   context.imageSmoothingEnabled = true;
   context.putImageData(output, 0, 0);
   range.textContent = `${width}x${height}`;
-  connection.textContent = `Receiving pose debug stream: ${imageTopic}`;
+  connection.textContent = `Receiving thermal stream: ${imageTopic}`;
+}
+
+function yuvToRgb(y, u, v) {
+  const c = y - 16;
+  const d = u - 128;
+  const e = v - 128;
+  return [
+    Math.max(0, Math.min(255, (298 * c + 409 * e + 128) >> 8)),
+    Math.max(0, Math.min(255, (298 * c - 100 * d - 208 * e + 128) >> 8)),
+    Math.max(0, Math.min(255, (298 * c + 516 * d + 128) >> 8)),
+  ];
+}
+
+function drawYuyvCameraFrame(image) {
+  const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
+  const width = image.width;
+  const height = image.height;
+  const output = context.createImageData(width, height);
+  const step = image.step || width * 2;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 2) {
+      const source = y * step + x * 2;
+      const y0 = bytes[source];
+      const u = bytes[source + 1];
+      const y1 = bytes[source + 2] ?? y0;
+      const v = bytes[source + 3];
+      const first = yuvToRgb(y0, u, v);
+      const second = yuvToRgb(y1, u, v);
+      const firstTarget = (y * width + x) * 4;
+      output.data[firstTarget] = first[0];
+      output.data[firstTarget + 1] = first[1];
+      output.data[firstTarget + 2] = first[2];
+      output.data[firstTarget + 3] = 255;
+
+      if (x + 1 < width) {
+        const secondTarget = firstTarget + 4;
+        output.data[secondTarget] = second[0];
+        output.data[secondTarget + 1] = second[1];
+        output.data[secondTarget + 2] = second[2];
+        output.data[secondTarget + 3] = 255;
+      }
+    }
+  }
+
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  canvas.dataset.stream = 'camera';
+  context.imageSmoothingEnabled = false;
+  context.putImageData(output, 0, 0);
+  range.textContent = `${width}x${height}`;
+  connection.textContent = `Receiving thermal stream: ${imageTopic}`;
 }
 
 async function drawCompressedCameraFrame(image) {
@@ -205,7 +263,7 @@ async function drawCompressedCameraFrame(image) {
   bitmap.close();
 
   range.textContent = `${width}x${height}`;
-  connection.textContent = `Receiving pose debug stream: ${imageTopic}`;
+  connection.textContent = `Receiving thermal stream: ${imageTopic}`;
 }
 
 function coreLabel(core) {

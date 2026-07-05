@@ -1,5 +1,5 @@
 /*
- * Small, dependency-free control service for the human pose dashboard.
+ * Small, dependency-free control service for the thermal camera dashboard.
  * It is intended to run on the Linux robot, alongside the ROS 2 workspace.
  */
 const http = require('node:http');
@@ -10,26 +10,8 @@ const { spawn } = require('node:child_process');
 const PORT = Number(process.env.PORT || 4173);
 const ROS_WORKSPACE = path.resolve(process.env.ROS2_WORKSPACE || path.join(__dirname, '..', 'ros2-initiator-drone'));
 const ROS_DISTRO = process.env.ROS_DISTRO || 'jazzy';
-const ORBBEC_SETUP = process.env.ORBBEC_SETUP || path.join(process.env.HOME || '', 'orbbec_ws', 'install', 'setup.bash');
 const DRONE_SETTINGS_FILE = process.env.DRONE_SETTINGS_FILE || '';
 const MAX_LOG_LINES = 160;
-
-function firstExistingPath(paths) {
-  return paths.find((candidate) => {
-    try {
-      return fs.existsSync(candidate) && fs.statSync(candidate).isFile();
-    } catch (_) {
-      return false;
-    }
-  }) || '';
-}
-
-const MOVENET_MODEL_PATH = process.env.MOVENET_MODEL_PATH || firstExistingPath([
-  path.join(process.env.HOME || '', 'models', 'movenet_lightning_int8.tflite'),
-  path.join(process.env.HOME || '', 'models', 'lite-model_movenet_singlepose_lightning_tflite_int8_4.tflite'),
-  path.join(ROS_WORKSPACE, 'models', 'movenet_lightning_int8.tflite'),
-  path.join(ROS_WORKSPACE, 'models', 'lite-model_movenet_singlepose_lightning_tflite_int8_4.tflite'),
-]);
 
 let launchProcess = null;
 let logs = [];
@@ -101,7 +83,7 @@ function state() {
     logs,
     cpu: cpuLoads(),
     cpuTemp: cpuTemperature(),
-    poseDebugEnabled: true,
+    thermalCameraEnabled: true,
   };
 }
 
@@ -115,22 +97,19 @@ function startLaunch() {
 
   const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
   const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
-  const poseLaunch = [
+  const thermalLaunch = [
     'ros2 launch drone_control drone_launch.py',
     'start_rosbridge:=true',
-    'start_camera:=true',
-    `pose_model_path:="${MOVENET_MODEL_PATH}"`,
-    `orbbec_setup:="${ORBBEC_SETUP}"`,
+    'start_camera:=false',
+    'start_pose:=false',
+    'start_thermal_camera:=true',
   ].join(' ');
   const command = [
     `if [ ! -f "${setupFile}" ]; then echo "Missing ROS setup file: ${setupFile}"; exit 1; fi`,
     `source "${setupFile}"`,
-    `if [ ! -f "${ORBBEC_SETUP}" ]; then echo "Missing Orbbec setup file: ${ORBBEC_SETUP}. RGB camera is required."; exit 1; fi`,
-    `source "${ORBBEC_SETUP}"`,
     `if [ ! -f "${installSetup}" ]; then echo "Missing workspace setup file: ${installSetup}. Run colcon build first."; exit 1; fi`,
     `source "${installSetup}"`,
-    `ros2 run human_pose_detection check_runtime --model "${MOVENET_MODEL_PATH}"`,
-    poseLaunch,
+    thermalLaunch,
   ].join(' && ');
 
   launchProcess = spawn('bash', ['-lc', command], {
@@ -138,10 +117,9 @@ function startLaunch() {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  addLog(`Starting RGB pose launch with rosbridge (PID ${launchProcess.pid}).`);
+  addLog(`Starting thermal camera launch with rosbridge (PID ${launchProcess.pid}).`);
   addLog(`ROS distro: ${ROS_DISTRO}; workspace: ${ROS_WORKSPACE}`);
-  addLog(`RGB camera required; Orbbec setup: ${ORBBEC_SETUP}`);
-  addLog(`MoveNet model path: ${MOVENET_MODEL_PATH || '(not set)'}`);
+  addLog('Launching only the V4L2 thermal camera node; RGB/depth launch paths remain available in ROS.');
   if (DRONE_SETTINGS_FILE) addLog(`Settings file: ${DRONE_SETTINGS_FILE}`);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));
