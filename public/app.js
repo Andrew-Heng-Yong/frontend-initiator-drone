@@ -22,7 +22,7 @@ const thermalCrop = {
   sourceHeight: 392,
   displayWidth: 256,
   displayHeight: 192,
-  yOffset: 200,
+  yOffset: 192,
 };
 
 let rosSocket;
