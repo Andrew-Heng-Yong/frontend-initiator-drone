@@ -43,6 +43,6 @@ ros2 launch drone_control drone_launch.py \
   start_thermal_camera:=true
 ```
 
-The dashboard subscribes only to the thermal stream. Stop sends SIGINT to the launch process and all of its ROS nodes.
+The dashboard subscribes only to the thermal stream. HikCamera-style 256x392 YUYV frames are cropped to the lower 256x192 thermal image for display. Stop sends SIGINT to the launch process and all of its ROS nodes.
 
 Set `ROS2_WORKSPACE` when the ROS workspace is not beside this directory. The dashboard defaults to ROS 2 Jazzy; set `ROS_DISTRO` if you are using another distro, and `PORT` to change the dashboard port.

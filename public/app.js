@@ -17,6 +17,13 @@ const logResizeHandle = document.querySelector('#log-resize-handle');
 
 const imageTopic = '/thermal/image_raw';
 const imageSubscription = { throttleRate: 200 };
+const thermalCrop = {
+  sourceWidth: 256,
+  sourceHeight: 392,
+  displayWidth: 256,
+  displayHeight: 192,
+  yOffset: 200,
+};
 
 let rosSocket;
 let latestFrame = null;
@@ -200,14 +207,18 @@ function yuvToRgb(y, u, v) {
 
 function drawYuyvCameraFrame(image) {
   const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
-  const width = image.width;
-  const height = image.height;
+  const sourceWidth = image.width;
+  const sourceHeight = image.height;
+  const useThermalCrop = sourceWidth === thermalCrop.sourceWidth && sourceHeight === thermalCrop.sourceHeight;
+  const width = useThermalCrop ? thermalCrop.displayWidth : sourceWidth;
+  const height = useThermalCrop ? thermalCrop.displayHeight : sourceHeight;
+  const yOffset = useThermalCrop ? thermalCrop.yOffset : 0;
   const output = context.createImageData(width, height);
-  const step = image.step || width * 2;
+  const step = image.step || sourceWidth * 2;
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 2) {
-      const source = y * step + x * 2;
+      const source = (y + yOffset) * step + x * 2;
       const y0 = bytes[source];
       const u = bytes[source + 1];
       const y1 = bytes[source + 2] ?? y0;
