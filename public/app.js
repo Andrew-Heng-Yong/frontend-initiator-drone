@@ -22,8 +22,8 @@ const cropSubscription = { throttleRate: 100 };
 const defaultCropDepthFrame = { width: 640, height: 480 };
 const cropRegionsFreshMs = 2500;
 const fallbackCropConfig = {
-  blockWidth: 40,
-  blockHeight: 40,
+  blockWidth: 30,
+  blockHeight: 30,
   minTotalBlocks: 3,
   blockDilation: 0,
   minComponentAreaPx: 8,
@@ -528,21 +528,6 @@ function drawCropOverlay(thermalWidth, thermalHeight, cropRegions) {
       context.fillRect(rect.x, rect.y, rect.width, rect.height);
       context.strokeRect(rect.x + 0.5, rect.y + 0.5, Math.max(1, rect.width - 1), Math.max(1, rect.height - 1));
     });
-
-    if (crop.bounding_rect) {
-      const bounds = depthRectToThermalRect(crop.bounding_rect, depthWidth, depthHeight, thermalWidth, thermalHeight);
-      context.strokeStyle = 'rgba(56, 217, 150, 0.98)';
-      context.lineWidth = 2;
-      context.strokeRect(bounds.x + 1, bounds.y + 1, Math.max(1, bounds.width - 2), Math.max(1, bounds.height - 2));
-      context.fillStyle = 'rgba(3, 12, 20, 0.72)';
-      const label = `${blocks.length || crop.active_block_count || 0} blocks`;
-      const labelWidth = context.measureText(label).width + 8;
-      const labelX = Math.max(0, Math.min(thermalWidth - labelWidth, bounds.x));
-      const labelY = Math.max(12, bounds.y);
-      context.fillRect(labelX, labelY - 12, labelWidth, 12);
-      context.fillStyle = '#38d996';
-      context.fillText(label, labelX + 4, labelY - 3);
-    }
 
   });
   context.restore();
