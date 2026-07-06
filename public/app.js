@@ -25,10 +25,10 @@ const fallbackCropConfig = {
   blockWidth: 24,
   blockHeight: 18,
   minTotalBlocks: 3,
-  blockDilation: 1,
+  blockDilation: 0,
   minComponentAreaPx: 8,
   thresholdStdDev: 1.2,
-  thresholdPercentile: 0.88,
+  thresholdPercentile: 0.95,
 };
 const thermalCrop = {
   sourceWidth: 256,
