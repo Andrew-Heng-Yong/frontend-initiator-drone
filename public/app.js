@@ -20,6 +20,16 @@ const cropRegionsTopic = '/thermal_depth_crop/regions';
 const imageSubscription = { throttleRate: 200 };
 const cropSubscription = { throttleRate: 100 };
 const defaultCropDepthFrame = { width: 640, height: 480 };
+const cropRegionsFreshMs = 2500;
+const fallbackCropConfig = {
+  blockWidth: 24,
+  blockHeight: 18,
+  minTotalBlocks: 3,
+  blockDilation: 1,
+  minComponentAreaPx: 8,
+  thresholdStdDev: 1.2,
+  thresholdPercentile: 0.88,
+};
 const thermalCrop = {
   sourceWidth: 256,
   sourceHeight: 392,
@@ -32,6 +42,7 @@ const thermalCrop = {
 let rosSocket;
 let latestFrame = null;
 let latestCropRegions = null;
+let latestCropRegionsAt = 0;
 let drawScheduled = false;
 let frameToken = 0;
 let subscribedTopics = new Set();
@@ -63,6 +74,7 @@ function closeRosbridge() {
   }
   latestFrame = null;
   latestCropRegions = null;
+  latestCropRegionsAt = 0;
   subscribedTopics = new Set();
   connection.textContent = 'Thermal stream disconnected.';
 }
@@ -85,6 +97,7 @@ function connectRosbridge() {
       scheduleDraw();
     } else if (message.topic === cropRegionsTopic) {
       latestCropRegions = parseCropRegions(message.msg);
+      latestCropRegionsAt = latestCropRegions ? performance.now() : 0;
       scheduleDraw();
     }
   };
@@ -230,7 +243,7 @@ async function drawCameraFrame(image) {
   canvas.dataset.stream = 'camera';
   context.imageSmoothingEnabled = true;
   context.putImageData(output, 0, 0);
-  updateRangeLabel(width, height, drawCropOverlay(width, height));
+  updateRangeLabel(width, height, drawCropOverlay(width, height, cropOverlaySource(output, width, height)));
   connection.textContent = `Receiving thermal stream: ${imageTopic}`;
 }
 
@@ -290,7 +303,7 @@ function drawYuyvCameraFrame(image) {
   canvas.dataset.stream = 'camera';
   context.imageSmoothingEnabled = false;
   context.putImageData(output, 0, 0);
-  updateRangeLabel(width, height, drawCropOverlay(width, height));
+  updateRangeLabel(width, height, drawCropOverlay(width, height, cropOverlaySource(output, width, height)));
   connection.textContent = `Receiving thermal stream: ${imageTopic}`;
 }
 
@@ -314,7 +327,8 @@ async function drawCompressedCameraFrame(image) {
   context.imageSmoothingEnabled = true;
   context.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
-  updateRangeLabel(width, height, drawCropOverlay(width, height));
+  const frame = context.getImageData(0, 0, width, height);
+  updateRangeLabel(width, height, drawCropOverlay(width, height, cropOverlaySource(frame, width, height)));
 
   connection.textContent = `Receiving thermal stream: ${imageTopic}`;
 }
@@ -338,12 +352,167 @@ function depthRectToThermalRect(rect, depthWidth, depthHeight, thermalWidth, the
   };
 }
 
-function drawCropOverlay(thermalWidth, thermalHeight) {
-  if (!latestCropRegions || !latestCropRegions.crops.length) return 0;
+function cropOverlaySource(imageData, thermalWidth, thermalHeight) {
+  if (
+    latestCropRegions &&
+    latestCropRegions.crops.length &&
+    performance.now() - latestCropRegionsAt < cropRegionsFreshMs
+  ) {
+    return latestCropRegions;
+  }
 
-  const depthWidth = Math.max(1, latestCropRegions.depthWidth || defaultCropDepthFrame.width);
-  const depthHeight = Math.max(1, latestCropRegions.depthHeight || defaultCropDepthFrame.height);
-  const accepted = latestCropRegions.crops.filter((crop) => crop && crop.accepted);
+  return computeFallbackCropRegions(imageData, thermalWidth, thermalHeight);
+}
+
+function computeFallbackCropRegions(imageData, thermalWidth, thermalHeight) {
+  if (!imageData || !imageData.data || thermalWidth <= 0 || thermalHeight <= 0) return null;
+
+  const values = new Uint8Array(thermalWidth * thermalHeight);
+  const histogram = new Array(256).fill(0);
+  let sum = 0;
+  let sumSquares = 0;
+
+  for (let index = 0; index < values.length; index += 1) {
+    const source = index * 4;
+    const value = Math.round(
+      imageData.data[source] * 0.299 +
+      imageData.data[source + 1] * 0.587 +
+      imageData.data[source + 2] * 0.114
+    );
+    values[index] = value;
+    histogram[value] += 1;
+    sum += value;
+    sumSquares += value * value;
+  }
+
+  const total = values.length;
+  const mean = sum / total;
+  const variance = Math.max(0, sumSquares / total - mean * mean);
+  const stdDev = Math.sqrt(variance);
+  const percentileTarget = Math.floor(total * fallbackCropConfig.thresholdPercentile);
+  let percentileValue = 255;
+  let cumulative = 0;
+  for (let value = 0; value < histogram.length; value += 1) {
+    cumulative += histogram[value];
+    if (cumulative >= percentileTarget) {
+      percentileValue = value;
+      break;
+    }
+  }
+  const threshold = Math.max(percentileValue, mean + stdDev * fallbackCropConfig.thresholdStdDev);
+
+  const active = new Uint8Array(total);
+  for (let index = 0; index < total; index += 1) {
+    active[index] = values[index] >= threshold ? 1 : 0;
+  }
+
+  const visited = new Uint8Array(total);
+  const crops = [];
+  for (let start = 0; start < total; start += 1) {
+    if (!active[start] || visited[start]) continue;
+
+    const queue = [start];
+    visited[start] = 1;
+    const pixels = [];
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const current = queue[cursor];
+      pixels.push(current);
+      const x = current % thermalWidth;
+      const y = Math.floor(current / thermalWidth);
+      const neighbors = [
+        x > 0 ? current - 1 : -1,
+        x + 1 < thermalWidth ? current + 1 : -1,
+        y > 0 ? current - thermalWidth : -1,
+        y + 1 < thermalHeight ? current + thermalWidth : -1,
+      ];
+      neighbors.forEach((next) => {
+        if (next >= 0 && active[next] && !visited[next]) {
+          visited[next] = 1;
+          queue.push(next);
+        }
+      });
+    }
+
+    crops.push(buildFallbackCropFromPixels(pixels, thermalWidth, thermalHeight));
+  }
+
+  return {
+    depthWidth: defaultCropDepthFrame.width,
+    depthHeight: defaultCropDepthFrame.height,
+    crops,
+  };
+}
+
+function buildFallbackCropFromPixels(pixels, thermalWidth, thermalHeight) {
+  if (pixels.length < fallbackCropConfig.minComponentAreaPx) {
+    return {
+      accepted: false,
+      active_block_count: 0,
+      thermal_component_area: pixels.length,
+      bounding_rect: { x: 0, y: 0, width: 0, height: 0 },
+      depth_blocks: [],
+    };
+  }
+
+  const blockCols = Math.ceil(defaultCropDepthFrame.width / fallbackCropConfig.blockWidth);
+  const blockRows = Math.ceil(defaultCropDepthFrame.height / fallbackCropConfig.blockHeight);
+  const blockSet = new Set();
+
+  pixels.forEach((pixel) => {
+    const thermalX = pixel % thermalWidth;
+    const thermalY = Math.floor(pixel / thermalWidth);
+    const depthX = Math.max(0, Math.min(defaultCropDepthFrame.width - 1, Math.floor(thermalX * defaultCropDepthFrame.width / thermalWidth)));
+    const depthY = Math.max(0, Math.min(defaultCropDepthFrame.height - 1, Math.floor(thermalY * defaultCropDepthFrame.height / thermalHeight)));
+    const blockX = Math.max(0, Math.min(blockCols - 1, Math.floor(depthX / fallbackCropConfig.blockWidth)));
+    const blockY = Math.max(0, Math.min(blockRows - 1, Math.floor(depthY / fallbackCropConfig.blockHeight)));
+    for (let dy = -fallbackCropConfig.blockDilation; dy <= fallbackCropConfig.blockDilation; dy += 1) {
+      for (let dx = -fallbackCropConfig.blockDilation; dx <= fallbackCropConfig.blockDilation; dx += 1) {
+        const dilatedX = blockX + dx;
+        const dilatedY = blockY + dy;
+        if (dilatedX >= 0 && dilatedX < blockCols && dilatedY >= 0 && dilatedY < blockRows) {
+          blockSet.add(`${dilatedX},${dilatedY}`);
+        }
+      }
+    }
+  });
+
+  const depthBlocks = [...blockSet].map((key) => {
+    const [blockX, blockY] = key.split(',').map(Number);
+    const x = blockX * fallbackCropConfig.blockWidth;
+    const y = blockY * fallbackCropConfig.blockHeight;
+    return {
+      x,
+      y,
+      width: Math.min(fallbackCropConfig.blockWidth, defaultCropDepthFrame.width - x),
+      height: Math.min(fallbackCropConfig.blockHeight, defaultCropDepthFrame.height - y),
+    };
+  });
+
+  const accepted = depthBlocks.length >= fallbackCropConfig.minTotalBlocks;
+  const bounding = depthBlocks.reduce((rect, block) => {
+    if (!rect) return { ...block };
+    const left = Math.min(rect.x, block.x);
+    const top = Math.min(rect.y, block.y);
+    const right = Math.max(rect.x + rect.width, block.x + block.width);
+    const bottom = Math.max(rect.y + rect.height, block.y + block.height);
+    return { x: left, y: top, width: right - left, height: bottom - top };
+  }, null) || { x: 0, y: 0, width: 0, height: 0 };
+
+  return {
+    accepted,
+    active_block_count: depthBlocks.length,
+    thermal_component_area: pixels.length,
+    bounding_rect: bounding,
+    depth_blocks: depthBlocks,
+  };
+}
+
+function drawCropOverlay(thermalWidth, thermalHeight, cropRegions) {
+  if (!cropRegions || !cropRegions.crops.length) return 0;
+
+  const depthWidth = Math.max(1, cropRegions.depthWidth || defaultCropDepthFrame.width);
+  const depthHeight = Math.max(1, cropRegions.depthHeight || defaultCropDepthFrame.height);
+  const accepted = cropRegions.crops.filter((crop) => crop && crop.accepted);
   if (!accepted.length) return 0;
 
   context.save();
