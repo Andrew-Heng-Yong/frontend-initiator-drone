@@ -22,8 +22,8 @@ const cropSubscription = { throttleRate: 100 };
 const defaultCropDepthFrame = { width: 640, height: 480 };
 const cropRegionsFreshMs = 2500;
 const fallbackCropConfig = {
-  blockWidth: 24,
-  blockHeight: 18,
+  blockWidth: 32,
+  blockHeight: 24,
   minTotalBlocks: 3,
   blockDilation: 0,
   minComponentAreaPx: 8,
