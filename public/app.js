@@ -16,17 +16,22 @@ const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
 
 const imageTopic = '/thermal/image_raw';
+const cropRegionsTopic = '/thermal_depth_crop/regions';
 const imageSubscription = { throttleRate: 200 };
+const cropSubscription = { throttleRate: 100 };
+const defaultCropDepthFrame = { width: 640, height: 480 };
 const thermalCrop = {
   sourceWidth: 256,
   sourceHeight: 392,
-  displayWidth: 256,
-  displayHeight: 192,
-  yOffset: 192,
+  sensorWidth: 256,
+  sensorHeight: 192,
+  cleanImageRows: 184,
+  yOffset: 200,
 };
 
 let rosSocket;
 let latestFrame = null;
+let latestCropRegions = null;
 let drawScheduled = false;
 let frameToken = 0;
 let subscribedTopics = new Set();
@@ -57,6 +62,7 @@ function closeRosbridge() {
     rosSocket = null;
   }
   latestFrame = null;
+  latestCropRegions = null;
   subscribedTopics = new Set();
   connection.textContent = 'Thermal stream disconnected.';
 }
@@ -69,12 +75,18 @@ function connectRosbridge() {
   rosSocket.onopen = () => {
     connection.textContent = `Waiting for frames: ${imageTopic}`;
     subscribeImageTopic(imageTopic, imageSubscription);
+    subscribeStringTopic(cropRegionsTopic, cropSubscription);
   };
   rosSocket.onmessage = (event) => {
     const message = parseRosbridgeMessage(event.data);
-    if (!message || message.op !== 'publish' || message.topic !== imageTopic) return;
-    latestFrame = message.msg;
-    scheduleDraw();
+    if (!message || message.op !== 'publish') return;
+    if (message.topic === imageTopic) {
+      latestFrame = message.msg;
+      scheduleDraw();
+    } else if (message.topic === cropRegionsTopic) {
+      latestCropRegions = parseCropRegions(message.msg);
+      scheduleDraw();
+    }
   };
   rosSocket.onerror = () => {
     connection.textContent = 'Waiting for rosbridge on port 9090...';
@@ -98,6 +110,34 @@ function subscribeImageTopic(topic, options = {}) {
     fragment_size: 8000000,
   }));
   subscribedTopics.add(topic);
+}
+
+function subscribeStringTopic(topic, options = {}) {
+  if (!rosSocket || rosSocket.readyState !== WebSocket.OPEN) return;
+  if (subscribedTopics.has(topic)) return;
+  rosSocket.send(JSON.stringify({
+    op: 'subscribe',
+    topic,
+    type: 'std_msgs/msg/String',
+    throttle_rate: options.throttleRate || 0,
+    queue_length: 1,
+  }));
+  subscribedTopics.add(topic);
+}
+
+function parseCropRegions(message) {
+  if (!message || typeof message.data !== 'string' || !message.data.trim()) return null;
+  try {
+    const parsed = JSON.parse(message.data);
+    const crops = Array.isArray(parsed.crops) ? parsed.crops : [];
+    return {
+      depthWidth: Number(parsed.depth_width || parsed.depthWidth || parsed.depth?.width) || defaultCropDepthFrame.width,
+      depthHeight: Number(parsed.depth_height || parsed.depthHeight || parsed.depth?.height) || defaultCropDepthFrame.height,
+      crops,
+    };
+  } catch (_) {
+    return null;
+  }
 }
 
 function parseRosbridgeMessage(data) {
@@ -190,7 +230,7 @@ async function drawCameraFrame(image) {
   canvas.dataset.stream = 'camera';
   context.imageSmoothingEnabled = true;
   context.putImageData(output, 0, 0);
-  range.textContent = `${width}x${height}`;
+  updateRangeLabel(width, height, drawCropOverlay(width, height));
   connection.textContent = `Receiving thermal stream: ${imageTopic}`;
 }
 
@@ -210,15 +250,17 @@ function drawYuyvCameraFrame(image) {
   const sourceWidth = image.width;
   const sourceHeight = image.height;
   const useThermalCrop = sourceWidth === thermalCrop.sourceWidth && sourceHeight === thermalCrop.sourceHeight;
-  const width = useThermalCrop ? thermalCrop.displayWidth : sourceWidth;
-  const height = useThermalCrop ? thermalCrop.displayHeight : sourceHeight;
+  const width = useThermalCrop ? thermalCrop.sensorWidth : sourceWidth;
+  const height = useThermalCrop ? thermalCrop.sensorHeight : sourceHeight;
+  const cleanImageRows = useThermalCrop ? thermalCrop.cleanImageRows : sourceHeight;
   const yOffset = useThermalCrop ? thermalCrop.yOffset : 0;
   const output = context.createImageData(width, height);
   const step = image.step || sourceWidth * 2;
 
   for (let y = 0; y < height; y += 1) {
+    const sourceY = yOffset + Math.floor((y * cleanImageRows) / height);
     for (let x = 0; x < width; x += 2) {
-      const source = (y + yOffset) * step + x * 2;
+      const source = sourceY * step + x * 2;
       const y0 = bytes[source];
       const u = bytes[source + 1];
       const y1 = bytes[source + 2] ?? y0;
@@ -248,7 +290,7 @@ function drawYuyvCameraFrame(image) {
   canvas.dataset.stream = 'camera';
   context.imageSmoothingEnabled = false;
   context.putImageData(output, 0, 0);
-  range.textContent = `${width}x${height}`;
+  updateRangeLabel(width, height, drawCropOverlay(width, height));
   connection.textContent = `Receiving thermal stream: ${imageTopic}`;
 }
 
@@ -272,9 +314,70 @@ async function drawCompressedCameraFrame(image) {
   context.imageSmoothingEnabled = true;
   context.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
+  updateRangeLabel(width, height, drawCropOverlay(width, height));
 
-  range.textContent = `${width}x${height}`;
   connection.textContent = `Receiving thermal stream: ${imageTopic}`;
+}
+
+function updateRangeLabel(width, height, cropCount) {
+  range.textContent = cropCount > 0
+    ? `${width}x${height} | ${cropCount} crop${cropCount === 1 ? '' : 's'}`
+    : `${width}x${height}`;
+}
+
+function depthRectToThermalRect(rect, depthWidth, depthHeight, thermalWidth, thermalHeight) {
+  const x = Math.max(0, Math.min(thermalWidth, (Number(rect.x) || 0) * thermalWidth / depthWidth));
+  const y = Math.max(0, Math.min(thermalHeight, (Number(rect.y) || 0) * thermalHeight / depthHeight));
+  const right = Math.max(0, Math.min(thermalWidth, ((Number(rect.x) || 0) + (Number(rect.width) || 0)) * thermalWidth / depthWidth));
+  const bottom = Math.max(0, Math.min(thermalHeight, ((Number(rect.y) || 0) + (Number(rect.height) || 0)) * thermalHeight / depthHeight));
+  return {
+    x,
+    y,
+    width: Math.max(1, right - x),
+    height: Math.max(1, bottom - y),
+  };
+}
+
+function drawCropOverlay(thermalWidth, thermalHeight) {
+  if (!latestCropRegions || !latestCropRegions.crops.length) return 0;
+
+  const depthWidth = Math.max(1, latestCropRegions.depthWidth || defaultCropDepthFrame.width);
+  const depthHeight = Math.max(1, latestCropRegions.depthHeight || defaultCropDepthFrame.height);
+  const accepted = latestCropRegions.crops.filter((crop) => crop && crop.accepted);
+  if (!accepted.length) return 0;
+
+  context.save();
+  context.lineJoin = 'round';
+  context.font = '10px ui-monospace, Consolas, monospace';
+  accepted.forEach((crop, index) => {
+    const blocks = Array.isArray(crop.depth_blocks) ? crop.depth_blocks : [];
+    context.fillStyle = 'rgba(249, 206, 98, 0.14)';
+    context.strokeStyle = 'rgba(249, 206, 98, 0.92)';
+    context.lineWidth = 1;
+    blocks.forEach((block) => {
+      const rect = depthRectToThermalRect(block, depthWidth, depthHeight, thermalWidth, thermalHeight);
+      context.fillRect(rect.x, rect.y, rect.width, rect.height);
+      context.strokeRect(rect.x + 0.5, rect.y + 0.5, Math.max(1, rect.width - 1), Math.max(1, rect.height - 1));
+    });
+
+    if (crop.bounding_rect) {
+      const bounds = depthRectToThermalRect(crop.bounding_rect, depthWidth, depthHeight, thermalWidth, thermalHeight);
+      context.strokeStyle = 'rgba(56, 217, 150, 0.98)';
+      context.lineWidth = 2;
+      context.strokeRect(bounds.x + 1, bounds.y + 1, Math.max(1, bounds.width - 2), Math.max(1, bounds.height - 2));
+      context.fillStyle = 'rgba(3, 12, 20, 0.72)';
+      const label = `${blocks.length || crop.active_block_count || 0} blocks`;
+      const labelWidth = context.measureText(label).width + 8;
+      const labelX = Math.max(0, Math.min(thermalWidth - labelWidth, bounds.x));
+      const labelY = Math.max(12, bounds.y);
+      context.fillRect(labelX, labelY - 12, labelWidth, 12);
+      context.fillStyle = '#38d996';
+      context.fillText(label, labelX + 4, labelY - 3);
+    }
+
+  });
+  context.restore();
+  return accepted.length;
 }
 
 function coreLabel(core) {

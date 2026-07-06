@@ -43,6 +43,6 @@ ros2 launch drone_control drone_launch.py \
   start_thermal_camera:=true
 ```
 
-The dashboard subscribes only to the thermal stream. HikCamera-style 256x392 YUYV frames are cropped to the lower 256x192 thermal image for display. Stop sends SIGINT to the launch process and all of its ROS nodes.
+The dashboard subscribes to the thermal stream and, when available, `/thermal_depth_crop/regions`. HikCamera-style devices expose a 256x192 sensor image inside a larger 256x392 YUYV transport frame, so the dashboard crops the transport frame and displays the real 256x192 thermal image. Accepted thermal-guided depth crop blocks are projected back onto the thermal image as small boxes, with a larger outline for each accepted crop group. Stop sends SIGINT to the launch process and all of its ROS nodes.
 
 Set `ROS2_WORKSPACE` when the ROS workspace is not beside this directory. The dashboard defaults to ROS 2 Jazzy; set `ROS_DISTRO` if you are using another distro, and `PORT` to change the dashboard port.
