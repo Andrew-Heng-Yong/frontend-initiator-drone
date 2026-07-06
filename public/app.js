@@ -27,6 +27,7 @@ const fallbackCropConfig = {
   minTotalBlocks: 3,
   blockDilation: 0,
   minComponentAreaPx: 8,
+  minTotalBlocks: 20,
   thresholdStdDev: 1.2,
   thresholdPercentile: 0.82,
 };
