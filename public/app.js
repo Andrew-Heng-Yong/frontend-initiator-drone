@@ -22,6 +22,7 @@ let rosSocket;
 let latestFrame = null;
 let drawScheduled = false;
 let frameToken = 0;
+let lastFrameAt = 0;
 let subscribedTopics = new Set();
 const messageFragments = new Map();
 
@@ -50,6 +51,7 @@ function closeRosbridge() {
     rosSocket = null;
   }
   latestFrame = null;
+  lastFrameAt = 0;
   subscribedTopics = new Set();
   connection.textContent = 'RGB tracking stream disconnected.';
 }
@@ -68,6 +70,7 @@ function connectRosbridge() {
     if (!message || message.op !== 'publish') return;
     if (message.topic === imageTopic) {
       latestFrame = message.msg;
+      lastFrameAt = performance.now();
       scheduleDraw();
     }
   };
@@ -353,6 +356,14 @@ async function refresh() {
     logs.textContent = serverLogs.join('\n') || 'No launch output yet.';
     logs.scrollTop = logs.scrollHeight;
     if (state.running) connectRosbridge();
+    if (
+      state.running &&
+      rosSocket &&
+      rosSocket.readyState === WebSocket.OPEN &&
+      !lastFrameAt
+    ) {
+      connection.textContent = `Waiting for frames: ${imageTopic}. Check launch output if this stays here.`;
+    }
   } catch (_) {
     connection.textContent = 'Dashboard service unavailable.';
   }
