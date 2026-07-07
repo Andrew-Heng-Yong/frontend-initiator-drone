@@ -1,15 +1,12 @@
-const startButton = document.querySelector('#start-button');
-const stopButton = document.querySelector('#stop-button');
 const statusDot = document.querySelector('#status-dot');
 const statusText = document.querySelector('#status-text');
 const connection = document.querySelector('#connection');
 const startToggle = document.querySelector('#start-toggle');
 const cpuMini = document.querySelector('#cpu-mini');
-const canvas = document.querySelector('#pose-canvas');
+const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
 const range = document.querySelector('#range');
 const logs = document.querySelector('#logs');
-const cpuCores = document.querySelector('#cpu-cores');
 const clearButton = document.querySelector('#clear-logs');
 const copyButton = document.querySelector('#copy-logs');
 const logPanel = document.querySelector('.log-panel');
@@ -24,7 +21,6 @@ const cropRegionsFreshMs = 2500;
 const fallbackCropConfig = {
   blockWidth: 30,
   blockHeight: 30,
-  minTotalBlocks: 3,
   blockDilation: 0,
   minComponentAreaPx: 8,
   minTotalBlocks: 20,
@@ -52,10 +48,8 @@ const messageFragments = new Map();
 function setRunning(running) {
   statusText.textContent = running ? 'Running' : 'Stopped';
   statusDot.classList.toggle('running', running);
-  startButton.disabled = running;
-  stopButton.disabled = !running;
   if (!running) closeRosbridge();
-  if (startToggle) startToggle.textContent = running ? 'Stop node' : 'Start node';
+  startToggle.textContent = running ? 'Stop node' : 'Start node';
 }
 
 async function request(path, body) {
@@ -541,48 +535,23 @@ function coreLabel(core) {
 
 function renderCpu(cores, temperature) {
   if (!cores || !cores.length) {
-    if (cpuCores) cpuCores.innerHTML = '<p class="cpu-empty">CPU data unavailable.</p>';
-    if (cpuMini) cpuMini.textContent = temperature == null ? '' : `temp: ${temperature}`;
+    cpuMini.textContent = temperature == null ? '' : `temp: ${temperature}`;
     return;
   }
 
-  if (cpuCores) {
-    cpuCores.replaceChildren(...cores.map(({ core, load }) => {
-      const row = document.createElement('div');
-      row.className = 'cpu-core';
-
-      const label = document.createElement('span');
-      label.textContent = core;
-
-      const meter = document.createElement('div');
-      meter.className = 'cpu-meter';
-      const fill = document.createElement('div');
-      fill.style.width = `${load}%`;
-      meter.append(fill);
-
-      const value = document.createElement('strong');
-      value.textContent = String(load);
-
-      row.append(label, meter, value);
-      return row;
-    }));
+  const items = cores.slice(0, 4).map(({ core, load }) => {
+    const el = document.createElement('div');
+    el.className = 'mini-core';
+    el.textContent = `${coreLabel(core)}: ${Math.round(load)}`;
+    return el;
+  });
+  if (temperature != null) {
+    const temp = document.createElement('div');
+    temp.className = 'mini-core cpu-temp';
+    temp.textContent = `temp: ${temperature}`;
+    items.unshift(temp);
   }
-
-  if (cpuMini) {
-    const items = cores.slice(0, 4).map(({ core, load }) => {
-      const el = document.createElement('div');
-      el.className = 'mini-core';
-      el.textContent = `${coreLabel(core)}: ${Math.round(load)}`;
-      return el;
-    });
-    if (temperature != null) {
-      const temp = document.createElement('div');
-      temp.className = 'mini-core cpu-temp';
-      temp.textContent = `temp: ${temperature}`;
-      items.unshift(temp);
-    }
-    cpuMini.replaceChildren(...items);
-  }
+  cpuMini.replaceChildren(...items);
 }
 
 async function copyLogsToClipboard() {
@@ -618,31 +587,11 @@ async function refresh() {
   }
 }
 
-if (startToggle) {
-  startToggle.addEventListener('click', async () => {
-    try {
-      const running = statusDot.classList.contains('running');
-      if (running) await request('/api/stop');
-      else await request('/api/start');
-      await refresh();
-    } catch (error) {
-      connection.textContent = error.message;
-    }
-  });
-}
-
-startButton.addEventListener('click', async () => {
+startToggle.addEventListener('click', async () => {
   try {
-    await request('/api/start');
-    await refresh();
-  } catch (error) {
-    connection.textContent = error.message;
-  }
-});
-
-stopButton.addEventListener('click', async () => {
-  try {
-    await request('/api/stop');
+    const running = statusDot.classList.contains('running');
+    if (running) await request('/api/stop');
+    else await request('/api/start');
     await refresh();
   } catch (error) {
     connection.textContent = error.message;

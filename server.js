@@ -100,8 +100,7 @@ function startLaunch() {
   const thermalLaunch = [
     'ros2 launch drone_control drone_launch.py',
     'start_rosbridge:=true',
-    'start_camera:=false',
-    'start_pose:=false',
+    'start_camera:=true',
     'start_thermal_camera:=true',
   ].join(' ');
   const command = [
@@ -119,7 +118,7 @@ function startLaunch() {
   });
   addLog(`Starting thermal camera launch with rosbridge (PID ${launchProcess.pid}).`);
   addLog(`ROS distro: ${ROS_DISTRO}; workspace: ${ROS_WORKSPACE}`);
-  addLog('Launching only the V4L2 thermal camera node; RGB/depth launch paths remain available in ROS.');
+  addLog('Launching the V4L2 thermal camera and Orbbec depth stream.');
   if (DRONE_SETTINGS_FILE) addLog(`Settings file: ${DRONE_SETTINGS_FILE}`);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));
