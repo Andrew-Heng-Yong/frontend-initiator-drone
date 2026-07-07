@@ -17,6 +17,12 @@ const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
 const overlayAlphaInput = document.querySelector('#overlay-alpha');
 const overlayAlphaValue = document.querySelector('#overlay-alpha-value');
+const thermalOffsetXInput = document.querySelector('#thermal-offset-x');
+const thermalOffsetXValue = document.querySelector('#thermal-offset-x-value');
+const thermalOffsetYInput = document.querySelector('#thermal-offset-y');
+const thermalOffsetYValue = document.querySelector('#thermal-offset-y-value');
+const thermalScaleInput = document.querySelector('#thermal-scale');
+const thermalScaleValue = document.querySelector('#thermal-scale-value');
 let imageTopics = {
   color: '/camera/color/image_raw',
   thermal: '/thermal/image_raw',
@@ -24,10 +30,12 @@ let imageTopics = {
 let thermalFov = { horizontal: 55, vertical: 35 };
 let cameraFov = { horizontal: 67, vertical: 53.6 };
 let flipThermalX = true;
+let thermalAlignment = { offsetX: 0, offsetY: 0, scale: 1 };
 
 let rosSocket;
 let activeImageTopic = null;
 let overlayAlphaTimer;
+let thermalAlignmentTimer;
 let overlayAlpha = 0.45;
 let latestThermal = null;
 let latestColor = null;
@@ -320,17 +328,23 @@ function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
   if (!latestThermal) return;
   const { values, width, height, low, high } = latestThermal;
   const span = Math.max(high - low, 0.5);
-  const overlayWidth = Math.max(width, Math.round(cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal)));
-  const overlayHeight = Math.max(height, Math.round(cameraHeight * fovFraction(thermalFov.vertical, cameraFov.vertical)));
-  const left = Math.max(0, Math.round((cameraWidth - overlayWidth) / 2));
-  const top = Math.max(0, Math.round((cameraHeight - overlayHeight) / 2));
+  const overlayWidth = Math.max(width, Math.round(
+    cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal) * thermalAlignment.scale,
+  ));
+  const overlayHeight = Math.max(height, Math.round(
+    cameraHeight * fovFraction(thermalFov.vertical, cameraFov.vertical) * thermalAlignment.scale,
+  ));
+  const left = Math.round((cameraWidth - overlayWidth) / 2 + thermalAlignment.offsetX);
+  const top = Math.round((cameraHeight - overlayHeight) / 2 + thermalAlignment.offsetY);
   const right = Math.min(cameraWidth, left + overlayWidth);
   const bottom = Math.min(cameraHeight, top + overlayHeight);
+  const drawLeft = Math.max(0, left);
+  const drawTop = Math.max(0, top);
 
-  for (let y = top; y < bottom; y += 1) {
-    const thermalY = Math.max(0, Math.min(height - 1, Math.floor(((y - top) / Math.max(1, bottom - top)) * height)));
-    for (let x = left; x < right; x += 1) {
-      const scaledX = Math.max(0, Math.min(width - 1, Math.floor(((x - left) / Math.max(1, right - left)) * width)));
+  for (let y = drawTop; y < bottom; y += 1) {
+    const thermalY = Math.max(0, Math.min(height - 1, Math.floor(((y - top) / Math.max(1, overlayHeight)) * height)));
+    for (let x = drawLeft; x < right; x += 1) {
+      const scaledX = Math.max(0, Math.min(width - 1, Math.floor(((x - left) / Math.max(1, overlayWidth)) * width)));
       const thermalX = flipThermalX ? width - 1 - scaledX : scaledX;
       const temperature = values[thermalY * width + thermalX];
       if (!Number.isFinite(temperature)) continue;
@@ -352,6 +366,25 @@ function setOverlayAlphaUi(alpha) {
   overlayAlphaValue.textContent = String(percent);
 }
 
+function setThermalAlignmentUi(alignment) {
+  const offsetX = clampNumber(alignment && alignment.offsetX, -1000, 1000, 0);
+  const offsetY = clampNumber(alignment && alignment.offsetY, -1000, 1000, 0);
+  const scale = clampNumber(alignment && alignment.scale, 0.1, 3, 1);
+  thermalAlignment = { offsetX, offsetY, scale };
+  if (thermalOffsetXInput && document.activeElement !== thermalOffsetXInput) {
+    thermalOffsetXInput.value = String(Math.round(offsetX));
+  }
+  if (thermalOffsetXValue) thermalOffsetXValue.textContent = String(Math.round(offsetX));
+  if (thermalOffsetYInput && document.activeElement !== thermalOffsetYInput) {
+    thermalOffsetYInput.value = String(Math.round(offsetY));
+  }
+  if (thermalOffsetYValue) thermalOffsetYValue.textContent = String(Math.round(offsetY));
+  if (thermalScaleInput && document.activeElement !== thermalScaleInput) {
+    thermalScaleInput.value = String(Math.round(scale * 100));
+  }
+  if (thermalScaleValue) thermalScaleValue.textContent = String(Math.round(scale * 100));
+}
+
 function applyStreamConfig(stream) {
   if (!stream) return;
   const nextTopics = {
@@ -363,7 +396,14 @@ function applyStreamConfig(stream) {
   thermalFov = finiteFov(stream.thermalFov, thermalFov);
   cameraFov = finiteFov(stream.cameraFov, cameraFov);
   flipThermalX = stream.flipThermalX !== false;
+  setThermalAlignmentUi(stream.alignment);
   if (topicsChanged) closeRosbridge();
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
 }
 
 function finiteFov(candidate, fallback) {
@@ -388,6 +428,26 @@ function streamStatusText() {
   return latestThermal
     ? `Receiving RGB + thermal: ${imageTopics.color} / ${imageTopics.thermal}`
     : `Receiving RGB; waiting for thermal: ${imageTopics.thermal}`;
+}
+
+function updateThermalAlignmentFromUi() {
+  thermalAlignment = {
+    offsetX: Number(thermalOffsetXInput ? thermalOffsetXInput.value : 0),
+    offsetY: Number(thermalOffsetYInput ? thermalOffsetYInput.value : 0),
+    scale: Number(thermalScaleInput ? thermalScaleInput.value : 100) / 100,
+  };
+  if (thermalOffsetXValue) thermalOffsetXValue.textContent = String(Math.round(thermalAlignment.offsetX));
+  if (thermalOffsetYValue) thermalOffsetYValue.textContent = String(Math.round(thermalAlignment.offsetY));
+  if (thermalScaleValue) thermalScaleValue.textContent = String(Math.round(thermalAlignment.scale * 100));
+  if (latestColor) scheduleDraw();
+  clearTimeout(thermalAlignmentTimer);
+  thermalAlignmentTimer = setTimeout(async () => {
+    try {
+      await request('/api/thermal-alignment', thermalAlignment);
+    } catch (error) {
+      connection.textContent = error.message;
+    }
+  }, 150);
 }
 
 function heatColor(value) {
@@ -485,6 +545,10 @@ async function refresh() {
     connection.textContent = 'Dashboard service unavailable.';
   }
 }
+
+[thermalOffsetXInput, thermalOffsetYInput, thermalScaleInput].forEach((input) => {
+  if (input) input.addEventListener('input', updateThermalAlignmentFromUi);
+});
 
 if (startToggle) {
   startToggle.addEventListener('click', async () => {

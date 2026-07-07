@@ -11,6 +11,7 @@ const PORT = Number(process.env.PORT || 4173);
 const ROS_WORKSPACE = path.resolve(process.env.ROS2_WORKSPACE || path.join(__dirname, '..', 'ros2-initiator-drone'));
 const ROS_DISTRO = process.env.ROS_DISTRO || 'jazzy';
 const ORBBEC_SETUP = process.env.ORBBEC_SETUP || path.join(process.env.HOME || '', 'orbbec_ws', 'install', 'setup.bash');
+const ALIGNMENT_FILE = path.join(__dirname, '.thermal-alignment.json');
 const LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND
   || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_thermal_overlay:=false';
 const STREAM_CONFIG = {
@@ -33,10 +34,43 @@ let logs = [];
 let previousCpuStats = null;
 let overlayAlpha = Number(process.env.THERMAL_OVERLAY_ALPHA || 0.45);
 if (!Number.isFinite(overlayAlpha) || overlayAlpha < 0 || overlayAlpha > 1) overlayAlpha = 0.45;
+let thermalAlignment = readThermalAlignment();
 
 function addLog(message) {
   logs.push(`[${new Date().toLocaleTimeString()}] ${message}`);
   logs = logs.slice(-MAX_LOG_LINES);
+}
+
+function normalizeThermalAlignment(alignment) {
+  const offsetX = Number(alignment.offsetX);
+  const offsetY = Number(alignment.offsetY);
+  const scale = Number(alignment.scale);
+  return {
+    offsetX: Number.isFinite(offsetX) ? Math.max(-1000, Math.min(1000, offsetX)) : 0,
+    offsetY: Number.isFinite(offsetY) ? Math.max(-1000, Math.min(1000, offsetY)) : 0,
+    scale: Number.isFinite(scale) && scale > 0 ? Math.max(0.1, Math.min(3, scale)) : 1,
+  };
+}
+
+function readThermalAlignment() {
+  const defaults = normalizeThermalAlignment({
+    offsetX: process.env.THERMAL_OFFSET_X || 0,
+    offsetY: process.env.THERMAL_OFFSET_Y || 0,
+    scale: process.env.THERMAL_SCALE || 1,
+  });
+  try {
+    return normalizeThermalAlignment(JSON.parse(fs.readFileSync(ALIGNMENT_FILE, 'utf8')));
+  } catch (_) {
+    return defaults;
+  }
+}
+
+function saveThermalAlignment() {
+  try {
+    fs.writeFileSync(ALIGNMENT_FILE, `${JSON.stringify(thermalAlignment, null, 2)}\n`);
+  } catch (error) {
+    addLog(`Could not save thermal alignment: ${error.message}`);
+  }
 }
 
 function readCpuStats() {
@@ -103,7 +137,7 @@ function state() {
     cpuTemp: cpuTemperature(),
     overlayAlpha,
     rgbOverlayEnabled: true,
-    stream: STREAM_CONFIG,
+    stream: { ...STREAM_CONFIG, alignment: thermalAlignment },
     launchCommand: LAUNCH_COMMAND,
   };
 }
@@ -147,6 +181,25 @@ async function setOverlayAlpha(request) {
     throw new Error('alpha must be a number from 0.0 to 1.0');
   }
   return applyOverlayAlpha(alpha);
+}
+
+async function setThermalAlignment(request) {
+  const body = await readJson(request);
+  const offsetX = Number(body.offsetX);
+  const offsetY = Number(body.offsetY);
+  const scale = Number(body.scale);
+  if (!Number.isFinite(offsetX) || offsetX < -1000 || offsetX > 1000) {
+    throw new Error('offsetX must be a number from -1000 to 1000');
+  }
+  if (!Number.isFinite(offsetY) || offsetY < -1000 || offsetY > 1000) {
+    throw new Error('offsetY must be a number from -1000 to 1000');
+  }
+  if (!Number.isFinite(scale) || scale < 0.1 || scale > 3) {
+    throw new Error('scale must be a number from 0.1 to 3.0');
+  }
+  thermalAlignment = { offsetX, offsetY, scale };
+  saveThermalAlignment();
+  return { ok: true, applied: true, alignment: thermalAlignment };
 }
 
 function startLaunch() {
@@ -210,6 +263,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/stop') return sendJson(response, 200, stopLaunch());
     if (request.method === 'POST' && url.pathname === '/api/logs/clear') return sendJson(response, 200, clearLogs());
     if (request.method === 'POST' && url.pathname === '/api/overlay-alpha') return sendJson(response, 200, await setOverlayAlpha(request));
+    if (request.method === 'POST' && url.pathname === '/api/thermal-alignment') return sendJson(response, 200, await setThermalAlignment(request));
 
     const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
     const filePath = path.resolve(__dirname, 'public', file);
