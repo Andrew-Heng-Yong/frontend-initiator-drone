@@ -1,6 +1,6 @@
 # Thermal dashboard
 
-This is a single-page dashboard for the drone camera stack. It starts and stops the drone launch file, starts rosbridge for the browser stream, then renders `/camera/color/image_raw` as the window and blends `/thermal/image_raw` into the center using the MLX90640 55 x 35 degree field of view. The Orbbec RGB camera is required; the dashboard does not start thermal-only mode.
+This is a single-page dashboard for the drone camera stack. It starts and stops the drone launch file, starts rosbridge for the browser stream, then renders `/camera/color/image_raw` as the window and blends `/thermal/image_raw` into the center. The Orbbec RGB camera is required; the dashboard does not start thermal-only mode.
 
 ## Run on the ROS 2 machine
 
@@ -27,6 +27,18 @@ Stop sends SIGINT to the launch process and all of its ROS nodes.
 
 `drone_control` is the top-level package for the drone. It starts the thermal sensor package and can start `rosbridge_websocket` on port `9090`; add future drone nodes to `src/drone_control/launch/drone_launch.py`.
 
+The dashboard can be pointed at the current I2C thermal accel path without editing the frontend:
+
+```bash
+DRONE_LAUNCH_COMMAND='ros2 launch <package> <launch-file> start_rosbridge:=true' \
+THERMAL_IMAGE_TOPIC=/thermal/image_raw \
+THERMAL_FOV_HORIZONTAL=55 \
+THERMAL_FOV_VERTICAL=35 \
+npm start
+```
+
+Use the actual launch command/topic for the active backend. The server logs both values on start, which makes it obvious if the old MLX node is still being launched.
+
 For RGB overlay, make sure the Orbbec workspace exists at `~/orbbec_ws/install/setup.bash`:
 
 ```bash
@@ -36,11 +48,11 @@ colcon build --packages-up-to drone_control
 source install/setup.bash
 ```
 
-If the dashboard connects but no image appears, check the launch output. A healthy RGB overlay launch should include `component_container`, `mlx90640_node`, and `rosbridge_websocket`. If the launch package is missing new arguments, rebuild and source the ROS workspace on the Pi:
+If the dashboard connects but no image appears, check the launch output. A healthy RGB overlay launch should include `component_container`, the active thermal node, and `rosbridge_websocket`. If the launch package is missing new arguments, rebuild and source the ROS workspace on the Pi:
 
 ```bash
 cd ~/ros2-initiator-drone
-rm -rf build/mlx90640_node build/drone_control install/mlx90640_node install/drone_control
+rm -rf build/<thermal_package> build/drone_control install/<thermal_package> install/drone_control
 source /opt/ros/jazzy/setup.bash
 colcon build --packages-up-to drone_control
 source install/setup.bash

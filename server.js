@@ -11,6 +11,21 @@ const PORT = Number(process.env.PORT || 4173);
 const ROS_WORKSPACE = path.resolve(process.env.ROS2_WORKSPACE || path.join(__dirname, '..', 'ros2-initiator-drone'));
 const ROS_DISTRO = process.env.ROS_DISTRO || 'jazzy';
 const ORBBEC_SETUP = process.env.ORBBEC_SETUP || path.join(process.env.HOME || '', 'orbbec_ws', 'install', 'setup.bash');
+const LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND
+  || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_thermal_overlay:=false';
+const STREAM_CONFIG = {
+  colorTopic: process.env.COLOR_IMAGE_TOPIC || '/camera/color/image_raw',
+  thermalTopic: process.env.THERMAL_IMAGE_TOPIC || '/thermal/image_raw',
+  thermalFov: {
+    horizontal: Number(process.env.THERMAL_FOV_HORIZONTAL || 55),
+    vertical: Number(process.env.THERMAL_FOV_VERTICAL || 35),
+  },
+  cameraFov: {
+    horizontal: Number(process.env.CAMERA_FOV_HORIZONTAL || 67),
+    vertical: Number(process.env.CAMERA_FOV_VERTICAL || 53.6),
+  },
+  flipThermalX: process.env.THERMAL_FLIP_X !== 'false',
+};
 const MAX_LOG_LINES = 160;
 
 let launchProcess = null;
@@ -88,6 +103,8 @@ function state() {
     cpuTemp: cpuTemperature(),
     overlayAlpha,
     rgbOverlayEnabled: true,
+    stream: STREAM_CONFIG,
+    launchCommand: LAUNCH_COMMAND,
   };
 }
 
@@ -137,7 +154,6 @@ function startLaunch() {
 
   const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
   const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
-  const rgbLaunch = 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_thermal_overlay:=false';
   const command = [
     `if [ ! -f "${setupFile}" ]; then echo "Missing ROS setup file: ${setupFile}"; exit 1; fi`,
     `source "${setupFile}"`,
@@ -145,7 +161,7 @@ function startLaunch() {
     `source "${ORBBEC_SETUP}"`,
     `if [ ! -f "${installSetup}" ]; then echo "Missing workspace setup file: ${installSetup}. Run colcon build first."; exit 1; fi`,
     `source "${installSetup}"`,
-    rgbLaunch,
+    LAUNCH_COMMAND,
   ].join(' && ');
 
   launchProcess = spawn('bash', ['-lc', command], {
@@ -156,6 +172,8 @@ function startLaunch() {
   addLog(`Starting RGB camera launch with rosbridge (PID ${launchProcess.pid}).`);
   addLog(`ROS distro: ${ROS_DISTRO}; workspace: ${ROS_WORKSPACE}`);
   addLog(`RGB camera required; thermal-only mode disabled; Orbbec setup: ${ORBBEC_SETUP}`);
+  addLog(`Launch command: ${LAUNCH_COMMAND}`);
+  addLog(`Stream topics: color=${STREAM_CONFIG.colorTopic}; thermal=${STREAM_CONFIG.thermalTopic}`);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.on('error', (error) => addLog(`Launch error: ${error.message}`));

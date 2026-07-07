@@ -17,12 +17,13 @@ const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
 const overlayAlphaInput = document.querySelector('#overlay-alpha');
 const overlayAlphaValue = document.querySelector('#overlay-alpha-value');
-const imageTopics = {
+let imageTopics = {
   color: '/camera/color/image_raw',
   thermal: '/thermal/image_raw',
 };
-const thermalFov = { horizontal: 55, vertical: 35 };
-const cameraFov = { horizontal: 67, vertical: 53.6 };
+let thermalFov = { horizontal: 55, vertical: 35 };
+let cameraFov = { horizontal: 67, vertical: 53.6 };
+let flipThermalX = true;
 
 let rosSocket;
 let activeImageTopic = null;
@@ -30,6 +31,7 @@ let overlayAlphaTimer;
 let overlayAlpha = 0.45;
 let latestThermal = null;
 let latestColor = null;
+let thermalStatus = 'thermal waiting';
 let drawScheduled = false;
 let cameraFrameToken = 0;
 let subscribedTopics = new Set();
@@ -62,6 +64,7 @@ function closeRosbridge() {
   activeImageTopic = null;
   latestColor = null;
   latestThermal = null;
+  thermalStatus = 'thermal waiting';
   subscribedTopics = new Set();
   connection.textContent = 'Camera stream disconnected.';
 }
@@ -114,7 +117,13 @@ function subscribeImageTopic(topic) {
 }
 
 function parseRosbridgeMessage(data) {
-  const message = JSON.parse(data);
+  let message;
+  try {
+    message = JSON.parse(data);
+  } catch (_) {
+    connection.textContent = 'Ignoring malformed rosbridge message.';
+    return null;
+  }
   if (message.op !== 'fragment') return message;
 
   const fragment = messageFragments.get(message.id) || {
@@ -135,7 +144,12 @@ function parseRosbridgeMessage(data) {
   }
 
   messageFragments.delete(message.id);
-  return JSON.parse(fragment.parts.join(''));
+  try {
+    return JSON.parse(fragment.parts.join(''));
+  } catch (_) {
+    connection.textContent = 'Ignoring malformed rosbridge fragment.';
+    return null;
+  }
 }
 
 function scheduleDraw() {
@@ -206,9 +220,9 @@ async function drawCameraFrame(image) {
   canvas.dataset.stream = 'overlay';
   context.imageSmoothingEnabled = true;
   context.putImageData(output, 0, 0);
-  range.textContent = `${width}x${height}`;
+  updateRangeLabel(width, height);
   activeImageTopic = imageTopics.color;
-  connection.textContent = `Receiving RGB with thermal overlay: ${imageTopics.color}`;
+  connection.textContent = streamStatusText();
   subscribeImageTopic(imageTopics.thermal);
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
@@ -240,33 +254,71 @@ async function drawCompressedCameraFrame(image) {
     context.putImageData(output, 0, 0);
   }
 
-  range.textContent = `${width}x${height}`;
+  updateRangeLabel(width, height);
   activeImageTopic = imageTopics.color;
-  connection.textContent = `Receiving RGB with thermal overlay: ${imageTopics.color}`;
+  connection.textContent = streamStatusText();
   subscribeImageTopic(imageTopics.thermal);
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
 function updateThermalFrame(image) {
-  if (image.encoding !== '32FC1') return;
-  const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
-  const temperatures = new Float32Array(bytes.buffer);
-  const values = [...temperatures].filter(Number.isFinite);
-  if (!values.length) return;
+  const frame = decodeThermalFrame(image);
+  if (!frame) return;
+  const values = [...frame.values].filter(Number.isFinite);
+  if (!values.length) {
+    thermalStatus = 'thermal empty';
+    return;
+  }
+
   const low = Math.min(...values);
   const high = Math.max(...values);
-  latestThermal = {
-    temperatures,
-    width: image.width || 32,
-    height: image.height || 24,
-    low,
-    high,
-  };
+  latestThermal = { ...frame, low, high };
+  thermalStatus = `thermal ${frame.width}x${frame.height} ${formatRange(low, high, frame.units)}`;
+}
+
+function decodeThermalFrame(image) {
+  const encoding = String(image.encoding || '').toLowerCase();
+  const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
+  const width = image.width || 32;
+  const height = image.height || 24;
+  const littleEndian = !image.is_bigendian;
+  const values = new Float32Array(width * height);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+  if (encoding === '32fc1') {
+    readScalarImage(values, width, height, image.step || width * 4, 4, bytes.byteLength, (offset) => view.getFloat32(offset, littleEndian));
+    return { values, width, height, units: 'temperature' };
+  }
+
+  if (['16uc1', 'mono16', '16sc1'].includes(encoding)) {
+    const signed = encoding === '16sc1';
+    readScalarImage(values, width, height, image.step || width * 2, 2, bytes.byteLength, (offset) => (
+      signed ? view.getInt16(offset, littleEndian) : view.getUint16(offset, littleEndian)
+    ));
+    return { values, width, height, units: 'raw' };
+  }
+
+  if (['8uc1', 'mono8'].includes(encoding)) {
+    readScalarImage(values, width, height, image.step || width, 1, bytes.byteLength, (offset) => bytes[offset]);
+    return { values, width, height, units: 'raw' };
+  }
+
+  thermalStatus = `unsupported thermal: ${image.encoding || 'unknown'}`;
+  return null;
+}
+
+function readScalarImage(target, width, height, step, bytesPerPixel, sourceLength, readValue) {
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = y * step + x * bytesPerPixel;
+      target[y * width + x] = offset + bytesPerPixel <= sourceLength ? readValue(offset) : NaN;
+    }
+  }
 }
 
 function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
   if (!latestThermal) return;
-  const { temperatures, width, height, low, high } = latestThermal;
+  const { values, width, height, low, high } = latestThermal;
   const span = Math.max(high - low, 0.5);
   const overlayWidth = Math.max(width, Math.round(cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal)));
   const overlayHeight = Math.max(height, Math.round(cameraHeight * fovFraction(thermalFov.vertical, cameraFov.vertical)));
@@ -278,8 +330,9 @@ function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
   for (let y = top; y < bottom; y += 1) {
     const thermalY = Math.max(0, Math.min(height - 1, Math.floor(((y - top) / Math.max(1, bottom - top)) * height)));
     for (let x = left; x < right; x += 1) {
-      const thermalX = width - 1 - Math.max(0, Math.min(width - 1, Math.floor(((x - left) / Math.max(1, right - left)) * width)));
-      const temperature = temperatures[thermalY * width + thermalX];
+      const scaledX = Math.max(0, Math.min(width - 1, Math.floor(((x - left) / Math.max(1, right - left)) * width)));
+      const thermalX = flipThermalX ? width - 1 - scaledX : scaledX;
+      const temperature = values[thermalY * width + thermalX];
       if (!Number.isFinite(temperature)) continue;
 
       const [red, green, blue] = heatColor((temperature - low) / span);
@@ -297,6 +350,44 @@ function setOverlayAlphaUi(alpha) {
   overlayAlpha = percent / 100;
   overlayAlphaInput.value = String(percent);
   overlayAlphaValue.textContent = String(percent);
+}
+
+function applyStreamConfig(stream) {
+  if (!stream) return;
+  const nextTopics = {
+    color: stream.colorTopic || imageTopics.color,
+    thermal: stream.thermalTopic || imageTopics.thermal,
+  };
+  const topicsChanged = nextTopics.color !== imageTopics.color || nextTopics.thermal !== imageTopics.thermal;
+  imageTopics = nextTopics;
+  thermalFov = finiteFov(stream.thermalFov, thermalFov);
+  cameraFov = finiteFov(stream.cameraFov, cameraFov);
+  flipThermalX = stream.flipThermalX !== false;
+  if (topicsChanged) closeRosbridge();
+}
+
+function finiteFov(candidate, fallback) {
+  const horizontal = Number(candidate && candidate.horizontal);
+  const vertical = Number(candidate && candidate.vertical);
+  return {
+    horizontal: Number.isFinite(horizontal) && horizontal > 0 ? horizontal : fallback.horizontal,
+    vertical: Number.isFinite(vertical) && vertical > 0 ? vertical : fallback.vertical,
+  };
+}
+
+function formatRange(low, high, units) {
+  const decimals = units === 'raw' ? 0 : 1;
+  return `${low.toFixed(decimals)}-${high.toFixed(decimals)}`;
+}
+
+function updateRangeLabel(width, height) {
+  range.textContent = `${width}x${height} | ${thermalStatus}`;
+}
+
+function streamStatusText() {
+  return latestThermal
+    ? `Receiving RGB + thermal: ${imageTopics.color} / ${imageTopics.thermal}`
+    : `Receiving RGB; waiting for thermal: ${imageTopics.thermal}`;
 }
 
 function heatColor(value) {
@@ -380,6 +471,7 @@ async function refresh() {
   try {
     const response = await fetch('/api/state');
     const state = await response.json();
+    applyStreamConfig(state.stream);
     setRunning(state.running);
     renderCpu(state.cpu, state.cpuTemp);
     if (typeof state.overlayAlpha === 'number' && document.activeElement !== overlayAlphaInput) {
