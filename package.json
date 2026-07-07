@@ -1,8 +1,8 @@
 {
-  "name": "thermal-camera-dashboard",
+  "name": "rgb-human-tracking-dashboard",
   "version": "1.0.0",
   "private": true,
-  "description": "Start, stop, and view the ROS 2 thermal camera node.",
+  "description": "Start, stop, and view the ROS 2 RGB human tracking node.",
   "scripts": {
     "start": "node server.js"
   },

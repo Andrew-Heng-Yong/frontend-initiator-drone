@@ -1,5 +1,5 @@
 /*
- * Small, dependency-free control service for the thermal camera dashboard.
+ * Small, dependency-free control service for the RGB human tracking dashboard.
  * It is intended to run on the Linux robot, alongside the ROS 2 workspace.
  */
 const http = require('node:http');
@@ -83,7 +83,6 @@ function state() {
     logs,
     cpu: cpuLoads(),
     cpuTemp: cpuTemperature(),
-    thermalCameraEnabled: true,
   };
 }
 
@@ -97,19 +96,18 @@ function startLaunch() {
 
   const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
   const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
-  const thermalLaunch = [
+  const rgbTrackingLaunch = [
     'ros2 launch drone_control drone_launch.py',
     'start_rosbridge:=true',
-    'start_camera:=false',
-    'start_pose:=false',
-    'start_thermal_camera:=true',
+    'start_camera:=true',
+    'start_pose:=true',
   ].join(' ');
   const command = [
     `if [ ! -f "${setupFile}" ]; then echo "Missing ROS setup file: ${setupFile}"; exit 1; fi`,
     `source "${setupFile}"`,
     `if [ ! -f "${installSetup}" ]; then echo "Missing workspace setup file: ${installSetup}. Run colcon build first."; exit 1; fi`,
     `source "${installSetup}"`,
-    thermalLaunch,
+    rgbTrackingLaunch,
   ].join(' && ');
 
   launchProcess = spawn('bash', ['-lc', command], {
@@ -117,9 +115,9 @@ function startLaunch() {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  addLog(`Starting thermal camera launch with rosbridge (PID ${launchProcess.pid}).`);
+  addLog(`Starting RGB human tracking launch with rosbridge (PID ${launchProcess.pid}).`);
   addLog(`ROS distro: ${ROS_DISTRO}; workspace: ${ROS_WORKSPACE}`);
-  addLog('Launching only the V4L2 thermal camera node; RGB/depth launch paths remain available in ROS.');
+  addLog('Launching RGB camera at 640x360 and human box tracker on the 582x360 center crop.');
   if (DRONE_SETTINGS_FILE) addLog(`Settings file: ${DRONE_SETTINGS_FILE}`);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));

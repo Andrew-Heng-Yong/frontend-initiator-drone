@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Thermal Camera Node</title>
+    <title>RGB Human Tracking</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -17,18 +17,18 @@
         <div class="status"><span id="status-dot"></span><span id="status-text">Stopped</span></div>
       </header>
       <div class="content">
-      <section class="controls" aria-label="Thermal camera node controls">
+      <section class="controls" aria-label="RGB human tracking controls">
         <button id="start-button" class="start" style="display:none">Start node</button>
         <button id="stop-button" class="stop" disabled style="display:none">Stop node</button>
       </section>
       <!-- Large CPU panel removed; compact CPU shown in header -->
-      <section class="viewer" aria-label="Thermal camera stream">
+      <section class="viewer" aria-label="RGB human tracking stream">
         <div class="viewer-heading">
           <div class="viewer-tools">
             <div id="range">--</div>
           </div>
         </div>
-        <canvas id="pose-canvas" width="256" height="192" aria-label="Thermal camera image"></canvas>
+        <canvas id="pose-canvas" width="582" height="360" aria-label="RGB human tracking image"></canvas>
       </section>
       </div>
       <section class="log-panel">
