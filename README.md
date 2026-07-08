@@ -62,6 +62,6 @@ For MLX90640 hardware, `sudo i2cdetect -y 1` should normally show `0x33`; if it 
 
 If the thermal image is visible but does not line up with RGB, use a small hot target such as a candle or warm hand and tune the dashboard `X`, `Y`, `Scale`, `H`, and `V` controls until the thermal hot spot lands on the same RGB object. The dashboard saves the tuned values in `.thermal-alignment.json`; they can also be seeded with `THERMAL_OFFSET_X`, `THERMAL_OFFSET_Y`, `THERMAL_SCALE`, `THERMAL_STRETCH_X`, and `THERMAL_STRETCH_Y`.
 
-The built-in dashboard calibration defaults are `Overlay=50.0`, `X=0.0`, `Y=0.0`, `Scale=100.0`, `H=100.0`, and `V=100.0`. Delete `.thermal-alignment.json` to return to these defaults after local tuning.
+The built-in dashboard calibration defaults are `Overlay=50.0`, `X=25.0`, `Y=-10.0`, `Scale=100.0`, `H=79.6`, and `V=115.4`. Delete `.thermal-alignment.json` to return to these defaults after local tuning.
 
 Set `ROS2_WORKSPACE` when the ROS workspace is not beside this directory. The dashboard defaults to ROS 2 Jazzy; set `ROS_DISTRO` if you are using another distro, and `PORT` to change the dashboard port.

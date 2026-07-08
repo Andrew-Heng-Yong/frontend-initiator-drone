@@ -29,11 +29,11 @@ const STREAM_CONFIG = {
 };
 const MAX_LOG_LINES = 160;
 const DEFAULT_THERMAL_ALIGNMENT = {
-  offsetX: 0,
-  offsetY: 0,
+  offsetX: 25,
+  offsetY: -10,
   scale: 1,
-  stretchX: 1,
-  stretchY: 1,
+  stretchX: 0.796,
+  stretchY: 1.154,
 };
 
 let launchProcess = null;
