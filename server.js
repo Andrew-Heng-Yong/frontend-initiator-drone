@@ -32,7 +32,7 @@ const STREAM_CONFIG = {
 };
 const MAX_LOG_LINES = 160;
 const DEFAULT_THERMAL_ALIGNMENT = {
-  offsetX: 20,
+  offsetX: 10,
   offsetY: 0,
   scale: 0.8,
   stretchX: 0.8,

@@ -44,7 +44,7 @@ The dashboard also subscribes to `/camera/depth/camera_info` by default and disp
 
 By default `BASE_VIEW_MODE=thermal-crop`: the thermal FOV defines the main viewport, and the depth image is cropped to that thermal window before thermal is blended full-frame. Set `BASE_VIEW_MODE=full-depth` to restore the older full depth frame with thermal drawn as a smaller rectangle. This keeps future wider thermal cameras easy to support by changing thermal FOV or the `H`/`V` stretch values instead of changing rendering code.
 
-The baked fallback thermal alignment is `X=20`, `Y=0`, `Scale=80`, `H=80`, `V=100`. This keeps vertical zoom unchanged and shrinks horizontal coverage from the right edge, matching the observed case where the right side aligned while the left side was too far left. The saved `.thermal-alignment.json` file still overrides these defaults after manual tuning.
+The baked fallback thermal alignment is `X=10`, `Y=0`, `Scale=80`, `H=80`, `V=100`. This keeps vertical zoom unchanged and shrinks horizontal coverage from the right edge, matching the observed case where the right side aligned while the left side was too far left. The saved `.thermal-alignment.json` file still overrides these defaults after manual tuning.
 
 For depth overlay, make sure the Orbbec workspace exists at `~/orbbec_ws/install/setup.bash`:
 
