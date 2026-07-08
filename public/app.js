@@ -28,6 +28,7 @@ let imageTopics = {
 };
 let thermalFov = { horizontal: 55, vertical: 35 };
 let cameraFov = { horizontal: 67, vertical: 53.6 };
+let cameraFovFromInfo = false;
 let flipThermalX = true;
 let thermalAlignment = { offsetX: 0, offsetY: 0, scale: 1, stretchX: 1, stretchY: 1 };
 
@@ -206,6 +207,7 @@ function updateCameraInfo(info) {
     horizontal: 2 * Math.atan(width / (2 * fx)) * 180 / Math.PI,
     vertical: 2 * Math.atan(height / (2 * fy)) * 180 / Math.PI,
   };
+  cameraFovFromInfo = true;
 }
 
 async function drawCameraFrame(image) {
@@ -479,9 +481,10 @@ function applyStreamConfig(stream) {
   const topicsChanged = nextTopics.color !== imageTopics.color
     || nextTopics.cameraInfo !== imageTopics.cameraInfo
     || nextTopics.thermal !== imageTopics.thermal;
+  if (topicsChanged) cameraFovFromInfo = false;
   imageTopics = nextTopics;
   thermalFov = finiteFov(stream.thermalFov, thermalFov);
-  cameraFov = finiteFov(stream.cameraFov, cameraFov);
+  if (!cameraFovFromInfo) cameraFov = finiteFov(stream.cameraFov, cameraFov);
   flipThermalX = stream.flipThermalX !== false;
   setThermalAlignmentUi(stream.alignment);
   if (topicsChanged) closeRosbridge();
@@ -542,7 +545,8 @@ function formatRange(low, high, units) {
 }
 
 function updateRangeLabel(width, height) {
-  range.textContent = `${width}x${height} | ${thermalStatus}`;
+  const fovSource = cameraFovFromInfo ? 'info' : 'fallback';
+  range.textContent = `${width}x${height} | ${thermalStatus} | fov ${cameraFov.horizontal.toFixed(1)}x${cameraFov.vertical.toFixed(1)} ${fovSource}`;
 }
 
 function streamStatusText() {
