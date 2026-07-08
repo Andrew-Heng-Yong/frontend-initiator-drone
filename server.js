@@ -28,12 +28,19 @@ const STREAM_CONFIG = {
   flipThermalX: process.env.THERMAL_FLIP_X !== 'false',
 };
 const MAX_LOG_LINES = 160;
+const DEFAULT_THERMAL_ALIGNMENT = {
+  offsetX: 0,
+  offsetY: 0,
+  scale: 1,
+  stretchX: 1,
+  stretchY: 1,
+};
 
 let launchProcess = null;
 let logs = [];
 let previousCpuStats = null;
-let overlayAlpha = Number(process.env.THERMAL_OVERLAY_ALPHA || 0.45);
-if (!Number.isFinite(overlayAlpha) || overlayAlpha < 0 || overlayAlpha > 1) overlayAlpha = 0.45;
+let overlayAlpha = Number(process.env.THERMAL_OVERLAY_ALPHA || 0.5);
+if (!Number.isFinite(overlayAlpha) || overlayAlpha < 0 || overlayAlpha > 1) overlayAlpha = 0.5;
 let thermalAlignment = readThermalAlignment();
 
 function addLog(message) {
@@ -61,11 +68,11 @@ function normalizeAlignmentScale(value) {
 
 function readThermalAlignment() {
   const defaults = normalizeThermalAlignment({
-    offsetX: process.env.THERMAL_OFFSET_X || 0,
-    offsetY: process.env.THERMAL_OFFSET_Y || 0,
-    scale: process.env.THERMAL_SCALE || 1,
-    stretchX: process.env.THERMAL_STRETCH_X || 1,
-    stretchY: process.env.THERMAL_STRETCH_Y || 1,
+    offsetX: process.env.THERMAL_OFFSET_X || DEFAULT_THERMAL_ALIGNMENT.offsetX,
+    offsetY: process.env.THERMAL_OFFSET_Y || DEFAULT_THERMAL_ALIGNMENT.offsetY,
+    scale: process.env.THERMAL_SCALE || DEFAULT_THERMAL_ALIGNMENT.scale,
+    stretchX: process.env.THERMAL_STRETCH_X || DEFAULT_THERMAL_ALIGNMENT.stretchX,
+    stretchY: process.env.THERMAL_STRETCH_Y || DEFAULT_THERMAL_ALIGNMENT.stretchY,
   });
   try {
     return normalizeThermalAlignment(JSON.parse(fs.readFileSync(ALIGNMENT_FILE, 'utf8')));
