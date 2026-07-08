@@ -1,6 +1,6 @@
 # Thermal dashboard
 
-This is a single-page dashboard for the drone camera stack. It starts and stops the drone launch file, starts rosbridge for the browser stream, then renders `/camera/color/image_raw` as the window and blends `/thermal/image_raw` into the center. The Orbbec RGB camera is required; the dashboard does not start thermal-only mode.
+This is a single-page dashboard for the drone camera stack. It starts and stops the drone launch file, starts rosbridge for the browser stream, then renders `/camera/depth/image_raw` as the window and blends `/thermal/image_raw` into the center. The Orbbec depth camera is required; the dashboard does not start thermal-only mode.
 
 ## Run on the ROS 2 machine
 
@@ -31,15 +31,18 @@ The dashboard can be pointed at the current I2C thermal accel path without editi
 
 ```bash
 DRONE_LAUNCH_COMMAND='ros2 launch <package> <launch-file> start_rosbridge:=true' \
+DEPTH_IMAGE_TOPIC=/camera/depth/image_raw \
 THERMAL_IMAGE_TOPIC=/thermal/image_raw \
 THERMAL_FOV_HORIZONTAL=55 \
 THERMAL_FOV_VERTICAL=35 \
 npm start
 ```
 
-Use the actual launch command/topic for the active backend. The server logs both values on start, which makes it obvious if the old MLX node is still being launched.
+Use the actual launch command/topic for the active backend. The server logs the active base/depth and thermal topics on start, which makes it obvious if the old MLX node or wrong camera topic is still being launched.
 
-For RGB overlay, make sure the Orbbec workspace exists at `~/orbbec_ws/install/setup.bash`:
+The dashboard also subscribes to `/camera/depth/camera_info` by default and uses the depth intrinsics to calculate FOV when available. Set `DEPTH_CAMERA_INFO_TOPIC` if your Orbbec driver publishes it somewhere else.
+
+For depth overlay, make sure the Orbbec workspace exists at `~/orbbec_ws/install/setup.bash`:
 
 ```bash
 cd ~/ros2-initiator-drone
@@ -48,7 +51,7 @@ colcon build --packages-up-to drone_control
 source install/setup.bash
 ```
 
-If the dashboard connects but no image appears, check the launch output. A healthy RGB overlay launch should include `component_container`, the active thermal node, and `rosbridge_websocket`. If the launch package is missing new arguments, rebuild and source the ROS workspace on the Pi:
+If the dashboard connects but no image appears, check the launch output. A healthy depth overlay launch should include `component_container`, the active thermal node, and `rosbridge_websocket`. If the launch package is missing new arguments, rebuild and source the ROS workspace on the Pi:
 
 ```bash
 cd ~/ros2-initiator-drone
@@ -60,7 +63,7 @@ source install/setup.bash
 
 For MLX90640 hardware, `sudo i2cdetect -y 1` should normally show `0x33`; if it does not, check power, SDA/SCL, ground, and make sure the module `PS` pin is tied to ground for I2C mode.
 
-If the thermal image is visible but does not line up with RGB, use a small hot target such as a candle or warm hand and tune the dashboard `X`, `Y`, `Scale`, `H`, and `V` controls until the thermal hot spot lands on the same RGB object. The dashboard saves the tuned values in `.thermal-alignment.json`; they can also be seeded with `THERMAL_OFFSET_X`, `THERMAL_OFFSET_Y`, `THERMAL_SCALE`, `THERMAL_STRETCH_X`, and `THERMAL_STRETCH_Y`.
+If the thermal image is visible but does not line up with depth, use a small hot target such as a candle or warm hand and tune the dashboard `X`, `Y`, `Scale`, `H`, and `V` controls until the thermal hot spot lands on the same depth object. The dashboard saves the tuned values in `.thermal-alignment.json`; they can also be seeded with `THERMAL_OFFSET_X`, `THERMAL_OFFSET_Y`, `THERMAL_SCALE`, `THERMAL_STRETCH_X`, and `THERMAL_STRETCH_Y`.
 
 The built-in dashboard calibration defaults are `Overlay=50.0`, `X=25.0`, `Y=-10.0`, `Scale=100.0`, `H=79.6`, and `V=115.4`. Delete `.thermal-alignment.json` to return to these defaults after local tuning.
 

@@ -22,7 +22,8 @@ const thermalScaleInput = document.querySelector('#thermal-scale');
 const thermalStretchXInput = document.querySelector('#thermal-stretch-x');
 const thermalStretchYInput = document.querySelector('#thermal-stretch-y');
 let imageTopics = {
-  color: '/camera/color/image_raw',
+  color: '/camera/depth/image_raw',
+  cameraInfo: '/camera/depth/camera_info',
   thermal: '/thermal/image_raw',
 };
 let thermalFov = { horizontal: 55, vertical: 35 };
@@ -79,10 +80,11 @@ function connectRosbridge() {
   if (rosSocket || !statusDot.classList.contains('running')) return;
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   rosSocket = new WebSocket(`${protocol}://${location.hostname}:9090`);
-  connection.textContent = 'Connecting to RGB camera stream...';
+  connection.textContent = 'Connecting to depth camera stream...';
   rosSocket.onopen = () => {
-    connection.textContent = `Waiting for RGB frames: ${imageTopics.color}`;
+    connection.textContent = `Waiting for depth frames: ${imageTopics.color}`;
     subscribeImageTopic(imageTopics.color);
+    subscribeCameraInfo();
   };
   rosSocket.onmessage = (event) => {
     const message = parseRosbridgeMessage(event.data);
@@ -99,6 +101,10 @@ function connectRosbridge() {
       updateThermalFrame(message.msg);
       if (activeImageTopic === imageTopics.color) scheduleDraw();
     }
+
+    if (message.topic === imageTopics.cameraInfo) {
+      updateCameraInfo(message.msg);
+    }
   };
   rosSocket.onerror = () => {
     connection.textContent = 'Waiting for rosbridge on port 9090...';
@@ -110,12 +116,20 @@ function connectRosbridge() {
 }
 
 function subscribeImageTopic(topic) {
+  subscribeRosTopic(topic, 'sensor_msgs/msg/Image');
+}
+
+function subscribeCameraInfo() {
+  if (imageTopics.cameraInfo) subscribeRosTopic(imageTopics.cameraInfo, 'sensor_msgs/msg/CameraInfo');
+}
+
+function subscribeRosTopic(topic, type) {
   if (!rosSocket || rosSocket.readyState !== WebSocket.OPEN) return;
   if (subscribedTopics.has(topic)) return;
   rosSocket.send(JSON.stringify({
     op: 'subscribe',
     topic,
-    type: 'sensor_msgs/msg/Image',
+    type,
     compression: 'none',
     fragment_size: 8000000,
   }));
@@ -167,7 +181,7 @@ function scheduleDraw() {
       try {
         await drawCameraFrame(latestColor);
       } catch (error) {
-        connection.textContent = `RGB decode failed: ${error.message}`;
+        connection.textContent = `Depth decode failed: ${error.message}`;
       }
     }
   });
@@ -179,14 +193,33 @@ function fovFraction(innerDegrees, outerDegrees) {
   return outer > 0 ? Math.max(0, Math.min(1, inner / outer)) : 1;
 }
 
+function updateCameraInfo(info) {
+  const width = Number(info.width);
+  const height = Number(info.height);
+  const k = info.k || [];
+  const fx = Number(k[0]);
+  const fy = Number(k[4]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(fx) || !Number.isFinite(fy) || fx <= 0 || fy <= 0) {
+    return;
+  }
+  cameraFov = {
+    horizontal: 2 * Math.atan(width / (2 * fx)) * 180 / Math.PI,
+    vertical: 2 * Math.atan(height / (2 * fy)) * 180 / Math.PI,
+  };
+}
+
 async function drawCameraFrame(image) {
   const encoding = String(image.encoding || '').toLowerCase();
   if (['mjpeg', 'mjpg', 'jpeg', 'jpg'].includes(encoding)) {
     await drawCompressedCameraFrame(image);
     return;
   }
+  if (['16uc1', 'mono16', '32fc1'].includes(encoding)) {
+    drawDepthCameraFrame(image, encoding);
+    return;
+  }
   if (!['rgb8', 'bgr8', 'rgba8', 'bgra8', 'mono8'].includes(encoding)) {
-    connection.textContent = `Unsupported RGB encoding: ${image.encoding || 'unknown'}`;
+    connection.textContent = `Unsupported base image encoding: ${image.encoding || 'unknown'}`;
     return;
   }
   const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
@@ -280,6 +313,65 @@ function updateThermalFrame(image) {
   const high = Math.max(...values);
   latestThermal = { ...frame, low, high };
   thermalStatus = `thermal ${frame.width}x${frame.height} ${formatRange(low, high, frame.units)}`;
+}
+
+function drawDepthCameraFrame(image, encoding) {
+  const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
+  const width = image.width;
+  const height = image.height;
+  const output = context.createImageData(width, height);
+  const values = new Float32Array(width * height);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const littleEndian = !image.is_bigendian;
+  const bytesPerPixel = encoding === '32fc1' ? 4 : 2;
+  const step = image.step || width * bytesPerPixel;
+
+  readScalarImage(values, width, height, step, bytesPerPixel, bytes.byteLength, (offset) => (
+    encoding === '32fc1' ? view.getFloat32(offset, littleEndian) : view.getUint16(offset, littleEndian)
+  ));
+
+  const finite = [...values].filter((value) => Number.isFinite(value) && value > 0);
+  if (!finite.length) {
+    connection.textContent = 'Depth frame has no valid pixels.';
+    return;
+  }
+  finite.sort((a, b) => a - b);
+  const near = finite[Math.floor(finite.length * 0.02)];
+  const far = finite[Math.floor(finite.length * 0.98)] || near + 1;
+  const span = Math.max(far - near, 1);
+
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    const target = index * 4;
+    if (!Number.isFinite(value) || value <= 0) {
+      output.data[target] = 6;
+      output.data[target + 1] = 12;
+      output.data[target + 2] = 20;
+      output.data[target + 3] = 255;
+      continue;
+    }
+    const normalized = 1 - Math.max(0, Math.min(1, (value - near) / span));
+    const [red, green, blue] = depthColor(normalized);
+    output.data[target] = red;
+    output.data[target + 1] = green;
+    output.data[target + 2] = blue;
+    output.data[target + 3] = 255;
+  }
+
+  overlayThermalOnCamera(output, width, height);
+
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  canvas.dataset.stream = 'overlay';
+  context.imageSmoothingEnabled = true;
+  context.putImageData(output, 0, 0);
+  updateRangeLabel(width, height);
+  activeImageTopic = imageTopics.color;
+  connection.textContent = streamStatusText();
+  subscribeImageTopic(imageTopics.thermal);
+  if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
 function decodeThermalFrame(image) {
@@ -381,9 +473,12 @@ function applyStreamConfig(stream) {
   if (!stream) return;
   const nextTopics = {
     color: stream.colorTopic || imageTopics.color,
+    cameraInfo: stream.cameraInfoTopic || imageTopics.cameraInfo,
     thermal: stream.thermalTopic || imageTopics.thermal,
   };
-  const topicsChanged = nextTopics.color !== imageTopics.color || nextTopics.thermal !== imageTopics.thermal;
+  const topicsChanged = nextTopics.color !== imageTopics.color
+    || nextTopics.cameraInfo !== imageTopics.cameraInfo
+    || nextTopics.thermal !== imageTopics.thermal;
   imageTopics = nextTopics;
   thermalFov = finiteFov(stream.thermalFov, thermalFov);
   cameraFov = finiteFov(stream.cameraFov, cameraFov);
@@ -452,8 +547,8 @@ function updateRangeLabel(width, height) {
 
 function streamStatusText() {
   return latestThermal
-    ? `Receiving RGB + thermal: ${imageTopics.color} / ${imageTopics.thermal}`
-    : `Receiving RGB; waiting for thermal: ${imageTopics.thermal}`;
+    ? `Receiving depth + thermal: ${imageTopics.color} / ${imageTopics.thermal}`
+    : `Receiving depth; waiting for thermal: ${imageTopics.thermal}`;
 }
 
 function updateOverlayAlphaFromUi(source, formatActive = false) {
@@ -608,6 +703,15 @@ async function refresh() {
   } catch (_) {
     connection.textContent = 'Dashboard service unavailable.';
   }
+}
+
+function depthColor(value) {
+  const stops = [[16, 28, 48], [22, 76, 121], [24, 125, 116], [238, 185, 72]];
+  const position = Math.max(0, Math.min(0.999, value)) * (stops.length - 1);
+  const start = stops[Math.floor(position)];
+  const end = stops[Math.ceil(position)];
+  const mix = position % 1;
+  return start.map((component, index) => Math.round(component + (end[index] - component) * mix));
 }
 
 [thermalOffsetXInput, thermalOffsetYInput, thermalScaleInput, thermalStretchXInput, thermalStretchYInput].forEach((input) => {

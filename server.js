@@ -15,7 +15,8 @@ const ALIGNMENT_FILE = path.join(__dirname, '.thermal-alignment.json');
 const LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND
   || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_thermal_overlay:=false';
 const STREAM_CONFIG = {
-  colorTopic: process.env.COLOR_IMAGE_TOPIC || '/camera/color/image_raw',
+  colorTopic: process.env.DEPTH_IMAGE_TOPIC || process.env.COLOR_IMAGE_TOPIC || '/camera/depth/image_raw',
+  cameraInfoTopic: process.env.DEPTH_CAMERA_INFO_TOPIC || '/camera/depth/camera_info',
   thermalTopic: process.env.THERMAL_IMAGE_TOPIC || '/thermal/image_raw',
   thermalFov: {
     horizontal: Number(process.env.THERMAL_FOV_HORIZONTAL || 55),
@@ -234,7 +235,7 @@ function startLaunch() {
   const command = [
     `if [ ! -f "${setupFile}" ]; then echo "Missing ROS setup file: ${setupFile}"; exit 1; fi`,
     `source "${setupFile}"`,
-    `if [ ! -f "${ORBBEC_SETUP}" ]; then echo "Missing Orbbec setup file: ${ORBBEC_SETUP}. RGB camera is required; thermal-only mode is disabled."; exit 1; fi`,
+    `if [ ! -f "${ORBBEC_SETUP}" ]; then echo "Missing Orbbec setup file: ${ORBBEC_SETUP}. Depth camera is required; thermal-only mode is disabled."; exit 1; fi`,
     `source "${ORBBEC_SETUP}"`,
     `if [ ! -f "${installSetup}" ]; then echo "Missing workspace setup file: ${installSetup}. Run colcon build first."; exit 1; fi`,
     `source "${installSetup}"`,
@@ -246,11 +247,11 @@ function startLaunch() {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  addLog(`Starting RGB camera launch with rosbridge (PID ${launchProcess.pid}).`);
+  addLog(`Starting depth camera launch with rosbridge (PID ${launchProcess.pid}).`);
   addLog(`ROS distro: ${ROS_DISTRO}; workspace: ${ROS_WORKSPACE}`);
-  addLog(`RGB camera required; thermal-only mode disabled; Orbbec setup: ${ORBBEC_SETUP}`);
+  addLog(`Depth camera required; thermal-only mode disabled; Orbbec setup: ${ORBBEC_SETUP}`);
   addLog(`Launch command: ${LAUNCH_COMMAND}`);
-  addLog(`Stream topics: color=${STREAM_CONFIG.colorTopic}; thermal=${STREAM_CONFIG.thermalTopic}`);
+  addLog(`Stream topics: base=${STREAM_CONFIG.colorTopic}; thermal=${STREAM_CONFIG.thermalTopic}`);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.on('error', (error) => addLog(`Launch error: ${error.message}`));
