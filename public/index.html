@@ -27,23 +27,27 @@
           <div class="viewer-tools">
             <label class="overlay-alpha">
               <span>Overlay</span>
-              <input id="overlay-alpha" type="range" min="0" max="100" value="45" />
-              <output id="overlay-alpha-value">45</output>
+              <input id="overlay-alpha" class="number-field" type="number" min="0" max="100" step="0.1" value="45.0" />
             </label>
             <label class="overlay-alpha">
               <span>X</span>
-              <input id="thermal-offset-x" type="range" min="-320" max="320" value="0" />
-              <output id="thermal-offset-x-value">0</output>
+              <input id="thermal-offset-x" class="number-field" type="number" min="-320" max="320" step="0.1" value="0.0" />
             </label>
             <label class="overlay-alpha">
               <span>Y</span>
-              <input id="thermal-offset-y" type="range" min="-240" max="240" value="0" />
-              <output id="thermal-offset-y-value">0</output>
+              <input id="thermal-offset-y" class="number-field" type="number" min="-240" max="240" step="0.1" value="0.0" />
             </label>
             <label class="overlay-alpha">
               <span>Scale</span>
-              <input id="thermal-scale" type="range" min="50" max="150" value="100" />
-              <output id="thermal-scale-value">100</output>
+              <input id="thermal-scale" class="number-field" type="number" min="50" max="150" step="0.1" value="100.0" />
+            </label>
+            <label class="overlay-alpha">
+              <span>H</span>
+              <input id="thermal-stretch-x" class="number-field" type="number" min="50" max="150" step="0.1" value="100.0" />
+            </label>
+            <label class="overlay-alpha">
+              <span>V</span>
+              <input id="thermal-stretch-y" class="number-field" type="number" min="50" max="150" step="0.1" value="100.0" />
             </label>
             <div id="range">--</div>
           </div>

@@ -16,8 +16,8 @@ button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; f
 .viewer, .cpu-panel, .log-panel { background: rgba(11, 26, 46, .78); border: 1px solid #264463; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 1.5rem 4rem rgba(0,0,0,.22); }.viewer-heading { align-items: flex-start; }.viewer-heading #range { color: #f9ce62; font-variant-numeric: tabular-nums; font-weight: 700; }
 .viewer-tools { display: flex; align-items: center; gap: .85rem; flex-wrap: wrap; justify-content: flex-end; }
 .overlay-alpha { display: flex; align-items: center; gap: .45rem; color: #aabbd1; font-size: .75rem; font-weight: 700; }
-.overlay-alpha input { width: 7.5rem; accent-color: #f9ce62; }
-.overlay-alpha output { min-width: 1.4rem; color: #f9ce62; font-variant-numeric: tabular-nums; text-align: right; }
+.overlay-alpha .number-field { width: 4.4rem; border: 1px solid #38516c; border-radius: .25rem; background: rgba(2,10,18,.3); color: #f9ce62; font: 800 .75rem/1 ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; padding: .2rem .28rem; text-align: right; }
+.overlay-alpha .number-field:focus { outline: 2px solid rgba(249, 206, 98, .75); outline-offset: 1px; }
 .cpu-panel { margin-bottom: 1.25rem; }
 .cpu-cores { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .5rem .6rem; margin-top: .6rem; }
 .cpu-core { display: grid; grid-template-columns: 2.2rem minmax(3rem, 1fr) 1.6rem; align-items: center; gap: .4rem; color: #b8c8dc; font-variant-numeric: tabular-nums; font-size: .85rem; }

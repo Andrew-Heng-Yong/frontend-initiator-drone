@@ -49,7 +49,14 @@ function normalizeThermalAlignment(alignment) {
     offsetX: Number.isFinite(offsetX) ? Math.max(-1000, Math.min(1000, offsetX)) : 0,
     offsetY: Number.isFinite(offsetY) ? Math.max(-1000, Math.min(1000, offsetY)) : 0,
     scale: Number.isFinite(scale) && scale > 0 ? Math.max(0.1, Math.min(3, scale)) : 1,
+    stretchX: normalizeAlignmentScale(alignment.stretchX),
+    stretchY: normalizeAlignmentScale(alignment.stretchY),
   };
+}
+
+function normalizeAlignmentScale(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.max(0.1, Math.min(3, number)) : 1;
 }
 
 function readThermalAlignment() {
@@ -57,6 +64,8 @@ function readThermalAlignment() {
     offsetX: process.env.THERMAL_OFFSET_X || 0,
     offsetY: process.env.THERMAL_OFFSET_Y || 0,
     scale: process.env.THERMAL_SCALE || 1,
+    stretchX: process.env.THERMAL_STRETCH_X || 1,
+    stretchY: process.env.THERMAL_STRETCH_Y || 1,
   });
   try {
     return normalizeThermalAlignment(JSON.parse(fs.readFileSync(ALIGNMENT_FILE, 'utf8')));
@@ -188,6 +197,8 @@ async function setThermalAlignment(request) {
   const offsetX = Number(body.offsetX);
   const offsetY = Number(body.offsetY);
   const scale = Number(body.scale);
+  const stretchX = body.stretchX == null ? 1 : Number(body.stretchX);
+  const stretchY = body.stretchY == null ? 1 : Number(body.stretchY);
   if (!Number.isFinite(offsetX) || offsetX < -1000 || offsetX > 1000) {
     throw new Error('offsetX must be a number from -1000 to 1000');
   }
@@ -197,7 +208,13 @@ async function setThermalAlignment(request) {
   if (!Number.isFinite(scale) || scale < 0.1 || scale > 3) {
     throw new Error('scale must be a number from 0.1 to 3.0');
   }
-  thermalAlignment = { offsetX, offsetY, scale };
+  if (!Number.isFinite(stretchX) || stretchX < 0.1 || stretchX > 3) {
+    throw new Error('stretchX must be a number from 0.1 to 3.0');
+  }
+  if (!Number.isFinite(stretchY) || stretchY < 0.1 || stretchY > 3) {
+    throw new Error('stretchY must be a number from 0.1 to 3.0');
+  }
+  thermalAlignment = { offsetX, offsetY, scale, stretchX, stretchY };
   saveThermalAlignment();
   return { ok: true, applied: true, alignment: thermalAlignment };
 }

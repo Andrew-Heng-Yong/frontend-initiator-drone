@@ -16,13 +16,11 @@ const copyButton = document.querySelector('#copy-logs');
 const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
 const overlayAlphaInput = document.querySelector('#overlay-alpha');
-const overlayAlphaValue = document.querySelector('#overlay-alpha-value');
 const thermalOffsetXInput = document.querySelector('#thermal-offset-x');
-const thermalOffsetXValue = document.querySelector('#thermal-offset-x-value');
 const thermalOffsetYInput = document.querySelector('#thermal-offset-y');
-const thermalOffsetYValue = document.querySelector('#thermal-offset-y-value');
 const thermalScaleInput = document.querySelector('#thermal-scale');
-const thermalScaleValue = document.querySelector('#thermal-scale-value');
+const thermalStretchXInput = document.querySelector('#thermal-stretch-x');
+const thermalStretchYInput = document.querySelector('#thermal-stretch-y');
 let imageTopics = {
   color: '/camera/color/image_raw',
   thermal: '/thermal/image_raw',
@@ -30,7 +28,7 @@ let imageTopics = {
 let thermalFov = { horizontal: 55, vertical: 35 };
 let cameraFov = { horizontal: 67, vertical: 53.6 };
 let flipThermalX = true;
-let thermalAlignment = { offsetX: 0, offsetY: 0, scale: 1 };
+let thermalAlignment = { offsetX: 0, offsetY: 0, scale: 1, stretchX: 1, stretchY: 1 };
 
 let rosSocket;
 let activeImageTopic = null;
@@ -329,10 +327,10 @@ function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
   const { values, width, height, low, high } = latestThermal;
   const span = Math.max(high - low, 0.5);
   const overlayWidth = Math.max(width, Math.round(
-    cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal) * thermalAlignment.scale,
+    cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal) * thermalAlignment.scale * thermalAlignment.stretchX,
   ));
   const overlayHeight = Math.max(height, Math.round(
-    cameraHeight * fovFraction(thermalFov.vertical, cameraFov.vertical) * thermalAlignment.scale,
+    cameraHeight * fovFraction(thermalFov.vertical, cameraFov.vertical) * thermalAlignment.scale * thermalAlignment.stretchY,
   ));
   const left = Math.round((cameraWidth - overlayWidth) / 2 + thermalAlignment.offsetX);
   const top = Math.round((cameraHeight - overlayHeight) / 2 + thermalAlignment.offsetY);
@@ -359,30 +357,24 @@ function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
 }
 
 function setOverlayAlphaUi(alpha) {
-  if (!overlayAlphaInput || !overlayAlphaValue) return;
-  const percent = Math.round(alpha * 100);
+  if (!overlayAlphaInput) return;
+  const percent = clampNumber(alpha * 100, 0, 100, 45);
   overlayAlpha = percent / 100;
-  overlayAlphaInput.value = String(percent);
-  overlayAlphaValue.textContent = String(percent);
+  setControlValue(overlayAlphaInput, percent);
 }
 
 function setThermalAlignmentUi(alignment) {
   const offsetX = clampNumber(alignment && alignment.offsetX, -1000, 1000, 0);
   const offsetY = clampNumber(alignment && alignment.offsetY, -1000, 1000, 0);
   const scale = clampNumber(alignment && alignment.scale, 0.1, 3, 1);
-  thermalAlignment = { offsetX, offsetY, scale };
-  if (thermalOffsetXInput && document.activeElement !== thermalOffsetXInput) {
-    thermalOffsetXInput.value = String(Math.round(offsetX));
-  }
-  if (thermalOffsetXValue) thermalOffsetXValue.textContent = String(Math.round(offsetX));
-  if (thermalOffsetYInput && document.activeElement !== thermalOffsetYInput) {
-    thermalOffsetYInput.value = String(Math.round(offsetY));
-  }
-  if (thermalOffsetYValue) thermalOffsetYValue.textContent = String(Math.round(offsetY));
-  if (thermalScaleInput && document.activeElement !== thermalScaleInput) {
-    thermalScaleInput.value = String(Math.round(scale * 100));
-  }
-  if (thermalScaleValue) thermalScaleValue.textContent = String(Math.round(scale * 100));
+  const stretchX = clampNumber(alignment && alignment.stretchX, 0.1, 3, 1);
+  const stretchY = clampNumber(alignment && alignment.stretchY, 0.1, 3, 1);
+  thermalAlignment = { offsetX, offsetY, scale, stretchX, stretchY };
+  setControlValue(thermalOffsetXInput, offsetX);
+  setControlValue(thermalOffsetYInput, offsetY);
+  setControlValue(thermalScaleInput, scale * 100);
+  setControlValue(thermalStretchXInput, stretchX * 100);
+  setControlValue(thermalStretchYInput, stretchY * 100);
 }
 
 function applyStreamConfig(stream) {
@@ -404,6 +396,40 @@ function clampNumber(value, min, max, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.max(min, Math.min(max, number));
+}
+
+function formatOneDecimal(value) {
+  return Number(value).toFixed(1);
+}
+
+function setControlValue(control, value, force = false) {
+  if (!control || (!force && document.activeElement === control)) return;
+  control.value = formatOneDecimal(value);
+}
+
+function inputNumber(control, fallback) {
+  if (!control) return fallback;
+  if (control.value === '' || control.value === '-' || control.value === '.') return fallback;
+  const value = Number(control.value);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function stepNumberInput(input, event, onChange) {
+  if (!input) return;
+  event.preventDefault();
+  const min = Number(input.min);
+  const max = Number(input.max);
+  const step = Number(input.step) || 1;
+  const fallback = Number(input.value) || 0;
+  const direction = event.deltaY < 0 ? 1 : -1;
+  const next = clampNumber(
+    inputNumber(input, fallback) + direction * step,
+    Number.isFinite(min) ? min : -Infinity,
+    Number.isFinite(max) ? max : Infinity,
+    fallback,
+  );
+  input.value = formatOneDecimal(next);
+  onChange(input, true);
 }
 
 function finiteFov(candidate, fallback) {
@@ -430,15 +456,53 @@ function streamStatusText() {
     : `Receiving RGB; waiting for thermal: ${imageTopics.thermal}`;
 }
 
-function updateThermalAlignmentFromUi() {
+function updateOverlayAlphaFromUi(source, formatActive = false) {
+  const percent = clampNumber(inputNumber(source, overlayAlpha * 100), 0, 100, overlayAlpha * 100);
+  overlayAlpha = percent / 100;
+  setControlValue(overlayAlphaInput, percent, formatActive);
+  clearTimeout(overlayAlphaTimer);
+  overlayAlphaTimer = setTimeout(async () => {
+    try {
+      await request('/api/overlay-alpha', { alpha: overlayAlpha });
+    } catch (error) {
+      connection.textContent = error.message;
+    }
+  }, 150);
+}
+
+function updateThermalAlignmentFromUi(source, formatActive = false) {
+  const offsetX = clampNumber(inputNumber(
+    thermalOffsetXInput,
+    thermalAlignment.offsetX,
+  ), -320, 320, thermalAlignment.offsetX);
+  const offsetY = clampNumber(inputNumber(
+    thermalOffsetYInput,
+    thermalAlignment.offsetY,
+  ), -240, 240, thermalAlignment.offsetY);
+  const scalePercent = clampNumber(inputNumber(
+    thermalScaleInput,
+    thermalAlignment.scale * 100,
+  ), 50, 150, thermalAlignment.scale * 100);
+  const stretchXPercent = clampNumber(inputNumber(
+    thermalStretchXInput,
+    thermalAlignment.stretchX * 100,
+  ), 50, 150, thermalAlignment.stretchX * 100);
+  const stretchYPercent = clampNumber(inputNumber(
+    thermalStretchYInput,
+    thermalAlignment.stretchY * 100,
+  ), 50, 150, thermalAlignment.stretchY * 100);
   thermalAlignment = {
-    offsetX: Number(thermalOffsetXInput ? thermalOffsetXInput.value : 0),
-    offsetY: Number(thermalOffsetYInput ? thermalOffsetYInput.value : 0),
-    scale: Number(thermalScaleInput ? thermalScaleInput.value : 100) / 100,
+    offsetX,
+    offsetY,
+    scale: scalePercent / 100,
+    stretchX: stretchXPercent / 100,
+    stretchY: stretchYPercent / 100,
   };
-  if (thermalOffsetXValue) thermalOffsetXValue.textContent = String(Math.round(thermalAlignment.offsetX));
-  if (thermalOffsetYValue) thermalOffsetYValue.textContent = String(Math.round(thermalAlignment.offsetY));
-  if (thermalScaleValue) thermalScaleValue.textContent = String(Math.round(thermalAlignment.scale * 100));
+  setControlValue(thermalOffsetXInput, offsetX, formatActive);
+  setControlValue(thermalOffsetYInput, offsetY, formatActive);
+  setControlValue(thermalScaleInput, scalePercent, formatActive);
+  setControlValue(thermalStretchXInput, stretchXPercent, formatActive);
+  setControlValue(thermalStretchYInput, stretchYPercent, formatActive);
   if (latestColor) scheduleDraw();
   clearTimeout(thermalAlignmentTimer);
   thermalAlignmentTimer = setTimeout(async () => {
@@ -546,9 +610,18 @@ async function refresh() {
   }
 }
 
-[thermalOffsetXInput, thermalOffsetYInput, thermalScaleInput].forEach((input) => {
-  if (input) input.addEventListener('input', updateThermalAlignmentFromUi);
+[thermalOffsetXInput, thermalOffsetYInput, thermalScaleInput, thermalStretchXInput, thermalStretchYInput].forEach((input) => {
+  if (!input) return;
+  input.addEventListener('input', () => updateThermalAlignmentFromUi(input));
+  input.addEventListener('change', () => updateThermalAlignmentFromUi(input, true));
+  input.addEventListener('wheel', (event) => stepNumberInput(input, event, updateThermalAlignmentFromUi));
 });
+
+if (overlayAlphaInput) {
+  overlayAlphaInput.addEventListener('input', () => updateOverlayAlphaFromUi(overlayAlphaInput));
+  overlayAlphaInput.addEventListener('change', () => updateOverlayAlphaFromUi(overlayAlphaInput, true));
+  overlayAlphaInput.addEventListener('wheel', (event) => stepNumberInput(overlayAlphaInput, event, updateOverlayAlphaFromUi));
+}
 
 if (startToggle) {
   startToggle.addEventListener('click', async () => {
@@ -603,21 +676,6 @@ if (copyButton) {
     } catch (error) {
       connection.textContent = `Copy failed: ${error.message}`;
     }
-  });
-}
-
-if (overlayAlphaInput) {
-  overlayAlphaInput.addEventListener('input', () => {
-    overlayAlpha = Number(overlayAlphaInput.value) / 100;
-    if (overlayAlphaValue) overlayAlphaValue.textContent = overlayAlphaInput.value;
-    clearTimeout(overlayAlphaTimer);
-    overlayAlphaTimer = setTimeout(async () => {
-      try {
-        await request('/api/overlay-alpha', { alpha: overlayAlpha });
-      } catch (error) {
-        connection.textContent = error.message;
-      }
-    }, 150);
   });
 }
 
