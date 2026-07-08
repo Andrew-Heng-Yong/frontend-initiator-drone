@@ -28,7 +28,9 @@ let imageTopics = {
 };
 let thermalFov = { horizontal: 55, vertical: 35 };
 let cameraFov = { horizontal: 67, vertical: 53.6 };
-let cameraFovFromInfo = false;
+let cameraInfoFov = null;
+let useCameraInfoFov = false;
+let baseViewMode = 'thermal-crop';
 let flipThermalX = true;
 let thermalAlignment = { offsetX: 0, offsetY: 0, scale: 1, stretchX: 1, stretchY: 1 };
 
@@ -203,11 +205,11 @@ function updateCameraInfo(info) {
   if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(fx) || !Number.isFinite(fy) || fx <= 0 || fy <= 0) {
     return;
   }
-  cameraFov = {
+  cameraInfoFov = {
     horizontal: 2 * Math.atan(width / (2 * fx)) * 180 / Math.PI,
     vertical: 2 * Math.atan(height / (2 * fy)) * 180 / Math.PI,
   };
-  cameraFovFromInfo = true;
+  if (useCameraInfoFov) cameraFov = cameraInfoFov;
 }
 
 async function drawCameraFrame(image) {
@@ -321,7 +323,6 @@ function drawDepthCameraFrame(image, encoding) {
   const bytes = Uint8Array.from(atob(image.data), (character) => character.charCodeAt(0));
   const width = image.width;
   const height = image.height;
-  const output = context.createImageData(width, height);
   const values = new Float32Array(width * height);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const littleEndian = !image.is_bigendian;
@@ -332,7 +333,10 @@ function drawDepthCameraFrame(image, encoding) {
     encoding === '32fc1' ? view.getFloat32(offset, littleEndian) : view.getUint16(offset, littleEndian)
   ));
 
-  const finite = [...values].filter((value) => Number.isFinite(value) && value > 0);
+  const viewport = latestThermal && baseViewMode === 'thermal-crop'
+    ? thermalViewportRect(width, height)
+    : { left: 0, top: 0, width, height };
+  const finite = depthValuesInViewport(values, width, height, viewport);
   if (!finite.length) {
     connection.textContent = 'Depth frame has no valid pixels.';
     return;
@@ -342,34 +346,45 @@ function drawDepthCameraFrame(image, encoding) {
   const far = finite[Math.floor(finite.length * 0.98)] || near + 1;
   const span = Math.max(far - near, 1);
 
-  for (let index = 0; index < values.length; index += 1) {
-    const value = values[index];
-    const target = index * 4;
-    if (!Number.isFinite(value) || value <= 0) {
-      output.data[target] = 6;
-      output.data[target + 1] = 12;
-      output.data[target + 2] = 20;
+  const output = context.createImageData(viewport.width, viewport.height);
+  for (let y = 0; y < viewport.height; y += 1) {
+    for (let x = 0; x < viewport.width; x += 1) {
+      const sourceX = viewport.left + x;
+      const sourceY = viewport.top + y;
+      const value = sourceX >= 0 && sourceX < width && sourceY >= 0 && sourceY < height
+        ? values[sourceY * width + sourceX]
+        : NaN;
+      const target = (y * viewport.width + x) * 4;
+      if (!Number.isFinite(value) || value <= 0) {
+        output.data[target] = 6;
+        output.data[target + 1] = 12;
+        output.data[target + 2] = 20;
+        output.data[target + 3] = 255;
+        continue;
+      }
+      const normalized = 1 - Math.max(0, Math.min(1, (value - near) / span));
+      const [red, green, blue] = depthColor(normalized);
+      output.data[target] = red;
+      output.data[target + 1] = green;
+      output.data[target + 2] = blue;
       output.data[target + 3] = 255;
-      continue;
     }
-    const normalized = 1 - Math.max(0, Math.min(1, (value - near) / span));
-    const [red, green, blue] = depthColor(normalized);
-    output.data[target] = red;
-    output.data[target + 1] = green;
-    output.data[target + 2] = blue;
-    output.data[target + 3] = 255;
   }
 
-  overlayThermalOnCamera(output, width, height);
+  if (latestThermal && baseViewMode === 'thermal-crop') {
+    overlayThermalOnViewport(output, viewport.width, viewport.height);
+  } else if (latestThermal) {
+    overlayThermalOnCamera(output, width, height);
+  }
 
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
+  if (canvas.width !== viewport.width || canvas.height !== viewport.height) {
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
   }
   canvas.dataset.stream = 'overlay';
   context.imageSmoothingEnabled = true;
   context.putImageData(output, 0, 0);
-  updateRangeLabel(width, height);
+  updateRangeLabel(viewport.width, viewport.height);
   activeImageTopic = imageTopics.color;
   connection.textContent = streamStatusText();
   subscribeImageTopic(imageTopics.thermal);
@@ -412,6 +427,58 @@ function readScalarImage(target, width, height, step, bytesPerPixel, sourceLengt
     for (let x = 0; x < width; x += 1) {
       const offset = y * step + x * bytesPerPixel;
       target[y * width + x] = offset + bytesPerPixel <= sourceLength ? readValue(offset) : NaN;
+    }
+  }
+}
+
+function thermalViewportRect(cameraWidth, cameraHeight) {
+  const thermalWidth = latestThermal ? latestThermal.width : 32;
+  const thermalHeight = latestThermal ? latestThermal.height : 24;
+  const width = Math.max(thermalWidth, Math.round(
+    cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal) * thermalAlignment.scale * thermalAlignment.stretchX,
+  ));
+  const height = Math.max(thermalHeight, Math.round(
+    cameraHeight * fovFraction(thermalFov.vertical, cameraFov.vertical) * thermalAlignment.scale * thermalAlignment.stretchY,
+  ));
+  return {
+    left: Math.round((cameraWidth - width) / 2 + thermalAlignment.offsetX),
+    top: Math.round((cameraHeight - height) / 2 + thermalAlignment.offsetY),
+    width,
+    height,
+  };
+}
+
+function depthValuesInViewport(values, width, height, viewport) {
+  const output = [];
+  const left = Math.max(0, viewport.left);
+  const top = Math.max(0, viewport.top);
+  const right = Math.min(width, viewport.left + viewport.width);
+  const bottom = Math.min(height, viewport.top + viewport.height);
+  for (let y = top; y < bottom; y += 1) {
+    for (let x = left; x < right; x += 1) {
+      const value = values[y * width + x];
+      if (Number.isFinite(value) && value > 0) output.push(value);
+    }
+  }
+  return output;
+}
+
+function overlayThermalOnViewport(output, outputWidth, outputHeight) {
+  const { values, width, height, low, high } = latestThermal;
+  const span = Math.max(high - low, 0.5);
+  for (let y = 0; y < outputHeight; y += 1) {
+    const thermalY = Math.max(0, Math.min(height - 1, Math.floor((y / Math.max(1, outputHeight)) * height)));
+    for (let x = 0; x < outputWidth; x += 1) {
+      const scaledX = Math.max(0, Math.min(width - 1, Math.floor((x / Math.max(1, outputWidth)) * width)));
+      const thermalX = flipThermalX ? width - 1 - scaledX : scaledX;
+      const temperature = values[thermalY * width + thermalX];
+      if (!Number.isFinite(temperature)) continue;
+
+      const [red, green, blue] = heatColor((temperature - low) / span);
+      const target = (y * outputWidth + x) * 4;
+      output.data[target] = Math.round((1 - overlayAlpha) * output.data[target] + overlayAlpha * red);
+      output.data[target + 1] = Math.round((1 - overlayAlpha) * output.data[target + 1] + overlayAlpha * green);
+      output.data[target + 2] = Math.round((1 - overlayAlpha) * output.data[target + 2] + overlayAlpha * blue);
     }
   }
 }
@@ -481,10 +548,12 @@ function applyStreamConfig(stream) {
   const topicsChanged = nextTopics.color !== imageTopics.color
     || nextTopics.cameraInfo !== imageTopics.cameraInfo
     || nextTopics.thermal !== imageTopics.thermal;
-  if (topicsChanged) cameraFovFromInfo = false;
+  if (topicsChanged) cameraInfoFov = null;
   imageTopics = nextTopics;
   thermalFov = finiteFov(stream.thermalFov, thermalFov);
-  if (!cameraFovFromInfo) cameraFov = finiteFov(stream.cameraFov, cameraFov);
+  useCameraInfoFov = stream.useCameraInfoFov === true;
+  baseViewMode = stream.baseViewMode === 'full-depth' ? 'full-depth' : 'thermal-crop';
+  cameraFov = useCameraInfoFov && cameraInfoFov ? cameraInfoFov : finiteFov(stream.cameraFov, cameraFov);
   flipThermalX = stream.flipThermalX !== false;
   setThermalAlignmentUi(stream.alignment);
   if (topicsChanged) closeRosbridge();
@@ -545,8 +614,9 @@ function formatRange(low, high, units) {
 }
 
 function updateRangeLabel(width, height) {
-  const fovSource = cameraFovFromInfo ? 'info' : 'fallback';
-  range.textContent = `${width}x${height} | ${thermalStatus} | fov ${cameraFov.horizontal.toFixed(1)}x${cameraFov.vertical.toFixed(1)} ${fovSource}`;
+  const source = useCameraInfoFov && cameraInfoFov ? 'info' : 'configured';
+  const info = cameraInfoFov ? ` | info ${cameraInfoFov.horizontal.toFixed(1)}x${cameraInfoFov.vertical.toFixed(1)}` : '';
+  range.textContent = `${width}x${height} ${baseViewMode} | ${thermalStatus} | fov ${cameraFov.horizontal.toFixed(1)}x${cameraFov.vertical.toFixed(1)} ${source}${info}`;
 }
 
 function streamStatusText() {

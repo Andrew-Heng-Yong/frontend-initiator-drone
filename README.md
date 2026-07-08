@@ -40,7 +40,9 @@ npm start
 
 Use the actual launch command/topic for the active backend. The server logs the active base/depth and thermal topics on start, which makes it obvious if the old MLX node or wrong camera topic is still being launched.
 
-The dashboard also subscribes to `/camera/depth/camera_info` by default and uses the depth intrinsics to calculate FOV when available. Set `DEPTH_CAMERA_INFO_TOPIC` if your Orbbec driver publishes it somewhere else.
+The dashboard also subscribes to `/camera/depth/camera_info` by default and displays the depth intrinsics-derived FOV for debugging. Overlay sizing uses the configured `CAMERA_FOV_HORIZONTAL` and `CAMERA_FOV_VERTICAL` defaults unless `USE_CAMERA_INFO_FOV=true` is set. Set `DEPTH_CAMERA_INFO_TOPIC` if your Orbbec driver publishes camera info somewhere else.
+
+By default `BASE_VIEW_MODE=thermal-crop`: the thermal FOV defines the main viewport, and the depth image is cropped to that thermal window before thermal is blended full-frame. Set `BASE_VIEW_MODE=full-depth` to restore the older full depth frame with thermal drawn as a smaller rectangle. This keeps future wider thermal cameras easy to support by changing thermal FOV or the `H`/`V` stretch values instead of changing rendering code.
 
 For depth overlay, make sure the Orbbec workspace exists at `~/orbbec_ws/install/setup.bash`:
 

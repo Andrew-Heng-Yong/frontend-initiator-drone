@@ -18,6 +18,7 @@ const STREAM_CONFIG = {
   colorTopic: process.env.DEPTH_IMAGE_TOPIC || process.env.COLOR_IMAGE_TOPIC || '/camera/depth/image_raw',
   cameraInfoTopic: process.env.DEPTH_CAMERA_INFO_TOPIC || '/camera/depth/camera_info',
   thermalTopic: process.env.THERMAL_IMAGE_TOPIC || '/thermal/image_raw',
+  baseViewMode: process.env.BASE_VIEW_MODE || 'thermal-crop',
   thermalFov: {
     horizontal: Number(process.env.THERMAL_FOV_HORIZONTAL || 55),
     vertical: Number(process.env.THERMAL_FOV_VERTICAL || 35),
@@ -26,6 +27,7 @@ const STREAM_CONFIG = {
     horizontal: Number(process.env.CAMERA_FOV_HORIZONTAL || 67),
     vertical: Number(process.env.CAMERA_FOV_VERTICAL || 53.6),
   },
+  useCameraInfoFov: process.env.USE_CAMERA_INFO_FOV === 'true',
   flipThermalX: process.env.THERMAL_FLIP_X !== 'false',
 };
 const MAX_LOG_LINES = 160;
@@ -252,6 +254,7 @@ function startLaunch() {
   addLog(`Depth camera required; thermal-only mode disabled; Orbbec setup: ${ORBBEC_SETUP}`);
   addLog(`Launch command: ${LAUNCH_COMMAND}`);
   addLog(`Stream topics: base=${STREAM_CONFIG.colorTopic}; thermal=${STREAM_CONFIG.thermalTopic}`);
+  addLog(`Base view mode: ${STREAM_CONFIG.baseViewMode}`);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.on('error', (error) => addLog(`Launch error: ${error.message}`));
