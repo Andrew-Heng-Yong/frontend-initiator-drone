@@ -7,44 +7,146 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
-const PORT = Number(process.env.PORT || 4173);
-const ROS_WORKSPACE = path.resolve(process.env.ROS2_WORKSPACE || path.join(__dirname, '..', 'ros2-initiator-drone'));
-const ROS_DISTRO = process.env.ROS_DISTRO || 'jazzy';
-const ORBBEC_SETUP = process.env.ORBBEC_SETUP || path.join(process.env.HOME || '', 'orbbec_ws', 'install', 'setup.bash');
-const ALIGNMENT_FILE = path.join(__dirname, '.thermal-alignment.json');
+const MASTER_PARAMS_FILE = resolveLocalPath(process.env.DRONE_MASTER_PARAMS || path.join(__dirname, 'config', 'master_params.yaml'));
+const MASTER_PARAMS = readYamlFile(MASTER_PARAMS_FILE);
+const SYSTEM_PARAMS = rosParams('system');
+const DRONE_PARAMS = rosParams('drone_control');
+const STREAM_PARAMS = rosParams('camera_streams');
+const DASHBOARD_PARAMS = rosParams('thermal_dashboard');
+const THERMAL_ALIGNMENT_PARAMS = DASHBOARD_PARAMS.thermal_alignment || {};
+const CAMERA_CALIBRATIONS_PARAMS_FILE = resolveLocalPath(
+  process.env.CAMERA_CALIBRATIONS_PARAMS
+    || SYSTEM_PARAMS.camera_calibrations_params_file
+    || path.join(__dirname, 'config', 'camera_calibrations.yaml'),
+);
+const CAMERA_CALIBRATIONS_PARAMS = readYamlFile(CAMERA_CALIBRATIONS_PARAMS_FILE);
+const CAMERA_PARAMS = (((CAMERA_CALIBRATIONS_PARAMS.camera_calibrations || {}).ros__parameters) || {});
+const DEPTH_CAMERA_PARAMS = CAMERA_PARAMS.depth_camera || {};
+const THERMAL_CAMERA_PARAMS = CAMERA_PARAMS.thermal_camera || {};
+
+const PORT = Number(process.env.PORT || SYSTEM_PARAMS.dashboard_port || 4173);
+const ROS_WORKSPACE = resolveLocalPath(process.env.ROS2_WORKSPACE || SYSTEM_PARAMS.ros2_workspace || path.join(__dirname, '..', 'ros2-initiator-drone'));
+const ROS_DISTRO = process.env.ROS_DISTRO || SYSTEM_PARAMS.ros_distro || 'jazzy';
+const ORBBEC_SETUP = resolveLocalPath(
+  process.env.ORBBEC_SETUP || SYSTEM_PARAMS.orbbec_setup || path.join(process.env.HOME || process.env.USERPROFILE || '', 'orbbec_ws', 'install', 'setup.bash'),
+);
+const ALIGNMENT_FILE = resolveLocalPath(process.env.THERMAL_ALIGNMENT_FILE || SYSTEM_PARAMS.alignment_file || path.join(__dirname, '.thermal-alignment.json'));
 const LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND
+  || DRONE_PARAMS.launch_command
   || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_thermal_overlay:=false';
 const STREAM_CONFIG = {
-  colorTopic: process.env.DEPTH_IMAGE_TOPIC || process.env.COLOR_IMAGE_TOPIC || '/camera/depth/image_raw',
-  cameraInfoTopic: process.env.DEPTH_CAMERA_INFO_TOPIC || '/camera/depth/camera_info',
-  thermalTopic: process.env.THERMAL_IMAGE_TOPIC || '/thermal/image_raw',
-  baseViewMode: process.env.BASE_VIEW_MODE || 'thermal-crop',
+  colorTopic: process.env.DEPTH_IMAGE_TOPIC || process.env.COLOR_IMAGE_TOPIC || STREAM_PARAMS.depth_image_topic || STREAM_PARAMS.color_image_topic || DEPTH_CAMERA_PARAMS.topic || '/camera/depth/image_raw',
+  cameraInfoTopic: process.env.DEPTH_CAMERA_INFO_TOPIC || STREAM_PARAMS.depth_camera_info_topic || DEPTH_CAMERA_PARAMS.camera_info_topic || '/camera/depth/camera_info',
+  thermalTopic: process.env.THERMAL_IMAGE_TOPIC || STREAM_PARAMS.thermal_image_topic || THERMAL_CAMERA_PARAMS.topic || '/thermal/image_raw',
+  baseViewMode: process.env.BASE_VIEW_MODE || STREAM_PARAMS.base_view_mode || 'thermal-crop',
   thermalFov: {
-    horizontal: Number(process.env.THERMAL_FOV_HORIZONTAL || 55),
-    vertical: Number(process.env.THERMAL_FOV_VERTICAL || 35),
+    horizontal: Number(process.env.THERMAL_FOV_HORIZONTAL || STREAM_PARAMS.thermal_fov_horizontal || 55),
+    vertical: Number(process.env.THERMAL_FOV_VERTICAL || STREAM_PARAMS.thermal_fov_vertical || 35),
   },
   cameraFov: {
-    horizontal: Number(process.env.CAMERA_FOV_HORIZONTAL || 67),
-    vertical: Number(process.env.CAMERA_FOV_VERTICAL || 53.6),
+    horizontal: requiredNumber('camera_streams.depth_fov_horizontal', process.env.DEPTH_FOV_HORIZONTAL || STREAM_PARAMS.depth_fov_horizontal),
+    vertical: requiredNumber('camera_streams.depth_fov_vertical', process.env.DEPTH_FOV_VERTICAL || STREAM_PARAMS.depth_fov_vertical),
   },
-  useCameraInfoFov: process.env.USE_CAMERA_INFO_FOV === 'true',
-  flipThermalX: process.env.THERMAL_FLIP_X !== 'false',
+  useCameraInfoFov: process.env.USE_CAMERA_INFO_FOV ? process.env.USE_CAMERA_INFO_FOV === 'true' : STREAM_PARAMS.use_camera_info_fov === true,
+  flipThermalX: process.env.THERMAL_FLIP_X ? process.env.THERMAL_FLIP_X !== 'false' : (DASHBOARD_PARAMS.thermal_display || {}).flip_x !== false,
 };
-const MAX_LOG_LINES = 160;
+const MAX_LOG_LINES = Number(SYSTEM_PARAMS.max_log_lines || 160);
 const DEFAULT_THERMAL_ALIGNMENT = {
-  offsetX: 10,
-  offsetY: 0,
-  scale: 0.8,
-  stretchX: 0.8,
-  stretchY: 1,
+  offsetX: THERMAL_ALIGNMENT_PARAMS.offset_x ?? 10,
+  offsetY: THERMAL_ALIGNMENT_PARAMS.offset_y ?? 0,
+  scale: THERMAL_ALIGNMENT_PARAMS.scale ?? 0.8,
+  stretchX: THERMAL_ALIGNMENT_PARAMS.stretch_x ?? 0.8,
+  stretchY: THERMAL_ALIGNMENT_PARAMS.stretch_y ?? 1,
 };
 
 let launchProcess = null;
 let logs = [];
 let previousCpuStats = null;
-let overlayAlpha = Number(process.env.THERMAL_OVERLAY_ALPHA || 0.5);
+let overlayAlpha = Number(process.env.THERMAL_OVERLAY_ALPHA || DASHBOARD_PARAMS.overlay_alpha || 0.5);
 if (!Number.isFinite(overlayAlpha) || overlayAlpha < 0 || overlayAlpha > 1) overlayAlpha = 0.5;
 let thermalAlignment = readThermalAlignment();
+
+function resolveLocalPath(value) {
+  if (!value) return value;
+  const text = String(value);
+  if (text.startsWith('~/')) return path.join(process.env.HOME || process.env.USERPROFILE || '', text.slice(2));
+  return path.isAbsolute(text) ? text : path.resolve(__dirname, text);
+}
+
+function readYamlFile(filePath) {
+  try {
+    return parseSimpleYaml(fs.readFileSync(filePath, 'utf8'));
+  } catch (_) {
+    return {};
+  }
+}
+
+function rosParams(nodeName) {
+  return (((MASTER_PARAMS[nodeName] || {}).ros__parameters) || {});
+}
+
+function parseSimpleYaml(source) {
+  const root = {};
+  const stack = [{ indent: -1, value: root, parent: null, key: null }];
+
+  source.split(/\r?\n/).forEach((rawLine) => {
+    const withoutComment = rawLine.split('#')[0].replace(/\s+$/, '');
+    if (!withoutComment.trim()) return;
+
+    const indent = withoutComment.match(/^ */)[0].length;
+    const content = withoutComment.trim();
+    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) stack.pop();
+
+    let frame = stack[stack.length - 1];
+    if (content.startsWith('- ')) {
+      if (!Array.isArray(frame.value) && frame.parent && frame.key) {
+        frame.parent[frame.key] = [];
+        frame.value = frame.parent[frame.key];
+      }
+      if (Array.isArray(frame.value)) frame.value.push(parseYamlScalar(content.slice(2).trim()));
+      return;
+    }
+
+    const match = content.match(/^([^:]+):(.*)$/);
+    if (!match) return;
+
+    const key = match[1].trim();
+    const rawValue = match[2].trim();
+    if (rawValue) {
+      frame.value[key] = parseYamlScalar(rawValue);
+      return;
+    }
+
+    const child = {};
+    frame.value[key] = child;
+    stack.push({ indent, value: child, parent: frame.value, key });
+  });
+
+  return root;
+}
+
+function parseYamlScalar(value) {
+  if (value.startsWith('[') && value.endsWith(']')) {
+    const inner = value.slice(1, -1).trim();
+    return inner ? inner.split(',').map((item) => parseYamlScalar(item.trim())) : [];
+  }
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    return value.slice(1, -1);
+  }
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  if (value === 'null') return null;
+  const number = Number(value);
+  return Number.isFinite(number) && value !== '' ? number : value;
+}
+
+function requiredNumber(name, value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    throw new Error(`Missing required numeric param: ${name}`);
+  }
+  return number;
+}
 
 function addLog(message) {
   logs.push(`[${new Date().toLocaleTimeString()}] ${message}`);
@@ -158,6 +260,11 @@ function state() {
     rgbOverlayEnabled: true,
     stream: { ...STREAM_CONFIG, alignment: thermalAlignment },
     launchCommand: LAUNCH_COMMAND,
+    params: {
+      master: MASTER_PARAMS_FILE,
+      cameraCalibrations: CAMERA_CALIBRATIONS_PARAMS_FILE,
+      cameraCalibrationsLoaded: Boolean(CAMERA_CALIBRATIONS_PARAMS.camera_calibrations),
+    },
   };
 }
 
@@ -253,6 +360,7 @@ function startLaunch() {
   addLog(`ROS distro: ${ROS_DISTRO}; workspace: ${ROS_WORKSPACE}`);
   addLog(`Depth camera required; thermal-only mode disabled; Orbbec setup: ${ORBBEC_SETUP}`);
   addLog(`Launch command: ${LAUNCH_COMMAND}`);
+  addLog(`Params: master=${MASTER_PARAMS_FILE}; camera_calibrations=${CAMERA_CALIBRATIONS_PARAMS_FILE}`);
   addLog(`Stream topics: base=${STREAM_CONFIG.colorTopic}; thermal=${STREAM_CONFIG.thermalTopic}`);
   addLog(`Base view mode: ${STREAM_CONFIG.baseViewMode}`);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
@@ -308,5 +416,9 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-server.listen(PORT, () => addLog(`Dashboard ready on http://0.0.0.0:${PORT}`));
+server.listen(PORT, () => {
+  addLog(`Dashboard ready on http://0.0.0.0:${PORT}`);
+  addLog(`Loaded params: ${MASTER_PARAMS_FILE}`);
+  addLog(`Loaded camera calibrations: ${CAMERA_CALIBRATIONS_PARAMS_FILE}`);
+});
 process.on('SIGINT', () => { try { stopLaunch(); } finally { server.close(() => process.exit(0)); } });

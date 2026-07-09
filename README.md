@@ -21,6 +21,8 @@ Open `http://<robot-ip>:4173`. The Start button sources ROS 2, sources the built
 ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_thermal_overlay:=false
 ```
 
+Runtime defaults are loaded from `config/master_params.yaml`. Camera intrinsics, distortion, and camera-frame transforms live separately in `config/camera_calibrations.yaml`, and the master params file points to it with `camera_calibrations_params_file`. Environment variables still override YAML values, so one-off test runs do not require editing the params files.
+
 If the Orbbec setup is missing, the server logs the missing setup path and exits instead of launching thermal-only mode.
 
 Stop sends SIGINT to the launch process and all of its ROS nodes.
@@ -33,6 +35,8 @@ The dashboard can be pointed at the current I2C thermal accel path without editi
 DRONE_LAUNCH_COMMAND='ros2 launch <package> <launch-file> start_rosbridge:=true' \
 DEPTH_IMAGE_TOPIC=/camera/depth/image_raw \
 THERMAL_IMAGE_TOPIC=/thermal/image_raw \
+DEPTH_FOV_HORIZONTAL=67 \
+DEPTH_FOV_VERTICAL=53.6 \
 THERMAL_FOV_HORIZONTAL=55 \
 THERMAL_FOV_VERTICAL=35 \
 npm start
@@ -40,7 +44,7 @@ npm start
 
 Use the actual launch command/topic for the active backend. The server logs the active base/depth and thermal topics on start, which makes it obvious if the old MLX node or wrong camera topic is still being launched.
 
-The dashboard also subscribes to `/camera/depth/camera_info` by default and displays the depth intrinsics-derived FOV for debugging. Overlay sizing uses the configured `CAMERA_FOV_HORIZONTAL` and `CAMERA_FOV_VERTICAL` defaults unless `USE_CAMERA_INFO_FOV=true` is set. Set `DEPTH_CAMERA_INFO_TOPIC` if your Orbbec driver publishes camera info somewhere else.
+The dashboard also subscribes to `/camera/depth/camera_info` by default and displays the depth intrinsics-derived FOV for debugging. Overlay sizing uses the configured `depth_fov_horizontal` and `depth_fov_vertical` params unless `USE_CAMERA_INFO_FOV=true` is set. Set `DEPTH_CAMERA_INFO_TOPIC` if your Orbbec driver publishes camera info somewhere else.
 
 By default `BASE_VIEW_MODE=thermal-crop`: the thermal FOV defines the main viewport, and the depth image is cropped to that thermal window before thermal is blended full-frame. Set `BASE_VIEW_MODE=full-depth` to restore the older full depth frame with thermal drawn as a smaller rectangle. This keeps future wider thermal cameras easy to support by changing thermal FOV or the `H`/`V` stretch values instead of changing rendering code.
 
@@ -72,3 +76,5 @@ If the thermal image is visible but does not line up with depth, use a small hot
 The built-in dashboard calibration defaults are `Overlay=50.0`, `X=25.0`, `Y=-10.0`, `Scale=100.0`, `H=79.6`, and `V=115.4`. Delete `.thermal-alignment.json` to return to these defaults after local tuning.
 
 Set `ROS2_WORKSPACE` when the ROS workspace is not beside this directory. The dashboard defaults to ROS 2 Jazzy; set `ROS_DISTRO` if you are using another distro, and `PORT` to change the dashboard port.
+
+Use `DRONE_MASTER_PARAMS=/path/to/master_params.yaml` to load a different master params file. Use `CAMERA_CALIBRATIONS_PARAMS=/path/to/camera_calibrations.yaml` to override only the calibration file referenced by the master params.

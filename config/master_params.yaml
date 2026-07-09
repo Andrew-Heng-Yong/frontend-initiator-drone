@@ -1,0 +1,91 @@
+# Master parameter file for the drone camera stack.
+#
+# Values mirror the dashboard/server defaults in this repo.
+# Camera intrinsics, distortion, and extrinsics live in camera_calibrations.yaml.
+
+system:
+  ros__parameters:
+    camera_calibrations_params_file: config/camera_calibrations.yaml
+    ros_distro: jazzy
+    ros2_workspace: ../ros2-initiator-drone
+    orbbec_setup: ~/orbbec_ws/install/setup.bash
+    dashboard_port: 4173
+    rosbridge_port: 9090
+    max_log_lines: 160
+    alignment_file: .thermal-alignment.json
+
+drone_control:
+  ros__parameters:
+    package: drone_control
+    launch_file: drone_launch.py
+    launch_command: ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_thermal_overlay:=false
+    start_rosbridge: true
+    start_depth_camera: true
+    start_thermal_overlay: false
+    require_depth_camera: true
+    allow_thermal_only_mode: false
+
+camera_streams:
+  ros__parameters:
+    base_view_mode: thermal-crop
+    use_camera_info_fov: false
+    color_image_topic: /camera/depth/image_raw
+    depth_image_topic: /camera/depth/image_raw
+    depth_camera_info_topic: /camera/depth/camera_info
+    thermal_image_topic: /thermal/image_raw
+    depth_fov_horizontal: 67.0
+    depth_fov_vertical: 53.6
+    thermal_fov_horizontal: 55.0
+    thermal_fov_vertical: 35.0
+
+    depth_image_type: sensor_msgs/msg/Image
+    depth_camera_info_type: sensor_msgs/msg/CameraInfo
+    thermal_image_type: sensor_msgs/msg/Image
+    rosbridge_compression: none
+    rosbridge_fragment_size: 8000000
+
+    supported_base_encodings: [mjpeg, mjpg, jpeg, jpg, 16UC1, mono16, 32FC1, rgb8, bgr8, rgba8, bgra8, mono8]
+    supported_thermal_encodings: [32FC1, 16UC1, mono16, 16SC1, 8UC1, mono8]
+
+thermal_dashboard:
+  ros__parameters:
+    overlay_alpha: 0.5
+    rgb_overlay_enabled: true
+    cpu_monitor_enabled: true
+    cpu_temperature_paths:
+      - /sys/class/thermal/thermal_zone0/temp
+      - /sys/class/hwmon/hwmon0/temp1_input
+
+    depth_display:
+      invalid_color_rgba: [6, 12, 20, 255]
+      near_percentile: 0.02
+      far_percentile: 0.98
+      minimum_depth_span: 1.0
+
+    thermal_display:
+      default_width: 32
+      default_height: 24
+      minimum_temperature_span: 0.5
+      flip_x: true
+      color_map:
+        - [20, 28, 65]
+        - [37, 104, 183]
+        - [37, 194, 151]
+        - [251, 191, 36]
+        - [220, 38, 38]
+
+    # Thermal-to-depth overlay alignment. These match the current server defaults.
+    thermal_alignment:
+      offset_x: 10.0
+      offset_y: 0.0
+      scale: 0.8
+      stretch_x: 0.8
+      stretch_y: 1.0
+
+    thermal_alignment_limits:
+      offset_x: [-320.0, 320.0]
+      offset_y: [-240.0, 240.0]
+      scale: [0.5, 1.5]
+      stretch_x: [0.5, 1.5]
+      stretch_y: [0.5, 1.5]
+      overlay_alpha: [0.0, 1.0]
