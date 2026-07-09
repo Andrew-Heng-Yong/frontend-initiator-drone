@@ -29,7 +29,7 @@ drone_control:
 
 camera_streams:
   ros__parameters:
-    base_view_mode: thermal-crop
+    base_view_mode: full-depth
     use_camera_info_fov: false
     color_image_topic: /camera/depth/cropped/image_raw
     depth_image_topic: /camera/depth/cropped/image_raw

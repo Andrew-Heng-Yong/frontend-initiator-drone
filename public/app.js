@@ -39,7 +39,7 @@ let thermalFov = { horizontal: 55, vertical: 35 };
 let cameraFov = { horizontal: 67, vertical: 53.6 };
 let cameraInfoFov = null;
 let useCameraInfoFov = false;
-let baseViewMode = 'thermal-crop';
+let baseViewMode = 'full-depth';
 let flipThermalX = true;
 let localCropPreview = false;
 let thermalAlignment = { offsetX: 0, offsetY: 0, scale: 1, stretchX: 1, stretchY: 1 };
@@ -710,7 +710,7 @@ function applyStreamConfig(stream) {
   imageTopics = nextTopics;
   thermalFov = finiteFov(stream.thermalFov, thermalFov);
   useCameraInfoFov = stream.useCameraInfoFov === true;
-  baseViewMode = stream.baseViewMode === 'full-depth' ? 'full-depth' : 'thermal-crop';
+  baseViewMode = stream.baseViewMode === 'thermal-crop' ? 'thermal-crop' : 'full-depth';
   cameraFov = useCameraInfoFov && cameraInfoFov ? cameraInfoFov : finiteFov(stream.cameraFov, cameraFov);
   flipThermalX = stream.flipThermalX !== false;
   localCropPreview = stream.cropper && stream.cropper.localPreview === true;
