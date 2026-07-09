@@ -13,11 +13,19 @@ header { justify-content: flex-start; }
 .status { display: flex; align-items: center; gap: .5rem; color: #aebdd2; font-weight: 700; }.status span:first-child { width: .65rem; height: .65rem; border-radius: 50%; background: #66758b; }.status span.running { background: #38d996; box-shadow: 0 0 1rem #38d996; }
 .controls { display: none; margin: 0; }.controls p { color: #9fb0c9; flex: 1; min-width: 14rem; }
 button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; font: inherit; font-weight: 750; cursor: pointer; }.start { background: #148560; }.stop { background: #bd3544; }button:disabled { opacity: .43; cursor: not-allowed; }
-.viewer, .cpu-panel, .log-panel { background: rgba(11, 26, 46, .78); border: 1px solid #264463; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 1.5rem 4rem rgba(0,0,0,.22); }.viewer-heading { align-items: flex-start; }.viewer-heading #range { color: #f9ce62; font-variant-numeric: tabular-nums; font-weight: 700; }
+.viewer, .cpu-panel, .log-panel { background: rgba(11, 26, 46, .78); border: 1px solid #264463; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 1.5rem 4rem rgba(0,0,0,.22); }.viewer-heading { align-items: flex-start; }.viewer-heading #range, .canvas-panel #range { color: #f9ce62; font-variant-numeric: tabular-nums; font-weight: 700; font-size: .82rem; line-height: 1.25; }
+.viewer-layout { display: grid; grid-template-columns: minmax(0, 1fr) 17rem; align-items: start; gap: 1rem; }
+.canvas-panel { min-width: 0; }
+.tuning-panel { align-self: stretch; display: flex; flex-direction: column; gap: .85rem; max-height: calc(100vh - 13rem); overflow: auto; padding-left: 1rem; border-left: 1px solid #264463; }
+.tuning-group { display: grid; gap: .45rem; }
+.tuning-group h2 { color: #edf5ff; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; }
 .viewer-tools { display: flex; align-items: center; gap: .85rem; flex-wrap: wrap; justify-content: flex-end; }
-.overlay-alpha { display: flex; align-items: center; gap: .45rem; color: #aabbd1; font-size: .75rem; font-weight: 700; }
+.overlay-alpha { display: flex; align-items: center; justify-content: space-between; gap: .45rem; color: #aabbd1; font-size: .75rem; font-weight: 700; }
 .overlay-alpha .number-field { width: 4.4rem; border: 1px solid #38516c; border-radius: .25rem; background: rgba(2,10,18,.3); color: #f9ce62; font: 800 .75rem/1 ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; padding: .2rem .28rem; text-align: right; }
 .overlay-alpha .number-field:focus { outline: 2px solid rgba(249, 206, 98, .75); outline-offset: 1px; }
+.check-field { display: flex; align-items: center; gap: .45rem; color: #aabbd1; font-size: .75rem; font-weight: 700; }
+.check-field input { accent-color: #38d996; }
+.cropper-status { color: #8da4c3; font: 700 .72rem/1.35 ui-monospace, Consolas, monospace; border-top: 1px solid rgba(38,68,99,.7); padding-top: .5rem; }
 .cpu-panel { margin-bottom: 1.25rem; }
 .cpu-cores { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .5rem .6rem; margin-top: .6rem; }
 .cpu-core { display: grid; grid-template-columns: 2.2rem minmax(3rem, 1fr) 1.6rem; align-items: center; gap: .4rem; color: #b8c8dc; font-variant-numeric: tabular-nums; font-size: .85rem; }
@@ -43,4 +51,5 @@ canvas[data-stream="overlay"] { image-rendering: auto; }
 .log-header .clear { background: transparent; border: 1px solid #2e445a; color: #aabbd1; padding: .28rem .48rem; border-radius: .4rem; cursor: pointer; font-size: .78rem; line-height: 1.1; font-weight: 700; }
 .log-header .clear:hover { border-color: #496b86; }
 pre { flex: 1 1 auto; min-height: 0; overflow: auto; white-space: pre; word-break: normal; color: #aabbd1; font: .72rem/1.35 ui-monospace, Consolas, monospace; margin: 0; padding: .4rem .5rem; border-radius: .4rem; background: rgba(3,12,20,.2); }
+@media (max-width: 760px) { .viewer-layout { grid-template-columns: 1fr; }.tuning-panel { max-height: none; padding-left: 0; border-left: 0; border-top: 1px solid #264463; padding-top: .85rem; } }
 @media (max-width: 560px) { main { width: min(100% - 1.25rem, 62rem); padding-top: .75rem; } header { align-items: flex-start; flex-wrap: wrap; }.header-left { flex: 1 1 100%; }.cpu-mini { margin-left: 0; }.status { margin-left: auto; }.controls p { order: 3; flex-basis: 100%; } }

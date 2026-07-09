@@ -23,36 +23,77 @@
       </section>
       <!-- Large CPU panel removed; compact CPU shown in header -->
       <section class="viewer" aria-label="Depth camera with thermal overlay">
-        <div class="viewer-heading">
-          <div class="viewer-tools">
-            <label class="overlay-alpha">
-              <span>Overlay</span>
-              <input id="overlay-alpha" class="number-field" type="number" min="0" max="100" step="0.1" value="50.0" />
-            </label>
-            <label class="overlay-alpha">
-              <span>X</span>
-              <input id="thermal-offset-x" class="number-field" type="number" min="-320" max="320" step="0.1" value="25.0" />
-            </label>
-            <label class="overlay-alpha">
-              <span>Y</span>
-              <input id="thermal-offset-y" class="number-field" type="number" min="-240" max="240" step="0.1" value="-10.0" />
-            </label>
-            <label class="overlay-alpha">
-              <span>Scale</span>
-              <input id="thermal-scale" class="number-field" type="number" min="50" max="150" step="0.1" value="100.0" />
-            </label>
-            <label class="overlay-alpha">
-              <span>H</span>
-              <input id="thermal-stretch-x" class="number-field" type="number" min="50" max="150" step="0.1" value="79.6" />
-            </label>
-            <label class="overlay-alpha">
-              <span>V</span>
-              <input id="thermal-stretch-y" class="number-field" type="number" min="50" max="150" step="0.1" value="115.4" />
-            </label>
+        <div class="viewer-layout">
+          <div class="canvas-panel">
             <div id="range">--</div>
+            <canvas id="thermal-canvas" width="32" height="24" aria-label="Depth camera with thermal overlay"></canvas>
+          </div>
+          <div class="tuning-panel" aria-label="Thermal tuning parameters">
+            <div class="tuning-group">
+              <h2>Overlay</h2>
+              <label class="overlay-alpha">
+                <span>Blend</span>
+                <input id="overlay-alpha" class="number-field" type="number" min="0" max="100" step="0.1" value="50.0" />
+              </label>
+              <label class="overlay-alpha">
+                <span>X</span>
+                <input id="thermal-offset-x" class="number-field" type="number" min="-320" max="320" step="0.1" value="25.0" />
+              </label>
+              <label class="overlay-alpha">
+                <span>Y</span>
+                <input id="thermal-offset-y" class="number-field" type="number" min="-240" max="240" step="0.1" value="-10.0" />
+              </label>
+              <label class="overlay-alpha">
+                <span>Scale</span>
+                <input id="thermal-scale" class="number-field" type="number" min="50" max="150" step="0.1" value="100.0" />
+              </label>
+              <label class="overlay-alpha">
+                <span>H</span>
+                <input id="thermal-stretch-x" class="number-field" type="number" min="50" max="150" step="0.1" value="79.6" />
+              </label>
+              <label class="overlay-alpha">
+                <span>V</span>
+                <input id="thermal-stretch-y" class="number-field" type="number" min="50" max="150" step="0.1" value="115.4" />
+              </label>
+            </div>
+            <div class="tuning-group">
+              <h2>Cropper</h2>
+              <label class="check-field">
+                <input id="cropper-enabled" type="checkbox" checked />
+                <span>Enabled</span>
+              </label>
+              <label class="overlay-alpha">
+                <span>Unit</span>
+                <input id="crop-unit-thermal-pixels" class="number-field" type="number" min="1" max="16" step="1" value="1" />
+              </label>
+              <label class="overlay-alpha">
+                <span>Min region</span>
+                <input id="crop-min-region-size" class="number-field" type="number" min="1" max="768" step="1" value="4" />
+              </label>
+              <label class="overlay-alpha">
+                <span>Inflate</span>
+                <input id="crop-inflation-radius" class="number-field" type="number" min="0" max="32" step="1" value="1" />
+              </label>
+              <label class="overlay-alpha">
+                <span>Min temp</span>
+                <input id="crop-highlight-min-temp" class="number-field" type="number" min="-100" max="1000" step="0.1" value="30.0" />
+              </label>
+              <label class="overlay-alpha">
+                <span>Max temp</span>
+                <input id="crop-highlight-max-temp" class="number-field" type="number" min="-100" max="1000" step="0.1" value="120.0" />
+              </label>
+              <label class="overlay-alpha">
+                <span>Low +</span>
+                <input id="crop-highlight-min-delta-low" class="number-field" type="number" min="0" max="1000" step="0.1" value="3.0" />
+              </label>
+              <label class="overlay-alpha">
+                <span>High -</span>
+                <input id="crop-highlight-max-delta-high" class="number-field" type="number" min="0" max="1000" step="0.1" value="1000.0" />
+              </label>
+              <div id="cropper-status" class="cropper-status">crop waiting</div>
+            </div>
           </div>
         </div>
-        <canvas id="thermal-canvas" width="32" height="24" aria-label="Depth camera with thermal overlay"></canvas>
       </section>
       </div>
       <section class="log-panel">

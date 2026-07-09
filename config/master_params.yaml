@@ -13,15 +13,17 @@ system:
     rosbridge_port: 9090
     max_log_lines: 160
     alignment_file: .thermal-alignment.json
+    cropper_settings_file: .thermal-cropper.json
 
 drone_control:
   ros__parameters:
     package: drone_control
     launch_file: drone_launch.py
-    launch_command: ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_thermal_overlay:=false
+    launch_command: ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_thermal_cropper:=true start_thermal_overlay:=false
     start_rosbridge: true
     start_depth_camera: true
     start_thermal_overlay: false
+    start_thermal_cropper: true
     require_depth_camera: true
     allow_thermal_only_mode: false
 
@@ -29,10 +31,10 @@ camera_streams:
   ros__parameters:
     base_view_mode: thermal-crop
     use_camera_info_fov: false
-    color_image_topic: /camera/depth/image_raw
-    depth_image_topic: /camera/depth/image_raw
-    depth_camera_info_topic: /camera/depth/camera_info
-    thermal_image_topic: /thermal/image_raw
+    color_image_topic: /camera/depth/cropped/image_raw
+    depth_image_topic: /camera/depth/cropped/image_raw
+    depth_camera_info_topic: /camera/depth/cropped/camera_info
+    thermal_image_topic: /thermal/cropped/image_raw
     depth_fov_horizontal: 67.0
     depth_fov_vertical: 53.6
     thermal_fov_horizontal: 55.0
@@ -73,6 +75,16 @@ thermal_dashboard:
         - [37, 194, 151]
         - [251, 191, 36]
         - [220, 38, 38]
+
+    thermal_cropper:
+      enabled: true
+      crop_unit_thermal_pixels: 1
+      min_region_size: 4
+      inflation_radius_thermal_pixels: 1
+      highlight_min_temp: 30.0
+      highlight_max_temp: 120.0
+      highlight_min_delta_from_frame_low: 3.0
+      highlight_max_delta_from_frame_high: 1000.0
 
     # Thermal-to-depth overlay alignment. These match the current server defaults.
     thermal_alignment:
