@@ -80,8 +80,8 @@ thermal_dashboard:
       enabled: true
       crop_unit_thermal_pixels: 2
       min_region_size: 20
-      inflation_radius_thermal_pixels: 0
-      highlight_min_temp: 25.0
+      inflation_radius_thermal_pixels: 1
+      highlight_min_temp: 28.0
       highlight_max_temp: 40.0
       highlight_min_delta_from_frame_low: 3.0
       highlight_max_delta_from_frame_high: 1000.0
