@@ -335,28 +335,17 @@ function drawDepthCameraFrame(image, encoding) {
     encoding === '32fc1' ? view.getFloat32(offset, littleEndian) : view.getUint16(offset, littleEndian)
   ));
 
-  const viewport = latestThermal && baseViewMode === 'thermal-crop'
-    ? thermalViewportRect(width, height)
-    : { left: 0, top: 0, width, height };
-  const finite = depthValuesInViewport(values, width, height, viewport);
-  if (!finite.length) {
-    connection.textContent = 'Depth frame has no valid pixels.';
-    return;
-  }
+  const finite = depthValues(values);
   finite.sort((a, b) => a - b);
-  const near = finite[Math.floor(finite.length * 0.02)];
-  const far = finite[Math.floor(finite.length * 0.98)] || near + 1;
+  const near = finite.length ? finite[Math.floor(finite.length * 0.02)] : 0;
+  const far = finite.length ? (finite[Math.floor(finite.length * 0.98)] || near + 1) : 1;
   const span = Math.max(far - near, 1);
 
-  const output = context.createImageData(viewport.width, viewport.height);
-  for (let y = 0; y < viewport.height; y += 1) {
-    for (let x = 0; x < viewport.width; x += 1) {
-      const sourceX = viewport.left + x;
-      const sourceY = viewport.top + y;
-      const value = sourceX >= 0 && sourceX < width && sourceY >= 0 && sourceY < height
-        ? values[sourceY * width + sourceX]
-        : NaN;
-      const target = (y * viewport.width + x) * 4;
+  const output = context.createImageData(width, height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const value = values[y * width + x];
+      const target = (y * width + x) * 4;
       if (!Number.isFinite(value) || value <= 0) {
         output.data[target] = 6;
         output.data[target + 1] = 12;
@@ -373,20 +362,18 @@ function drawDepthCameraFrame(image, encoding) {
     }
   }
 
-  if (latestThermal && baseViewMode === 'thermal-crop') {
-    overlayThermalOnViewport(output, viewport.width, viewport.height);
-  } else if (latestThermal) {
+  if (latestThermal) {
     overlayThermalOnCamera(output, width, height);
   }
 
-  if (canvas.width !== viewport.width || canvas.height !== viewport.height) {
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
   }
   canvas.dataset.stream = 'overlay';
   context.imageSmoothingEnabled = true;
   context.putImageData(output, 0, 0);
-  updateRangeLabel(viewport.width, viewport.height);
+  updateRangeLabel(width, height);
   activeImageTopic = imageTopics.color;
   connection.textContent = streamStatusText();
   subscribeImageTopic(imageTopics.thermal);
@@ -433,60 +420,13 @@ function readScalarImage(target, width, height, step, bytesPerPixel, sourceLengt
   }
 }
 
-function thermalViewportRect(cameraWidth, cameraHeight) {
-  return fullThermalViewportRect(cameraWidth, cameraHeight);
-}
-
-function fullThermalViewportRect(cameraWidth, cameraHeight) {
-  const thermalWidth = latestThermal ? latestThermal.width : 32;
-  const thermalHeight = latestThermal ? latestThermal.height : 24;
-  const width = Math.max(thermalWidth, Math.round(
-    cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal) * thermalAlignment.scale * thermalAlignment.stretchX,
-  ));
-  const height = Math.max(thermalHeight, Math.round(
-    cameraHeight * fovFraction(thermalFov.vertical, cameraFov.vertical) * thermalAlignment.scale * thermalAlignment.stretchY,
-  ));
-  return {
-    left: Math.round((cameraWidth - width) / 2 + thermalAlignment.offsetX),
-    top: Math.round((cameraHeight - height) / 2 + thermalAlignment.offsetY),
-    width,
-    height,
-  };
-}
-
-function depthValuesInViewport(values, width, height, viewport) {
+function depthValues(values) {
   const output = [];
-  const left = Math.max(0, viewport.left);
-  const top = Math.max(0, viewport.top);
-  const right = Math.min(width, viewport.left + viewport.width);
-  const bottom = Math.min(height, viewport.top + viewport.height);
-  for (let y = top; y < bottom; y += 1) {
-    for (let x = left; x < right; x += 1) {
-      const value = values[y * width + x];
-      if (Number.isFinite(value) && value > 0) output.push(value);
-    }
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    if (Number.isFinite(value) && value > 0) output.push(value);
   }
   return output;
-}
-
-function overlayThermalOnViewport(output, outputWidth, outputHeight) {
-  const { values, width, height, low, high } = latestThermal;
-  const span = Math.max(high - low, 0.5);
-  for (let y = 0; y < outputHeight; y += 1) {
-    const thermalY = Math.max(0, Math.min(height - 1, Math.floor((y / Math.max(1, outputHeight)) * height)));
-    for (let x = 0; x < outputWidth; x += 1) {
-      const scaledX = Math.max(0, Math.min(width - 1, Math.floor((x / Math.max(1, outputWidth)) * width)));
-      const thermalX = flipThermalX ? width - 1 - scaledX : scaledX;
-      const temperature = values[thermalY * width + thermalX];
-      if (!Number.isFinite(temperature)) continue;
-
-      const [red, green, blue] = heatColor((temperature - low) / span);
-      const target = (y * outputWidth + x) * 4;
-      output.data[target] = Math.round((1 - overlayAlpha) * output.data[target] + overlayAlpha * red);
-      output.data[target + 1] = Math.round((1 - overlayAlpha) * output.data[target + 1] + overlayAlpha * green);
-      output.data[target + 2] = Math.round((1 - overlayAlpha) * output.data[target + 2] + overlayAlpha * blue);
-    }
-  }
 }
 
 function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
