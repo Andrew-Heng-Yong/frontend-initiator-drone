@@ -22,14 +22,6 @@ const thermalScaleInput = document.querySelector('#thermal-scale');
 const thermalStretchXInput = document.querySelector('#thermal-stretch-x');
 const thermalStretchYInput = document.querySelector('#thermal-stretch-y');
 const cropperEnabledInput = document.querySelector('#cropper-enabled');
-const cropUnitThermalPixelsInput = document.querySelector('#crop-unit-thermal-pixels');
-const cropMinRegionSizeInput = document.querySelector('#crop-min-region-size');
-const cropInflationRadiusInput = document.querySelector('#crop-inflation-radius');
-const cropHighlightMinTempInput = document.querySelector('#crop-highlight-min-temp');
-const cropHighlightMaxTempInput = document.querySelector('#crop-highlight-max-temp');
-const cropHighlightMinDeltaLowInput = document.querySelector('#crop-highlight-min-delta-low');
-const cropHighlightMaxDeltaHighInput = document.querySelector('#crop-highlight-max-delta-high');
-const cropperStatus = document.querySelector('#cropper-status');
 let imageTopics = {
   color: '/camera/depth/image_raw',
   cameraInfo: '/camera/depth/camera_info',
@@ -41,24 +33,13 @@ let cameraInfoFov = null;
 let useCameraInfoFov = false;
 let baseViewMode = 'full-depth';
 let flipThermalX = true;
-let localCropPreview = false;
 let thermalAlignment = { offsetX: 0, offsetY: 0, scale: 1, stretchX: 1, stretchY: 1 };
-let thermalCropper = {
-  enabled: true,
-  cropUnitThermalPixels: 1,
-  minRegionSize: 4,
-  inflationRadiusThermalPixels: 1,
-  highlightMinTemp: 30,
-  highlightMaxTemp: 120,
-  highlightMinDeltaFromFrameLow: 3,
-  highlightMaxDeltaFromFrameHigh: 1000,
-};
+let thermalCropper = { enabled: true };
 
 let rosSocket;
 let activeImageTopic = null;
 let overlayAlphaTimer;
 let thermalAlignmentTimer;
-let thermalCropperTimer;
 let overlayAlpha = 0.45;
 let latestThermal = null;
 let latestColor = null;
@@ -96,7 +77,6 @@ function closeRosbridge() {
   latestColor = null;
   latestThermal = null;
   thermalStatus = 'thermal waiting';
-  renderCropperStatus({ region: null, text: 'crop waiting' });
   subscribedTopics = new Set();
   connection.textContent = 'Camera stream disconnected.';
 }
@@ -332,16 +312,13 @@ function updateThermalFrame(image) {
   const values = [...frame.values].filter(Number.isFinite);
   if (!values.length) {
     thermalStatus = 'thermal empty';
-    renderCropperStatus({ region: null, text: 'crop empty' });
     return;
   }
 
   const low = Math.min(...values);
   const high = Math.max(...values);
-  const cropper = detectThermalCropperRegion({ ...frame, low, high });
-  latestThermal = { ...frame, low, high, cropper };
-  thermalStatus = `thermal ${frame.width}x${frame.height} ${formatRange(low, high, frame.units)}${cropper.text ? ` | ${cropper.text}` : ''}`;
-  renderCropperStatus(cropper);
+  latestThermal = { ...frame, low, high };
+  thermalStatus = `thermal ${frame.width}x${frame.height} ${formatRange(low, high, frame.units)}`;
 }
 
 function drawDepthCameraFrame(image, encoding) {
@@ -456,118 +433,8 @@ function readScalarImage(target, width, height, step, bytesPerPixel, sourceLengt
   }
 }
 
-function detectThermalCropperRegion(frame) {
-  if (!thermalCropper.enabled) return { region: null, text: 'crop off' };
-  const width = frame.width;
-  const height = frame.height;
-  const unit = clampInteger(thermalCropper.cropUnitThermalPixels, 1, Math.max(width, height), 1);
-  const columns = Math.ceil(width / unit);
-  const rows = Math.ceil(height / unit);
-  const mask = new Uint8Array(columns * rows);
-  let highlighted = 0;
-
-  for (let cellY = 0; cellY < rows; cellY += 1) {
-    for (let cellX = 0; cellX < columns; cellX += 1) {
-      let hit = false;
-      for (let y = cellY * unit; y < Math.min(height, (cellY + 1) * unit) && !hit; y += 1) {
-        for (let x = cellX * unit; x < Math.min(width, (cellX + 1) * unit); x += 1) {
-          if (isHighlightedThermalPixel(frame.values[y * width + x], frame.low, frame.high)) {
-            hit = true;
-            break;
-          }
-        }
-      }
-      if (hit) {
-        mask[cellY * columns + cellX] = 1;
-        highlighted += 1;
-      }
-    }
-  }
-
-  if (!highlighted) return { region: null, text: 'crop no highlight' };
-  const visited = new Uint8Array(mask.length);
-  let best = null;
-  const neighbors = [-1, 0, 1];
-
-  for (let index = 0; index < mask.length; index += 1) {
-    if (!mask[index] || visited[index]) continue;
-    const queue = [index];
-    visited[index] = 1;
-    let count = 0;
-    let minX = columns;
-    let minY = rows;
-    let maxX = 0;
-    let maxY = 0;
-
-    for (let cursor = 0; cursor < queue.length; cursor += 1) {
-      const current = queue[cursor];
-      const x = current % columns;
-      const y = Math.floor(current / columns);
-      count += 1;
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-
-      neighbors.forEach((dy) => {
-        neighbors.forEach((dx) => {
-          if (dx === 0 && dy === 0) return;
-          const nextX = x + dx;
-          const nextY = y + dy;
-          if (nextX < 0 || nextX >= columns || nextY < 0 || nextY >= rows) return;
-          const next = nextY * columns + nextX;
-          if (!mask[next] || visited[next]) return;
-          visited[next] = 1;
-          queue.push(next);
-        });
-      });
-    }
-
-    if (!best || count > best.count) best = { count, minX, minY, maxX, maxY };
-  }
-
-  if (!best || best.count < thermalCropper.minRegionSize) {
-    return { region: null, text: `crop small ${best ? best.count : 0}/${thermalCropper.minRegionSize}` };
-  }
-
-  const inflate = clampInteger(thermalCropper.inflationRadiusThermalPixels, 0, Math.max(width, height), 0);
-  const left = Math.max(0, best.minX * unit - inflate);
-  const top = Math.max(0, best.minY * unit - inflate);
-  const right = Math.min(width, (best.maxX + 1) * unit + inflate);
-  const bottom = Math.min(height, (best.maxY + 1) * unit + inflate);
-  const region = {
-    left,
-    top,
-    width: Math.max(1, right - left),
-    height: Math.max(1, bottom - top),
-    clusterSize: best.count,
-    highlightedCount: highlighted,
-  };
-  return { region, text: `crop ${region.width}x${region.height} c${best.count}` };
-}
-
-function isHighlightedThermalPixel(value, low, high) {
-  if (!Number.isFinite(value)) return false;
-  if (value < thermalCropper.highlightMinTemp || value > thermalCropper.highlightMaxTemp) return false;
-  if (value < low + thermalCropper.highlightMinDeltaFromFrameLow) return false;
-  if (value < high - thermalCropper.highlightMaxDeltaFromFrameHigh) return false;
-  return true;
-}
-
 function thermalViewportRect(cameraWidth, cameraHeight) {
-  const full = fullThermalViewportRect(cameraWidth, cameraHeight);
-  const crop = latestThermal && latestThermal.cropper && latestThermal.cropper.region;
-  if (!thermalCropper.enabled || !localCropPreview || !crop) return full;
-
-  const thermalWidth = latestThermal.width || 32;
-  const thermalHeight = latestThermal.height || 24;
-  const cropLeft = flipThermalX ? thermalWidth - crop.left - crop.width : crop.left;
-  return {
-    left: Math.round(full.left + (cropLeft / thermalWidth) * full.width),
-    top: Math.round(full.top + (crop.top / thermalHeight) * full.height),
-    width: Math.max(1, Math.round((crop.width / thermalWidth) * full.width)),
-    height: Math.max(1, Math.round((crop.height / thermalHeight) * full.height)),
-  };
+  return fullThermalViewportRect(cameraWidth, cameraHeight);
 }
 
 function fullThermalViewportRect(cameraWidth, cameraHeight) {
@@ -604,17 +471,11 @@ function depthValuesInViewport(values, width, height, viewport) {
 
 function overlayThermalOnViewport(output, outputWidth, outputHeight) {
   const { values, width, height, low, high } = latestThermal;
-  const rawCrop = thermalCropper.enabled && localCropPreview && latestThermal.cropper && latestThermal.cropper.region
-    ? latestThermal.cropper.region
-    : { left: 0, top: 0, width, height };
-  const crop = flipThermalX
-    ? { ...rawCrop, left: width - rawCrop.left - rawCrop.width }
-    : rawCrop;
   const span = Math.max(high - low, 0.5);
   for (let y = 0; y < outputHeight; y += 1) {
-    const thermalY = Math.max(0, Math.min(height - 1, Math.floor(crop.top + (y / Math.max(1, outputHeight)) * crop.height)));
+    const thermalY = Math.max(0, Math.min(height - 1, Math.floor((y / Math.max(1, outputHeight)) * height)));
     for (let x = 0; x < outputWidth; x += 1) {
-      const scaledX = Math.max(0, Math.min(width - 1, Math.floor(crop.left + (x / Math.max(1, outputWidth)) * crop.width)));
+      const scaledX = Math.max(0, Math.min(width - 1, Math.floor((x / Math.max(1, outputWidth)) * width)));
       const thermalX = flipThermalX ? width - 1 - scaledX : scaledX;
       const temperature = values[thermalY * width + thermalX];
       if (!Number.isFinite(temperature)) continue;
@@ -687,13 +548,6 @@ function setThermalCropperUi(cropper) {
   if (!cropper) return;
   thermalCropper = normalizeCropperSettings(cropper);
   if (cropperEnabledInput) cropperEnabledInput.checked = thermalCropper.enabled;
-  setControlValue(cropUnitThermalPixelsInput, thermalCropper.cropUnitThermalPixels);
-  setControlValue(cropMinRegionSizeInput, thermalCropper.minRegionSize);
-  setControlValue(cropInflationRadiusInput, thermalCropper.inflationRadiusThermalPixels);
-  setControlValue(cropHighlightMinTempInput, thermalCropper.highlightMinTemp);
-  setControlValue(cropHighlightMaxTempInput, thermalCropper.highlightMaxTemp);
-  setControlValue(cropHighlightMinDeltaLowInput, thermalCropper.highlightMinDeltaFromFrameLow);
-  setControlValue(cropHighlightMaxDeltaHighInput, thermalCropper.highlightMaxDeltaFromFrameHigh);
 }
 
 function applyStreamConfig(stream) {
@@ -713,7 +567,6 @@ function applyStreamConfig(stream) {
   baseViewMode = stream.baseViewMode === 'thermal-crop' ? 'thermal-crop' : 'full-depth';
   cameraFov = useCameraInfoFov && cameraInfoFov ? cameraInfoFov : finiteFov(stream.cameraFov, cameraFov);
   flipThermalX = stream.flipThermalX !== false;
-  localCropPreview = stream.cropper && stream.cropper.localPreview === true;
   setThermalAlignmentUi(stream.alignment);
   setThermalCropperUi(stream.cropper);
   if (topicsChanged) closeRosbridge();
@@ -725,31 +578,12 @@ function clampNumber(value, min, max, fallback) {
   return Math.max(min, Math.min(max, number));
 }
 
-function clampInteger(value, min, max, fallback) {
-  return Math.round(clampNumber(value, min, max, fallback));
-}
-
 function formatOneDecimal(value) {
   return Number(value).toFixed(1);
 }
 
 function normalizeCropperSettings(settings) {
-  const normalized = {
-    enabled: settings.enabled !== false,
-    cropUnitThermalPixels: clampInteger(settings.cropUnitThermalPixels, 1, 16, 1),
-    minRegionSize: clampInteger(settings.minRegionSize, 1, 768, 4),
-    inflationRadiusThermalPixels: clampInteger(settings.inflationRadiusThermalPixels, 0, 32, 1),
-    highlightMinTemp: clampNumber(settings.highlightMinTemp, -100, 1000, 30),
-    highlightMaxTemp: clampNumber(settings.highlightMaxTemp, -100, 1000, 120),
-    highlightMinDeltaFromFrameLow: clampNumber(settings.highlightMinDeltaFromFrameLow, 0, 1000, 3),
-    highlightMaxDeltaFromFrameHigh: clampNumber(settings.highlightMaxDeltaFromFrameHigh, 0, 1000, 1000),
-  };
-  if (normalized.highlightMaxTemp < normalized.highlightMinTemp) {
-    const swap = normalized.highlightMaxTemp;
-    normalized.highlightMaxTemp = normalized.highlightMinTemp;
-    normalized.highlightMinTemp = swap;
-  }
-  return normalized;
+  return { enabled: !settings || settings.enabled !== false };
 }
 
 function setControlValue(control, value, force = false) {
@@ -866,48 +700,15 @@ function updateThermalAlignmentFromUi(source, formatActive = false) {
   }, 150);
 }
 
-function updateThermalCropperFromUi(source, formatActive = false) {
+async function updateThermalCropperFromUi() {
   thermalCropper = normalizeCropperSettings({
     enabled: cropperEnabledInput ? cropperEnabledInput.checked : thermalCropper.enabled,
-    cropUnitThermalPixels: inputNumber(cropUnitThermalPixelsInput, thermalCropper.cropUnitThermalPixels),
-    minRegionSize: inputNumber(cropMinRegionSizeInput, thermalCropper.minRegionSize),
-    inflationRadiusThermalPixels: inputNumber(cropInflationRadiusInput, thermalCropper.inflationRadiusThermalPixels),
-    highlightMinTemp: inputNumber(cropHighlightMinTempInput, thermalCropper.highlightMinTemp),
-    highlightMaxTemp: inputNumber(cropHighlightMaxTempInput, thermalCropper.highlightMaxTemp),
-    highlightMinDeltaFromFrameLow: inputNumber(cropHighlightMinDeltaLowInput, thermalCropper.highlightMinDeltaFromFrameLow),
-    highlightMaxDeltaFromFrameHigh: inputNumber(cropHighlightMaxDeltaHighInput, thermalCropper.highlightMaxDeltaFromFrameHigh),
   });
-  setControlValue(cropUnitThermalPixelsInput, thermalCropper.cropUnitThermalPixels, formatActive);
-  setControlValue(cropMinRegionSizeInput, thermalCropper.minRegionSize, formatActive);
-  setControlValue(cropInflationRadiusInput, thermalCropper.inflationRadiusThermalPixels, formatActive);
-  setControlValue(cropHighlightMinTempInput, thermalCropper.highlightMinTemp, formatActive);
-  setControlValue(cropHighlightMaxTempInput, thermalCropper.highlightMaxTemp, formatActive);
-  setControlValue(cropHighlightMinDeltaLowInput, thermalCropper.highlightMinDeltaFromFrameLow, formatActive);
-  setControlValue(cropHighlightMaxDeltaHighInput, thermalCropper.highlightMaxDeltaFromFrameHigh, formatActive);
-
-  if (latestThermal) {
-    latestThermal.cropper = detectThermalCropperRegion(latestThermal);
-    renderCropperStatus(latestThermal.cropper);
+  try {
+    await request('/api/thermal-cropper', thermalCropper);
+  } catch (error) {
+    connection.textContent = error.message;
   }
-  if (latestColor) scheduleDraw();
-  clearTimeout(thermalCropperTimer);
-  thermalCropperTimer = setTimeout(async () => {
-    try {
-      await request('/api/thermal-cropper', thermalCropper);
-    } catch (error) {
-      connection.textContent = error.message;
-    }
-  }, 150);
-}
-
-function renderCropperStatus(cropper) {
-  if (!cropperStatus) return;
-  if (!cropper || !cropper.region) {
-    cropperStatus.textContent = cropper && cropper.text ? cropper.text : 'crop waiting';
-    return;
-  }
-  const { left, top, width, height, clusterSize, highlightedCount } = cropper.region;
-  cropperStatus.textContent = `crop ${width}x${height} @ ${left},${top} | cluster ${clusterSize} | hot ${highlightedCount}`;
 }
 
 function heatColor(value) {
@@ -1022,15 +823,8 @@ function depthColor(value) {
   input.addEventListener('wheel', (event) => stepNumberInput(input, event, updateThermalAlignmentFromUi));
 });
 
-[cropUnitThermalPixelsInput, cropMinRegionSizeInput, cropInflationRadiusInput, cropHighlightMinTempInput, cropHighlightMaxTempInput, cropHighlightMinDeltaLowInput, cropHighlightMaxDeltaHighInput].forEach((input) => {
-  if (!input) return;
-  input.addEventListener('input', () => updateThermalCropperFromUi(input));
-  input.addEventListener('change', () => updateThermalCropperFromUi(input, true));
-  input.addEventListener('wheel', (event) => stepNumberInput(input, event, updateThermalCropperFromUi));
-});
-
 if (cropperEnabledInput) {
-  cropperEnabledInput.addEventListener('change', () => updateThermalCropperFromUi(cropperEnabledInput, true));
+  cropperEnabledInput.addEventListener('change', () => updateThermalCropperFromUi());
 }
 
 if (overlayAlphaInput) {

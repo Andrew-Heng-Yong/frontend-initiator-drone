@@ -33,9 +33,9 @@ const ORBBEC_SETUP = resolveLocalPath(
 );
 const ALIGNMENT_FILE = resolveLocalPath(process.env.THERMAL_ALIGNMENT_FILE || SYSTEM_PARAMS.alignment_file || path.join(__dirname, '.thermal-alignment.json'));
 const CROPPER_SETTINGS_FILE = resolveLocalPath(process.env.THERMAL_CROPPER_SETTINGS_FILE || SYSTEM_PARAMS.cropper_settings_file || path.join(__dirname, '.thermal-cropper.json'));
-const LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND
-  || DRONE_PARAMS.launch_command
+const BASE_LAUNCH_COMMAND = DRONE_PARAMS.launch_command
   || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_thermal_cropper:=true start_thermal_overlay:=false';
+const LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND || appendThermalCropperLaunchArgs(BASE_LAUNCH_COMMAND);
 const STREAM_CONFIG = {
   colorTopic: process.env.DEPTH_IMAGE_TOPIC || process.env.COLOR_IMAGE_TOPIC || STREAM_PARAMS.depth_image_topic || STREAM_PARAMS.color_image_topic || '/camera/depth/cropped/image_raw',
   cameraInfoTopic: process.env.DEPTH_CAMERA_INFO_TOPIC || STREAM_PARAMS.depth_camera_info_topic || '/camera/depth/cropped/camera_info',
@@ -62,13 +62,6 @@ const DEFAULT_THERMAL_ALIGNMENT = {
 };
 const DEFAULT_THERMAL_CROPPER = {
   enabled: THERMAL_CROPPER_PARAMS.enabled !== false,
-  cropUnitThermalPixels: THERMAL_CROPPER_PARAMS.crop_unit_thermal_pixels ?? 1,
-  minRegionSize: THERMAL_CROPPER_PARAMS.min_region_size ?? 4,
-  inflationRadiusThermalPixels: THERMAL_CROPPER_PARAMS.inflation_radius_thermal_pixels ?? 1,
-  highlightMinTemp: THERMAL_CROPPER_PARAMS.highlight_min_temp ?? 30,
-  highlightMaxTemp: THERMAL_CROPPER_PARAMS.highlight_max_temp ?? 120,
-  highlightMinDeltaFromFrameLow: THERMAL_CROPPER_PARAMS.highlight_min_delta_from_frame_low ?? 3,
-  highlightMaxDeltaFromFrameHigh: THERMAL_CROPPER_PARAMS.highlight_max_delta_from_frame_high ?? 1000,
 };
 
 let launchProcess = null;
@@ -96,6 +89,33 @@ function readYamlFile(filePath) {
 
 function rosParams(nodeName) {
   return (((MASTER_PARAMS[nodeName] || {}).ros__parameters) || {});
+}
+
+function appendThermalCropperLaunchArgs(command) {
+  const args = {
+    crop_unit_thermal_pixels: normalizeLaunchInteger(THERMAL_CROPPER_PARAMS.crop_unit_thermal_pixels, 1, 16, 2),
+    min_region_size: normalizeLaunchInteger(THERMAL_CROPPER_PARAMS.min_region_size, 1, 768, 20),
+    inflation_radius_thermal_pixels: normalizeLaunchInteger(THERMAL_CROPPER_PARAMS.inflation_radius_thermal_pixels, 0, 32, 0),
+    highlight_min_temp: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_min_temp, -100, 1000, 25),
+    highlight_max_temp: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_max_temp, -100, 1000, 40),
+    highlight_min_delta_from_frame_low: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_min_delta_from_frame_low, 0, 1000, 3),
+    highlight_max_delta_from_frame_high: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_max_delta_from_frame_high, 0, 1000, 1000),
+  };
+  const suffix = Object.entries(args)
+    .filter(([name]) => !command.includes(`${name}:=`))
+    .map(([name, value]) => `${name}:=${value}`)
+    .join(' ');
+  return suffix ? `${command} ${suffix}` : command;
+}
+
+function normalizeLaunchNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
+}
+
+function normalizeLaunchInteger(value, min, max, fallback) {
+  return Math.round(normalizeLaunchNumber(value, min, max, fallback));
 }
 
 function parseSimpleYaml(source) {
@@ -200,46 +220,15 @@ function readThermalAlignment() {
 }
 
 function normalizeThermalCropper(settings) {
-  const minTemp = Number(settings.highlightMinTemp);
-  const maxTemp = Number(settings.highlightMaxTemp);
-  const minDelta = Number(settings.highlightMinDeltaFromFrameLow);
-  const maxDelta = Number(settings.highlightMaxDeltaFromFrameHigh);
-  const output = {
-    enabled: settings.enabled !== false,
-    cropUnitThermalPixels: normalizeInteger(settings.cropUnitThermalPixels, 1, 16, 1),
-    minRegionSize: normalizeInteger(settings.minRegionSize, 1, 768, 4),
-    inflationRadiusThermalPixels: normalizeInteger(settings.inflationRadiusThermalPixels, 0, 32, 1),
-    highlightMinTemp: Number.isFinite(minTemp) ? minTemp : 30,
-    highlightMaxTemp: Number.isFinite(maxTemp) ? maxTemp : 120,
-    highlightMinDeltaFromFrameLow: Number.isFinite(minDelta) ? Math.max(0, minDelta) : 3,
-    highlightMaxDeltaFromFrameHigh: Number.isFinite(maxDelta) ? Math.max(0, maxDelta) : 1000,
-  };
-  if (output.highlightMaxTemp < output.highlightMinTemp) {
-    const swap = output.highlightMaxTemp;
-    output.highlightMaxTemp = output.highlightMinTemp;
-    output.highlightMinTemp = swap;
-  }
-  return output;
-}
-
-function normalizeInteger(value, min, max, fallback) {
-  const number = Math.round(Number(value));
-  return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+  return { enabled: !settings || settings.enabled !== false };
 }
 
 function readThermalCropper() {
   const defaults = normalizeThermalCropper({
     enabled: process.env.THERMAL_CROPPER_ENABLED == null ? DEFAULT_THERMAL_CROPPER.enabled : process.env.THERMAL_CROPPER_ENABLED !== 'false',
-    cropUnitThermalPixels: process.env.THERMAL_CROP_UNIT_PIXELS || DEFAULT_THERMAL_CROPPER.cropUnitThermalPixels,
-    minRegionSize: process.env.THERMAL_CROP_MIN_REGION_SIZE || DEFAULT_THERMAL_CROPPER.minRegionSize,
-    inflationRadiusThermalPixels: process.env.THERMAL_CROP_INFLATION_RADIUS || DEFAULT_THERMAL_CROPPER.inflationRadiusThermalPixels,
-    highlightMinTemp: process.env.THERMAL_CROP_HIGHLIGHT_MIN_TEMP || DEFAULT_THERMAL_CROPPER.highlightMinTemp,
-    highlightMaxTemp: process.env.THERMAL_CROP_HIGHLIGHT_MAX_TEMP || DEFAULT_THERMAL_CROPPER.highlightMaxTemp,
-    highlightMinDeltaFromFrameLow: process.env.THERMAL_CROP_HIGHLIGHT_MIN_DELTA_LOW || DEFAULT_THERMAL_CROPPER.highlightMinDeltaFromFrameLow,
-    highlightMaxDeltaFromFrameHigh: process.env.THERMAL_CROP_HIGHLIGHT_MAX_DELTA_HIGH || DEFAULT_THERMAL_CROPPER.highlightMaxDeltaFromFrameHigh,
   });
   try {
-    return normalizeThermalCropper(JSON.parse(fs.readFileSync(CROPPER_SETTINGS_FILE, 'utf8')));
+    return normalizeThermalCropper({ ...defaults, ...JSON.parse(fs.readFileSync(CROPPER_SETTINGS_FILE, 'utf8')) });
   } catch (_) {
     return defaults;
   }
@@ -318,7 +307,6 @@ function cpuTemperature() {
 }
 
 function state() {
-  const cropperState = { ...thermalCropper, localPreview: false };
   return {
     running: launchProcess !== null,
     logs,
@@ -326,7 +314,7 @@ function state() {
     cpuTemp: cpuTemperature(),
     overlayAlpha,
     rgbOverlayEnabled: true,
-    stream: { ...STREAM_CONFIG, alignment: thermalAlignment, cropper: cropperState },
+    stream: { ...STREAM_CONFIG, alignment: thermalAlignment, cropper: thermalCropper },
     launchCommand: LAUNCH_COMMAND,
     params: {
       master: MASTER_PARAMS_FILE,
@@ -415,19 +403,7 @@ function applyThermalCropperParams() {
   if (!launchProcess) return;
   const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
   const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
-  const params = {
-    enabled: thermalCropper.enabled,
-    crop_unit_thermal_pixels: thermalCropper.cropUnitThermalPixels,
-    min_region_size: thermalCropper.minRegionSize,
-    inflation_radius_thermal_pixels: thermalCropper.inflationRadiusThermalPixels,
-    highlight_min_temp: thermalCropper.highlightMinTemp,
-    highlight_max_temp: thermalCropper.highlightMaxTemp,
-    highlight_min_delta_from_frame_low: thermalCropper.highlightMinDeltaFromFrameLow,
-    highlight_max_delta_from_frame_high: thermalCropper.highlightMaxDeltaFromFrameHigh,
-  };
-  const paramCommands = Object.entries(params)
-    .map(([name, value]) => `ros2 param set /thermal_cropper_node ${name} ${value}`)
-    .join(' && ');
+  const paramCommands = `ros2 param set /thermal_cropper_node enabled ${thermalCropper.enabled}`;
   const command = [
     `source "${setupFile}"`,
     `source "${installSetup}"`,
@@ -469,6 +445,7 @@ function startLaunch() {
   addLog(`Params: master=${MASTER_PARAMS_FILE}; camera_calibrations=${CAMERA_CALIBRATIONS_PARAMS_FILE}`);
   addLog(`Stream topics: base=${STREAM_CONFIG.colorTopic}; thermal=${STREAM_CONFIG.thermalTopic}`);
   addLog(`Base view mode: ${STREAM_CONFIG.baseViewMode}`);
+  setTimeout(applyThermalCropperParams, 3000);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.on('error', (error) => addLog(`Launch error: ${error.message}`));
