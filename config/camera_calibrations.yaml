@@ -84,3 +84,22 @@ camera_calibrations:
       child_frame: camera_link
       translation: [0.0, 0.0, 0.0]
       rotation_rpy: [0.0, 0.0, 0.0]
+
+    imu:
+      name: mpu6050_imu
+      driver: mpu6050
+      frame_id: mpu6050_link
+      parent_frame: base_link
+      topic: /imu/data_raw
+      temperature_topic: /imu/temperature
+      i2c_bus: 1
+      i2c_address: "0x68"
+      publish_rate_hz: 100.0
+      gyro_range_dps: 250
+      accel_range_g: 2
+
+    imu_mount:
+      parent_frame: base_link
+      child_frame: mpu6050_link
+      translation: [0.0, 0.0, 0.0]
+      rotation_rpy: [0.0, 0.0, 0.0]

@@ -35,6 +35,7 @@ button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; f
 .cpu-meter div { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #38d996, #f9ce62, #f97367); transition: width .25s ease; }
 .cpu-empty { color: #9fb0c9; }
 
+.imu-mini { color:#8da4c3; font:700 .7rem/1.2 ui-monospace, Consolas, monospace; background: rgba(2,10,18,.3); padding:.28rem .45rem; border-radius:.35rem; border:1px solid rgba(46,68,90,.3); white-space: nowrap; }
 .cpu-mini { display:flex; gap:.5rem; align-items:center; justify-content:center; min-width:10rem; margin-left: auto; }
 .cpu-mini .mini-core { color:#8da4c3; font-size:.7rem; background: rgba(2,10,18,.3); padding:.2rem .4rem; border-radius:.35rem; border:1px solid rgba(46,68,90,.3); }
 .cpu-mini .cpu-temp { color: #f9ce62; border-color: rgba(249, 206, 98, .32); }
@@ -52,4 +53,4 @@ canvas[data-stream="overlay"] { image-rendering: auto; }
 .log-header .clear:hover { border-color: #496b86; }
 pre { flex: 1 1 auto; min-height: 0; overflow: auto; white-space: pre; word-break: normal; color: #aabbd1; font: .72rem/1.35 ui-monospace, Consolas, monospace; margin: 0; padding: .4rem .5rem; border-radius: .4rem; background: rgba(3,12,20,.2); }
 @media (max-width: 760px) { .viewer-layout { grid-template-columns: 1fr; }.tuning-panel { max-height: none; padding-left: 0; border-left: 0; border-top: 1px solid #264463; padding-top: .85rem; } }
-@media (max-width: 560px) { main { width: min(100% - 1.25rem, 62rem); padding-top: .75rem; } header { align-items: flex-start; flex-wrap: wrap; }.header-left { flex: 1 1 100%; }.cpu-mini { margin-left: 0; }.status { margin-left: auto; }.controls p { order: 3; flex-basis: 100%; } }
+@media (max-width: 560px) { main { width: min(100% - 1.25rem, 62rem); padding-top: .75rem; } header { align-items: flex-start; flex-wrap: wrap; }.header-left { flex: 1 1 100%; }.cpu-mini { margin-left: 0; }.imu-mini { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }.status { margin-left: auto; }.controls p { order: 3; flex-basis: 100%; } }

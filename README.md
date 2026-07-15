@@ -27,7 +27,7 @@ If the Orbbec setup is missing, the server logs the missing setup path and exits
 
 Stop sends SIGINT to the launch process and all of its ROS nodes.
 
-`drone_control` is the top-level package for the drone. It starts the thermal sensor package and can start `rosbridge_websocket` on port `9090`; add future drone nodes to `src/drone_control/launch/drone_launch.py`.
+`drone_control` is the top-level package for the drone. It starts the thermal sensor package, starts the MPU6050 IMU when `start_imu:=true`, and can start `rosbridge_websocket` on port `9090`; add future drone nodes to `src/drone_control/launch/drone_launch.py`.
 
 The dashboard can be pointed at the current I2C thermal accel path without editing the frontend:
 
@@ -70,6 +70,8 @@ source install/setup.bash
 ```
 
 For MLX90640 hardware, `sudo i2cdetect -y 1` should normally show `0x33`; if it does not, check power, SDA/SCL, ground, and make sure the module `PS` pin is tied to ground for I2C mode.
+
+For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. The default launch command enables the IMU with `start_imu:=true`; it publishes `sensor_msgs/Imu` on `/imu/data_raw` and chip temperature on `/imu/temperature`.
 
 If the thermal image is visible but does not line up with depth, use a small hot target such as a candle or warm hand and tune the dashboard `X`, `Y`, `Scale`, `H`, and `V` controls until the thermal hot spot lands on the same depth object. The dashboard saves the tuned values in `.thermal-alignment.json`; they can also be seeded with `THERMAL_OFFSET_X`, `THERMAL_OFFSET_Y`, `THERMAL_SCALE`, `THERMAL_STRETCH_X`, and `THERMAL_STRETCH_Y`.
 

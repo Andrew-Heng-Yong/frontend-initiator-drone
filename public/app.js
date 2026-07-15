@@ -5,6 +5,7 @@ const statusText = document.querySelector('#status-text');
 const connection = document.querySelector('#connection');
 const startToggle = document.querySelector('#start-toggle');
 const cpuMini = document.querySelector('#cpu-mini');
+const imuMini = document.querySelector('#imu-mini');
 const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
 const range = document.querySelector('#range');
@@ -26,6 +27,7 @@ let imageTopics = {
   color: '/camera/depth/image_raw',
   cameraInfo: '/camera/depth/camera_info',
   thermal: '/thermal/image_raw',
+  imu: '/imu/data_raw',
 };
 let thermalFov = { horizontal: 55, vertical: 35 };
 let cameraFov = { horizontal: 67, vertical: 53.6 };
@@ -44,6 +46,7 @@ let overlayAlpha = 0.45;
 let latestThermal = null;
 let latestColor = null;
 let thermalStatus = 'thermal waiting';
+let imuStatus = 'gyro waiting';
 let drawScheduled = false;
 let cameraFrameToken = 0;
 let subscribedTopics = new Set();
@@ -77,6 +80,8 @@ function closeRosbridge() {
   latestColor = null;
   latestThermal = null;
   thermalStatus = 'thermal waiting';
+  imuStatus = 'gyro waiting';
+  renderImuStatus();
   subscribedTopics = new Set();
   connection.textContent = 'Camera stream disconnected.';
 }
@@ -90,6 +95,7 @@ function connectRosbridge() {
     connection.textContent = `Waiting for depth frames: ${imageTopics.color}`;
     subscribeImageTopic(imageTopics.color);
     subscribeCameraInfo();
+    subscribeImuTopic();
   };
   rosSocket.onmessage = (event) => {
     const message = parseRosbridgeMessage(event.data);
@@ -110,6 +116,10 @@ function connectRosbridge() {
     if (message.topic === imageTopics.cameraInfo) {
       updateCameraInfo(message.msg);
     }
+
+    if (message.topic === imageTopics.imu) {
+      updateImu(message.msg);
+    }
   };
   rosSocket.onerror = () => {
     connection.textContent = 'Waiting for rosbridge on port 9090...';
@@ -126,6 +136,10 @@ function subscribeImageTopic(topic) {
 
 function subscribeCameraInfo() {
   if (imageTopics.cameraInfo) subscribeRosTopic(imageTopics.cameraInfo, 'sensor_msgs/msg/CameraInfo');
+}
+
+function subscribeImuTopic() {
+  if (imageTopics.imu) subscribeRosTopic(imageTopics.imu, 'sensor_msgs/msg/Imu');
 }
 
 function subscribeRosTopic(topic, type) {
@@ -212,6 +226,27 @@ function updateCameraInfo(info) {
     vertical: 2 * Math.atan(height / (2 * fy)) * 180 / Math.PI,
   };
   if (useCameraInfoFov) cameraFov = cameraInfoFov;
+}
+
+function updateImu(message) {
+  const gyro = message && message.angular_velocity;
+  if (!gyro) {
+    imuStatus = 'gyro unavailable';
+    renderImuStatus();
+    return;
+  }
+  imuStatus = `gyro x:${formatGyro(gyro.x)} y:${formatGyro(gyro.y)} z:${formatGyro(gyro.z)}`;
+  renderImuStatus();
+}
+
+function formatGyro(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '--';
+  return number.toFixed(2);
+}
+
+function renderImuStatus() {
+  if (imuMini) imuMini.textContent = imuStatus;
 }
 
 async function drawCameraFrame(image) {
@@ -496,10 +531,12 @@ function applyStreamConfig(stream) {
     color: stream.colorTopic || imageTopics.color,
     cameraInfo: stream.cameraInfoTopic || imageTopics.cameraInfo,
     thermal: stream.thermalTopic || imageTopics.thermal,
+    imu: stream.imuTopic || imageTopics.imu,
   };
   const topicsChanged = nextTopics.color !== imageTopics.color
     || nextTopics.cameraInfo !== imageTopics.cameraInfo
-    || nextTopics.thermal !== imageTopics.thermal;
+    || nextTopics.thermal !== imageTopics.thermal
+    || nextTopics.imu !== imageTopics.imu;
   if (topicsChanged) cameraInfoFov = null;
   imageTopics = nextTopics;
   thermalFov = finiteFov(stream.thermalFov, thermalFov);
