@@ -23,6 +23,11 @@ ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_came
 
 Runtime defaults are loaded from `config/master_params.yaml`. Camera intrinsics, distortion, and camera-frame transforms live separately in `config/camera_calibrations.yaml`, and the master params file points to it with `camera_calibrations_params_file`. Environment variables still override YAML values, so one-off test runs do not require editing the params files.
 
+Set `camera_streams.ros__parameters.frontend_mode` to choose the browser display:
+
+- `simple`: subscribe only to the cropper depth output and scale it into a fixed `640x480` window.
+- `full`: subscribe to depth, thermal, camera info, and IMU topics for the full overlay/tuning dashboard.
+
 If the Orbbec setup is missing, the server logs the missing setup path and exits instead of launching thermal-only mode.
 
 Stop sends SIGINT to the launch process and all of its ROS nodes.
@@ -75,7 +80,7 @@ For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. The def
 
 If the thermal image is visible but does not line up with depth, use a small hot target such as a candle or warm hand and tune the dashboard `X`, `Y`, `Scale`, `H`, and `V` controls until the thermal hot spot lands on the same depth object. The dashboard saves the tuned values in `.thermal-alignment.json`; they can also be seeded with `THERMAL_OFFSET_X`, `THERMAL_OFFSET_Y`, `THERMAL_SCALE`, `THERMAL_STRETCH_X`, and `THERMAL_STRETCH_Y`.
 
-The ROS cropper node uses highlighted thermal pixels to publish `/camera/depth/cropped/image_raw` and `/thermal/cropped/image_raw`. Both outputs keep the original stream dimensions; pixels outside the selected highlighted region are blacked out only while the cropper is enabled. Each crop unit covers `crop_unit_thermal_pixels` square thermal pixels, clusters count diagonal neighbors, `min_region_size` rejects small clusters, and `inflation_radius_thermal_pixels` expands the crop mask. The dashboard toggles the already-running cropper node at runtime; all cropper tuning values live in the `thermal_cropper` block in `config/master_params.yaml` and are passed to `thermal_cropper_node` at launch.
+The ROS cropper node uses highlighted thermal pixels to publish `/camera/depth/cropped/image_raw` and `/thermal/cropped/image_raw`. While disabled, those topics pass raw frames through. While enabled, they publish rectangular crops around the selected thermal cluster so the dashboard canvas shrinks to the active region instead of blacking out the rest of the frame. Each crop unit covers `crop_unit_thermal_pixels` square thermal pixels, clusters count diagonal neighbors, `min_region_size` rejects small clusters, and `inflation_radius_thermal_pixels` expands the crop region. The dashboard toggles the already-running cropper node at runtime; all cropper tuning values live in the `thermal_cropper` block in `config/master_params.yaml` and are passed to `thermal_cropper_node` at launch.
 
 The built-in dashboard calibration defaults are `Overlay=50.0`, `X=25.0`, `Y=-10.0`, `Scale=100.0`, `H=79.6`, and `V=115.4`. Delete `.thermal-alignment.json` to return to these defaults after local tuning.
 

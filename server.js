@@ -37,6 +37,7 @@ const BASE_LAUNCH_COMMAND = DRONE_PARAMS.launch_command
   || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_thermal_cropper:=true thermal_cropper_enabled:=false start_thermal_overlay:=false';
 const LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND || appendThermalCropperLaunchArgs(BASE_LAUNCH_COMMAND);
 const STREAM_CONFIG = {
+  frontendMode: process.env.FRONTEND_MODE || STREAM_PARAMS.frontend_mode || 'full',
   colorTopic: process.env.DEPTH_IMAGE_TOPIC || process.env.COLOR_IMAGE_TOPIC || STREAM_PARAMS.depth_image_topic || STREAM_PARAMS.color_image_topic || '/camera/depth/cropped/image_raw',
   cameraInfoTopic: process.env.DEPTH_CAMERA_INFO_TOPIC || STREAM_PARAMS.depth_camera_info_topic || '/camera/depth/cropped/camera_info',
   thermalTopic: process.env.THERMAL_IMAGE_TOPIC || STREAM_PARAMS.thermal_image_topic || '/thermal/cropped/image_raw',
@@ -231,6 +232,7 @@ function readThermalCropper() {
   const defaults = normalizeThermalCropper({
     enabled: process.env.THERMAL_CROPPER_ENABLED == null ? DEFAULT_THERMAL_CROPPER.enabled : process.env.THERMAL_CROPPER_ENABLED !== 'false',
   });
+  if (STREAM_CONFIG.frontendMode === 'simple') return defaults;
   try {
     return normalizeThermalCropper({ ...defaults, ...JSON.parse(fs.readFileSync(CROPPER_SETTINGS_FILE, 'utf8')) });
   } catch (_) {
@@ -447,6 +449,7 @@ function startLaunch() {
   addLog(`Depth camera required; thermal-only mode disabled; Orbbec setup: ${ORBBEC_SETUP}`);
   addLog(`Launch command: ${LAUNCH_COMMAND}`);
   addLog(`Params: master=${MASTER_PARAMS_FILE}; camera_calibrations=${CAMERA_CALIBRATIONS_PARAMS_FILE}`);
+  addLog(`Frontend mode: ${STREAM_CONFIG.frontendMode}`);
   addLog(`Stream topics: base=${STREAM_CONFIG.colorTopic}; thermal=${STREAM_CONFIG.thermalTopic}; imu=${STREAM_CONFIG.imuTopic}`);
   addLog(`Base view mode: ${STREAM_CONFIG.baseViewMode}`);
   setTimeout(applyThermalCropperParams, 3000);

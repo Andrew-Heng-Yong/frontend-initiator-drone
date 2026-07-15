@@ -8,6 +8,8 @@ const cpuMini = document.querySelector('#cpu-mini');
 const imuMini = document.querySelector('#imu-mini');
 const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
+const scaleCanvas = document.createElement('canvas');
+const scaleContext = scaleCanvas.getContext('2d');
 const range = document.querySelector('#range');
 const emptyState = document.querySelector('#empty-state');
 const logs = document.querySelector('#logs');
@@ -29,6 +31,8 @@ let imageTopics = {
   thermal: '/thermal/image_raw',
   imu: '/imu/data_raw',
 };
+let frontendMode = 'full';
+const SIMPLE_DISPLAY_SIZE = { width: 640, height: 480 };
 let thermalFov = { horizontal: 55, vertical: 35 };
 let cameraFov = { horizontal: 67, vertical: 53.6 };
 let cameraInfoFov = null;
@@ -94,8 +98,10 @@ function connectRosbridge() {
   rosSocket.onopen = () => {
     connection.textContent = `Waiting for depth frames: ${imageTopics.color}`;
     subscribeImageTopic(imageTopics.color);
-    subscribeCameraInfo();
-    subscribeImuTopic();
+    if (frontendMode !== 'simple') {
+      subscribeCameraInfo();
+      subscribeImuTopic();
+    }
   };
   rosSocket.onmessage = (event) => {
     const message = parseRosbridgeMessage(event.data);
@@ -109,15 +115,18 @@ function connectRosbridge() {
     }
 
     if (message.topic === imageTopics.thermal) {
+      if (frontendMode === 'simple') return;
       updateThermalFrame(message.msg);
       if (activeImageTopic === imageTopics.color) scheduleDraw();
     }
 
     if (message.topic === imageTopics.cameraInfo) {
+      if (frontendMode === 'simple') return;
       updateCameraInfo(message.msg);
     }
 
     if (message.topic === imageTopics.imu) {
+      if (frontendMode === 'simple') return;
       updateImu(message.msg);
     }
   };
@@ -291,19 +300,16 @@ async function drawCameraFrame(image) {
       output.data[target + 3] = 255;
     }
   }
-  overlayThermalOnCamera(output, width, height);
+  if (frontendMode !== 'simple') overlayThermalOnCamera(output, width, height);
 
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-  }
+  setCanvasSize(width, height);
   canvas.dataset.stream = 'overlay';
   context.imageSmoothingEnabled = true;
-  context.putImageData(output, 0, 0);
+  drawImageData(output, width, height);
   updateRangeLabel(width, height);
   activeImageTopic = imageTopics.color;
   connection.textContent = streamStatusText();
-  subscribeImageTopic(imageTopics.thermal);
+  if (frontendMode !== 'simple') subscribeImageTopic(imageTopics.thermal);
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
@@ -319,16 +325,13 @@ async function drawCompressedCameraFrame(image) {
 
   const width = image.width || bitmap.width;
   const height = image.height || bitmap.height;
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-  }
+  setCanvasSize(width, height);
   canvas.dataset.stream = 'overlay';
   context.imageSmoothingEnabled = true;
-  context.drawImage(bitmap, 0, 0, width, height);
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
 
-  if (latestThermal) {
+  if (frontendMode !== 'simple' && latestThermal) {
     const output = context.getImageData(0, 0, width, height);
     overlayThermalOnCamera(output, width, height);
     context.putImageData(output, 0, 0);
@@ -337,7 +340,7 @@ async function drawCompressedCameraFrame(image) {
   updateRangeLabel(width, height);
   activeImageTopic = imageTopics.color;
   connection.textContent = streamStatusText();
-  subscribeImageTopic(imageTopics.thermal);
+  if (frontendMode !== 'simple') subscribeImageTopic(imageTopics.thermal);
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
@@ -397,21 +400,18 @@ function drawDepthCameraFrame(image, encoding) {
     }
   }
 
-  if (latestThermal) {
+  if (frontendMode !== 'simple' && latestThermal) {
     overlayThermalOnCamera(output, width, height);
   }
 
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-  }
+  setCanvasSize(width, height);
   canvas.dataset.stream = 'overlay';
   context.imageSmoothingEnabled = true;
-  context.putImageData(output, 0, 0);
+  drawImageData(output, width, height);
   updateRangeLabel(width, height);
   activeImageTopic = imageTopics.color;
   connection.textContent = streamStatusText();
-  subscribeImageTopic(imageTopics.thermal);
+  if (frontendMode !== 'simple') subscribeImageTopic(imageTopics.thermal);
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
@@ -455,6 +455,29 @@ function readScalarImage(target, width, height, step, bytesPerPixel, sourceLengt
   }
 }
 
+function setCanvasSize(sourceWidth, sourceHeight) {
+  const width = frontendMode === 'simple' ? SIMPLE_DISPLAY_SIZE.width : sourceWidth;
+  const height = frontendMode === 'simple' ? SIMPLE_DISPLAY_SIZE.height : sourceHeight;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+}
+
+function drawImageData(imageData, sourceWidth, sourceHeight) {
+  if (frontendMode !== 'simple') {
+    context.putImageData(imageData, 0, 0);
+    return;
+  }
+  if (scaleCanvas.width !== sourceWidth || scaleCanvas.height !== sourceHeight) {
+    scaleCanvas.width = sourceWidth;
+    scaleCanvas.height = sourceHeight;
+  }
+  scaleContext.putImageData(imageData, 0, 0);
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(scaleCanvas, 0, 0, canvas.width, canvas.height);
+}
+
 function depthValues(values) {
   const output = [];
   for (let index = 0; index < values.length; index += 1) {
@@ -468,14 +491,15 @@ function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
   if (!latestThermal) return;
   const { values, width, height, low, high } = latestThermal;
   const span = Math.max(high - low, 0.5);
-  const overlayWidth = Math.max(width, Math.round(
+  const cropperActive = thermalCropper && thermalCropper.enabled;
+  const overlayWidth = cropperActive ? cameraWidth : Math.max(width, Math.round(
     cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal) * thermalAlignment.scale * thermalAlignment.stretchX,
   ));
-  const overlayHeight = Math.max(height, Math.round(
+  const overlayHeight = cropperActive ? cameraHeight : Math.max(height, Math.round(
     cameraHeight * fovFraction(thermalFov.vertical, cameraFov.vertical) * thermalAlignment.scale * thermalAlignment.stretchY,
   ));
-  const left = Math.round((cameraWidth - overlayWidth) / 2 + thermalAlignment.offsetX);
-  const top = Math.round((cameraHeight - overlayHeight) / 2 + thermalAlignment.offsetY);
+  const left = cropperActive ? 0 : Math.round((cameraWidth - overlayWidth) / 2 + thermalAlignment.offsetX);
+  const top = cropperActive ? 0 : Math.round((cameraHeight - overlayHeight) / 2 + thermalAlignment.offsetY);
   const right = Math.min(cameraWidth, left + overlayWidth);
   const bottom = Math.min(cameraHeight, top + overlayHeight);
   const drawLeft = Math.max(0, left);
@@ -527,6 +551,10 @@ function setThermalCropperUi(cropper) {
 
 function applyStreamConfig(stream) {
   if (!stream) return;
+  const nextFrontendMode = stream.frontendMode === 'simple' ? 'simple' : 'full';
+  const frontendModeChanged = nextFrontendMode !== frontendMode;
+  frontendMode = nextFrontendMode;
+  document.documentElement.dataset.frontendMode = frontendMode;
   const nextTopics = {
     color: stream.colorTopic || imageTopics.color,
     cameraInfo: stream.cameraInfoTopic || imageTopics.cameraInfo,
@@ -546,7 +574,7 @@ function applyStreamConfig(stream) {
   flipThermalX = stream.flipThermalX !== false;
   setThermalAlignmentUi(stream.alignment);
   setThermalCropperUi(stream.cropper);
-  if (topicsChanged) closeRosbridge();
+  if (topicsChanged || frontendModeChanged) closeRosbridge();
 }
 
 function clampNumber(value, min, max, fallback) {
@@ -608,12 +636,17 @@ function formatRange(low, high, units) {
 }
 
 function updateRangeLabel(width, height) {
+  if (frontendMode === 'simple') {
+    range.textContent = `${SIMPLE_DISPLAY_SIZE.width}x${SIMPLE_DISPLAY_SIZE.height} simple | cropper ${width}x${height}`;
+    return;
+  }
   const source = useCameraInfoFov && cameraInfoFov ? 'info' : 'configured';
   const info = cameraInfoFov ? ` | info ${cameraInfoFov.horizontal.toFixed(1)}x${cameraInfoFov.vertical.toFixed(1)}` : '';
   range.textContent = `${width}x${height} ${baseViewMode} | ${thermalStatus} | fov ${cameraFov.horizontal.toFixed(1)}x${cameraFov.vertical.toFixed(1)} ${source}${info}`;
 }
 
 function streamStatusText() {
+  if (frontendMode === 'simple') return `Receiving cropper: ${imageTopics.color}`;
   return latestThermal
     ? `Receiving depth + thermal: ${imageTopics.color} / ${imageTopics.thermal}`
     : `Receiving depth; waiting for thermal: ${imageTopics.thermal}`;
