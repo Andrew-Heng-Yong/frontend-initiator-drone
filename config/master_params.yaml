@@ -84,9 +84,9 @@ thermal_dashboard:
 
     thermal_cropper:
       enabled: true
-      crop_unit_thermal_pixels: 2
-      min_region_size: 4
-      inflation_radius_thermal_pixels: 1
+      crop_unit_thermal_pixels: 3
+      min_region_size: 10
+      inflation_radius_thermal_pixels: 2
       highlight_min_temp: 28.0
       highlight_max_temp: 40.0
       highlight_min_delta_from_frame_low: 3.0
