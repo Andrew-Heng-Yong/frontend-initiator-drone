@@ -109,10 +109,6 @@ function connectRosbridge() {
     if (message.op !== 'publish') return;
 
     if (message.topic === imageTopics.color) {
-      if (isUncroppedSimpleFrame(message.msg)) {
-        showWaitingForSimpleCrop();
-        return;
-      }
       latestColor = message.msg;
       scheduleDraw();
       return;
@@ -272,12 +268,6 @@ function renderImuStatus() {
   if (imuMini) imuMini.textContent = imuStatus;
 }
 
-function isUncroppedSimpleFrame(image) {
-  return frontendMode === 'simple'
-    && Number(image && image.width) === SIMPLE_DISPLAY_SIZE.width
-    && Number(image && image.height) === SIMPLE_DISPLAY_SIZE.height;
-}
-
 function showWaitingForSimpleCrop() {
   if (frontendMode !== 'simple') return;
   latestColor = null;
@@ -360,10 +350,8 @@ async function drawCompressedCameraFrame(image) {
   canvas.dataset.stream = 'overlay';
   context.imageSmoothingEnabled = true;
   if (frontendMode === 'simple') {
-    const left = Math.floor((canvas.width - bitmap.width) / 2);
-    const top = Math.floor((canvas.height - bitmap.height) / 2);
     context.clearRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(bitmap, left, top);
+    context.drawImage(bitmap, 0, 0);
   } else {
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   }
@@ -507,10 +495,8 @@ function drawImageData(imageData, sourceWidth, sourceHeight) {
     context.putImageData(imageData, 0, 0);
     return;
   }
-  const left = Math.floor((canvas.width - sourceWidth) / 2);
-  const top = Math.floor((canvas.height - sourceHeight) / 2);
   context.clearRect(0, 0, canvas.width, canvas.height);
-  context.putImageData(imageData, left, top);
+  context.putImageData(imageData, 0, 0);
 }
 
 function depthValues(values) {
