@@ -49,7 +49,7 @@ html[data-frontend-mode="simple"] .cpu-mini { margin-left: 0; }
 html[data-frontend-mode="simple"] .viewer { width: min(100%, 43rem); margin: 0 auto; }
 html[data-frontend-mode="simple"] .viewer-layout { display: block; }
 html[data-frontend-mode="simple"] .tuning-panel { display: none; }
-html[data-frontend-mode="simple"] canvas { width: 640px; height: 480px; max-width: 100%; aspect-ratio: 4 / 3; object-fit: fill; }
+html[data-frontend-mode="simple"] canvas { width: 640px; height: 480px; }
 html[data-frontend-mode="simple"] canvas[data-stream="waiting"] { image-rendering: auto; }
 #empty-state { color: #9fb0c9; text-align: center; margin-top: 1rem; }
 .log-panel { width: 100vw; margin: 1rem 0 0 calc(50% - 50vw); height: 25vh; flex: 0 0 auto; display: flex; flex-direction: column; gap: .35rem; overflow: hidden; min-height: 6rem; max-height: 80vh; border-radius: 0; border-left: 0; border-right: 0; padding: 0 .75rem .6rem; }

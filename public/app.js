@@ -8,8 +8,6 @@ const cpuMini = document.querySelector('#cpu-mini');
 const imuMini = document.querySelector('#imu-mini');
 const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
-const scaleCanvas = document.createElement('canvas');
-const scaleContext = scaleCanvas.getContext('2d');
 const range = document.querySelector('#range');
 const emptyState = document.querySelector('#empty-state');
 const logs = document.querySelector('#logs');
@@ -361,7 +359,14 @@ async function drawCompressedCameraFrame(image) {
   setCanvasSize(width, height);
   canvas.dataset.stream = 'overlay';
   context.imageSmoothingEnabled = true;
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  if (frontendMode === 'simple') {
+    const left = Math.floor((canvas.width - bitmap.width) / 2);
+    const top = Math.floor((canvas.height - bitmap.height) / 2);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, left, top);
+  } else {
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  }
   bitmap.close();
 
   if (frontendMode !== 'simple' && latestThermal) {
@@ -502,13 +507,10 @@ function drawImageData(imageData, sourceWidth, sourceHeight) {
     context.putImageData(imageData, 0, 0);
     return;
   }
-  if (scaleCanvas.width !== sourceWidth || scaleCanvas.height !== sourceHeight) {
-    scaleCanvas.width = sourceWidth;
-    scaleCanvas.height = sourceHeight;
-  }
-  scaleContext.putImageData(imageData, 0, 0);
+  const left = Math.floor((canvas.width - sourceWidth) / 2);
+  const top = Math.floor((canvas.height - sourceHeight) / 2);
   context.clearRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(scaleCanvas, 0, 0, canvas.width, canvas.height);
+  context.putImageData(imageData, left, top);
 }
 
 function depthValues(values) {
