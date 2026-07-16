@@ -503,7 +503,10 @@ const server = http.createServer(async (request, response) => {
       response.writeHead(404); return response.end('Not found');
     }
     const type = filePath.endsWith('.css') ? 'text/css' : filePath.endsWith('.js') ? 'text/javascript' : 'text/html';
-    response.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` });
+    response.writeHead(200, {
+      'Content-Type': `${type}; charset=utf-8`,
+      'Cache-Control': 'no-store',
+    });
     fs.createReadStream(filePath).pipe(response);
   } catch (error) {
     addLog(`Server error: ${error.message}`);
