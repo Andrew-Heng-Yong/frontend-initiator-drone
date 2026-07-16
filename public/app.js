@@ -274,6 +274,7 @@ function showWaitingForSimpleCrop() {
   activeImageTopic = null;
   setCanvasSize(SIMPLE_DISPLAY_SIZE.width, SIMPLE_DISPLAY_SIZE.height);
   context.clearRect(0, 0, canvas.width, canvas.height);
+  drawThermalFrameOutline();
   canvas.dataset.stream = 'waiting';
   range.textContent = `${SIMPLE_DISPLAY_SIZE.width}x${SIMPLE_DISPLAY_SIZE.height} display | waiting for thermal crop`;
   connection.textContent = `Cropper connected; waiting for a detected region on ${imageTopics.color}`;
@@ -352,6 +353,7 @@ async function drawCompressedCameraFrame(image) {
   if (frontendMode === 'simple') {
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.drawImage(bitmap, 0, 0);
+    drawThermalFrameOutline();
   } else {
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   }
@@ -497,6 +499,27 @@ function drawImageData(imageData, sourceWidth, sourceHeight) {
   }
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.putImageData(imageData, 0, 0);
+  drawThermalFrameOutline();
+}
+
+function drawThermalFrameOutline() {
+  if (frontendMode !== 'simple') return;
+  const frameWidth = Math.max(1, Math.round(
+    canvas.width * fovFraction(thermalFov.horizontal, cameraFov.horizontal)
+      * thermalAlignment.scale * thermalAlignment.stretchX,
+  ));
+  const frameHeight = Math.max(1, Math.round(
+    canvas.height * fovFraction(thermalFov.vertical, cameraFov.vertical)
+      * thermalAlignment.scale * thermalAlignment.stretchY,
+  ));
+  const left = Math.round((canvas.width - frameWidth) / 2 + thermalAlignment.offsetX);
+  const top = Math.round((canvas.height - frameHeight) / 2 + thermalAlignment.offsetY);
+
+  context.save();
+  context.strokeStyle = '#ffffff';
+  context.lineWidth = 1;
+  context.strokeRect(left + 0.5, top + 0.5, frameWidth - 1, frameHeight - 1);
+  context.restore();
 }
 
 function depthValues(values) {
