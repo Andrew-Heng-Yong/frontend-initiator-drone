@@ -13,7 +13,7 @@
           <button id="start-toggle" class="start">Start node</button>
           <p id="connection">Waiting to start.</p>
         </div>
-        <div class="imu-mini" id="imu-mini" aria-hidden="false">gyro waiting</div>
+        <div class="imu-mini" id="imu-mini" aria-live="polite">IMU waiting</div>
         <div class="cpu-mini" id="cpu-mini" aria-hidden="false"></div>
         <div class="status"><span id="status-dot"></span><span id="status-text">Stopped</span></div>
       </header>
@@ -23,11 +23,11 @@
         <button id="stop-button" class="stop" disabled style="display:none">Stop node</button>
       </section>
       <!-- Large CPU panel removed; compact CPU shown in header -->
-      <section class="viewer" aria-label="Depth camera with thermal overlay">
+      <section class="viewer" aria-label="Thermal-guided cropped depth stream">
         <div class="viewer-layout">
           <div class="canvas-panel">
             <div id="range">--</div>
-            <canvas id="thermal-canvas" width="32" height="24" aria-label="Depth camera with thermal overlay"></canvas>
+            <canvas id="thermal-canvas" width="32" height="24" aria-label="Thermal-guided cropped depth stream"></canvas>
           </div>
           <div class="tuning-panel" aria-label="Thermal tuning parameters">
             <div class="tuning-group">

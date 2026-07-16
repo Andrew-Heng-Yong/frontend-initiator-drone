@@ -50,7 +50,7 @@ let overlayAlpha = 0.45;
 let latestThermal = null;
 let latestColor = null;
 let thermalStatus = 'thermal waiting';
-let imuStatus = 'gyro waiting';
+let imuStatus = 'IMU waiting';
 let drawScheduled = false;
 let cameraFrameToken = 0;
 let subscribedTopics = new Set();
@@ -84,7 +84,7 @@ function closeRosbridge() {
   latestColor = null;
   latestThermal = null;
   thermalStatus = 'thermal waiting';
-  imuStatus = 'gyro waiting';
+  imuStatus = 'IMU waiting';
   renderImuStatus();
   subscribedTopics = new Set();
   connection.textContent = 'Camera stream disconnected.';
@@ -94,14 +94,16 @@ function connectRosbridge() {
   if (rosSocket || !statusDot.classList.contains('running')) return;
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   rosSocket = new WebSocket(`${protocol}://${location.hostname}:9090`);
-  connection.textContent = 'Connecting to depth camera stream...';
+  connection.textContent = frontendMode === 'simple'
+    ? 'Connecting to thermal-cropped depth stream...'
+    : 'Connecting to depth camera stream...';
   rosSocket.onopen = () => {
-    connection.textContent = `Waiting for depth frames: ${imageTopics.color}`;
+    connection.textContent = frontendMode === 'simple'
+      ? `Waiting for thermal crop: ${imageTopics.color}`
+      : `Waiting for depth frames: ${imageTopics.color}`;
     subscribeImageTopic(imageTopics.color);
-    if (frontendMode !== 'simple') {
-      subscribeCameraInfo();
-      subscribeImuTopic();
-    }
+    subscribeImuTopic();
+    if (frontendMode !== 'simple') subscribeCameraInfo();
   };
   rosSocket.onmessage = (event) => {
     const message = parseRosbridgeMessage(event.data);
@@ -109,6 +111,10 @@ function connectRosbridge() {
     if (message.op !== 'publish') return;
 
     if (message.topic === imageTopics.color) {
+      if (isUncroppedSimpleFrame(message.msg)) {
+        showWaitingForSimpleCrop();
+        return;
+      }
       latestColor = message.msg;
       scheduleDraw();
       return;
@@ -125,10 +131,7 @@ function connectRosbridge() {
       updateCameraInfo(message.msg);
     }
 
-    if (message.topic === imageTopics.imu) {
-      if (frontendMode === 'simple') return;
-      updateImu(message.msg);
-    }
+    if (message.topic === imageTopics.imu) updateImu(message.msg);
   };
   rosSocket.onerror = () => {
     connection.textContent = 'Waiting for rosbridge on port 9090...';
@@ -140,7 +143,7 @@ function connectRosbridge() {
 }
 
 function subscribeImageTopic(topic) {
-  subscribeRosTopic(topic, 'sensor_msgs/msg/Image');
+  subscribeRosTopic(topic, 'sensor_msgs/msg/Image', { queue_length: 1 });
 }
 
 function subscribeCameraInfo() {
@@ -148,10 +151,15 @@ function subscribeCameraInfo() {
 }
 
 function subscribeImuTopic() {
-  if (imageTopics.imu) subscribeRosTopic(imageTopics.imu, 'sensor_msgs/msg/Imu');
+  if (imageTopics.imu) {
+    subscribeRosTopic(imageTopics.imu, 'sensor_msgs/msg/Imu', {
+      throttle_rate: frontendMode === 'simple' ? 100 : 0,
+      queue_length: 1,
+    });
+  }
 }
 
-function subscribeRosTopic(topic, type) {
+function subscribeRosTopic(topic, type, options = {}) {
   if (!rosSocket || rosSocket.readyState !== WebSocket.OPEN) return;
   if (subscribedTopics.has(topic)) return;
   rosSocket.send(JSON.stringify({
@@ -160,6 +168,7 @@ function subscribeRosTopic(topic, type) {
     type,
     compression: 'none',
     fragment_size: 8000000,
+    ...options,
   }));
   subscribedTopics.add(topic);
 }
@@ -239,16 +248,23 @@ function updateCameraInfo(info) {
 
 function updateImu(message) {
   const gyro = message && message.angular_velocity;
-  if (!gyro) {
-    imuStatus = 'gyro unavailable';
+  const acceleration = message && message.linear_acceleration;
+  if (!gyro && !acceleration) {
+    imuStatus = 'IMU unavailable';
     renderImuStatus();
     return;
   }
-  imuStatus = `gyro x:${formatGyro(gyro.x)} y:${formatGyro(gyro.y)} z:${formatGyro(gyro.z)}`;
+  const gyroText = gyro
+    ? `gyro x:${formatImuValue(gyro.x)} y:${formatImuValue(gyro.y)} z:${formatImuValue(gyro.z)} rad/s`
+    : 'gyro unavailable';
+  const accelerationText = acceleration
+    ? `accel x:${formatImuValue(acceleration.x)} y:${formatImuValue(acceleration.y)} z:${formatImuValue(acceleration.z)} m/s2`
+    : 'accel unavailable';
+  imuStatus = `${gyroText} | ${accelerationText}`;
   renderImuStatus();
 }
 
-function formatGyro(value) {
+function formatImuValue(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return '--';
   return number.toFixed(2);
@@ -256,6 +272,23 @@ function formatGyro(value) {
 
 function renderImuStatus() {
   if (imuMini) imuMini.textContent = imuStatus;
+}
+
+function isUncroppedSimpleFrame(image) {
+  return frontendMode === 'simple'
+    && Number(image && image.width) === SIMPLE_DISPLAY_SIZE.width
+    && Number(image && image.height) === SIMPLE_DISPLAY_SIZE.height;
+}
+
+function showWaitingForSimpleCrop() {
+  if (frontendMode !== 'simple') return;
+  latestColor = null;
+  activeImageTopic = null;
+  setCanvasSize(SIMPLE_DISPLAY_SIZE.width, SIMPLE_DISPLAY_SIZE.height);
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  canvas.dataset.stream = 'waiting';
+  range.textContent = `${SIMPLE_DISPLAY_SIZE.width}x${SIMPLE_DISPLAY_SIZE.height} display | waiting for thermal crop`;
+  connection.textContent = `Cropper connected; waiting for a detected region on ${imageTopics.color}`;
 }
 
 async function drawCameraFrame(image) {
@@ -574,6 +607,7 @@ function applyStreamConfig(stream) {
   flipThermalX = stream.flipThermalX !== false;
   setThermalAlignmentUi(stream.alignment);
   setThermalCropperUi(stream.cropper);
+  if (frontendModeChanged && frontendMode === 'simple') showWaitingForSimpleCrop();
   if (topicsChanged || frontendModeChanged) closeRosbridge();
 }
 
@@ -637,7 +671,7 @@ function formatRange(low, high, units) {
 
 function updateRangeLabel(width, height) {
   if (frontendMode === 'simple') {
-    range.textContent = `${SIMPLE_DISPLAY_SIZE.width}x${SIMPLE_DISPLAY_SIZE.height} simple | cropper ${width}x${height}`;
+    range.textContent = `${SIMPLE_DISPLAY_SIZE.width}x${SIMPLE_DISPLAY_SIZE.height} display | thermal crop ${width}x${height}`;
     return;
   }
   const source = useCameraInfoFov && cameraInfoFov ? 'info' : 'configured';
@@ -646,7 +680,7 @@ function updateRangeLabel(width, height) {
 }
 
 function streamStatusText() {
-  if (frontendMode === 'simple') return `Receiving cropper: ${imageTopics.color}`;
+  if (frontendMode === 'simple') return `Receiving thermal-cropped depth: ${imageTopics.color}`;
   return latestThermal
     ? `Receiving depth + thermal: ${imageTopics.color} / ${imageTopics.thermal}`
     : `Receiving depth; waiting for thermal: ${imageTopics.thermal}`;

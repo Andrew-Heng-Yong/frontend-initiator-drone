@@ -35,16 +35,22 @@ button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; f
 .cpu-meter div { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #38d996, #f9ce62, #f97367); transition: width .25s ease; }
 .cpu-empty { color: #9fb0c9; }
 
-.imu-mini { color:#8da4c3; font:700 .7rem/1.2 ui-monospace, Consolas, monospace; background: rgba(2,10,18,.3); padding:.28rem .45rem; border-radius:.35rem; border:1px solid rgba(46,68,90,.3); white-space: nowrap; }
+.imu-mini { color:#8da4c3; font:700 .7rem/1.35 ui-monospace, Consolas, monospace; background: rgba(2,10,18,.3); padding:.28rem .45rem; border-radius:.35rem; border:1px solid rgba(46,68,90,.3); white-space: normal; }
 .cpu-mini { display:flex; gap:.5rem; align-items:center; justify-content:center; min-width:10rem; margin-left: auto; }
 .cpu-mini .mini-core { color:#8da4c3; font-size:.7rem; background: rgba(2,10,18,.3); padding:.2rem .4rem; border-radius:.35rem; border:1px solid rgba(46,68,90,.3); }
 .cpu-mini .cpu-temp { color: #f9ce62; border-color: rgba(249, 206, 98, .32); }
 canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; width: 100%; height: auto; max-width: 56rem; margin: .75rem auto 0; background: #111d2d; border-radius: .45rem; }
 canvas[data-stream="overlay"] { image-rendering: auto; }
-html[data-frontend-mode="simple"] main { width: min(100% - 2rem, 46rem); }
+html[data-frontend-mode="simple"] main { width: min(100% - 2rem, 62rem); }
+html[data-frontend-mode="simple"] header { flex-wrap: wrap; }
+html[data-frontend-mode="simple"] .header-left { flex: 1 1 22rem; }
+html[data-frontend-mode="simple"] .imu-mini { flex: 1 1 31rem; }
+html[data-frontend-mode="simple"] .cpu-mini { margin-left: 0; }
+html[data-frontend-mode="simple"] .viewer { width: min(100%, 43rem); margin: 0 auto; }
 html[data-frontend-mode="simple"] .viewer-layout { display: block; }
 html[data-frontend-mode="simple"] .tuning-panel { display: none; }
 html[data-frontend-mode="simple"] canvas { width: 640px; height: 480px; max-width: 100%; aspect-ratio: 4 / 3; object-fit: fill; }
+html[data-frontend-mode="simple"] canvas[data-stream="waiting"] { image-rendering: auto; }
 #empty-state { color: #9fb0c9; text-align: center; margin-top: 1rem; }
 .log-panel { width: 100vw; margin: 1rem 0 0 calc(50% - 50vw); height: 25vh; flex: 0 0 auto; display: flex; flex-direction: column; gap: .35rem; overflow: hidden; min-height: 6rem; max-height: 80vh; border-radius: 0; border-left: 0; border-right: 0; padding: 0 .75rem .6rem; }
 .log-resize-handle { height: .55rem; margin: 0 -.75rem .05rem; cursor: ns-resize; display: flex; align-items: center; justify-content: center; touch-action: none; }

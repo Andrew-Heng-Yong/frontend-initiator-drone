@@ -33,11 +33,12 @@ const ORBBEC_SETUP = resolveLocalPath(
 );
 const ALIGNMENT_FILE = resolveLocalPath(process.env.THERMAL_ALIGNMENT_FILE || SYSTEM_PARAMS.alignment_file || path.join(__dirname, '.thermal-alignment.json'));
 const CROPPER_SETTINGS_FILE = resolveLocalPath(process.env.THERMAL_CROPPER_SETTINGS_FILE || SYSTEM_PARAMS.cropper_settings_file || path.join(__dirname, '.thermal-cropper.json'));
+const FRONTEND_MODE = process.env.FRONTEND_MODE || STREAM_PARAMS.frontend_mode || 'full';
 const BASE_LAUNCH_COMMAND = DRONE_PARAMS.launch_command
   || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_thermal_cropper:=true thermal_cropper_enabled:=false start_thermal_overlay:=false';
 const LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND || appendThermalCropperLaunchArgs(BASE_LAUNCH_COMMAND);
 const STREAM_CONFIG = {
-  frontendMode: process.env.FRONTEND_MODE || STREAM_PARAMS.frontend_mode || 'full',
+  frontendMode: FRONTEND_MODE,
   colorTopic: process.env.DEPTH_IMAGE_TOPIC || process.env.COLOR_IMAGE_TOPIC || STREAM_PARAMS.depth_image_topic || STREAM_PARAMS.color_image_topic || '/camera/depth/cropped/image_raw',
   cameraInfoTopic: process.env.DEPTH_CAMERA_INFO_TOPIC || STREAM_PARAMS.depth_camera_info_topic || '/camera/depth/cropped/camera_info',
   thermalTopic: process.env.THERMAL_IMAGE_TOPIC || STREAM_PARAMS.thermal_image_topic || '/thermal/cropped/image_raw',
@@ -98,7 +99,10 @@ function appendThermalCropperLaunchArgs(command) {
   const args = {
     crop_unit_thermal_pixels: normalizeLaunchInteger(THERMAL_CROPPER_PARAMS.crop_unit_thermal_pixels, 1, 16, 2),
     thermal_cropper_enabled: THERMAL_CROPPER_PARAMS.enabled !== false,
-    min_region_size: normalizeLaunchInteger(THERMAL_CROPPER_PARAMS.min_region_size, 1, 768, 20),
+    passthrough_when_no_region: THERMAL_CROPPER_PARAMS.passthrough_when_no_region == null
+      ? FRONTEND_MODE !== 'simple'
+      : THERMAL_CROPPER_PARAMS.passthrough_when_no_region !== false,
+    min_region_size: normalizeLaunchInteger(THERMAL_CROPPER_PARAMS.min_region_size, 1, 768, 4),
     inflation_radius_thermal_pixels: normalizeLaunchInteger(THERMAL_CROPPER_PARAMS.inflation_radius_thermal_pixels, 0, 32, 0),
     highlight_min_temp: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_min_temp, -100, 1000, 25),
     highlight_max_temp: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_max_temp, -100, 1000, 40),
