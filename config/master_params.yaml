@@ -30,7 +30,7 @@ drone_control:
 
 camera_streams:
   ros__parameters:
-    frontend_mode: simple
+    frontend_mode: full
     base_view_mode: full-depth
     use_camera_info_fov: false
     color_image_topic: /camera/depth/cropped/image_raw
@@ -71,8 +71,8 @@ thermal_dashboard:
       minimum_depth_span: 1.0
 
     thermal_display:
-      default_width: 32
-      default_height: 24
+      default_width: 80
+      default_height: 62
       minimum_temperature_span: 0.5
       flip_x: true
       color_map:

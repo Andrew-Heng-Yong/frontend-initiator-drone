@@ -32,9 +32,9 @@ If the Orbbec setup is missing, the server logs the missing setup path and exits
 
 Stop sends SIGINT to the launch process and all of its ROS nodes.
 
-`drone_control` is the top-level package for the drone. It starts the thermal sensor package, starts the MPU6050 IMU when `start_imu:=true`, and can start `rosbridge_websocket` on port `9090`; add future drone nodes to `src/drone_control/launch/drone_launch.py`.
+`drone_control` is the top-level package for the drone. It starts the MI0802 SenXor thermal driver, starts the MPU6050 IMU when `start_imu:=true`, and can start `rosbridge_websocket` on port `9090`; add future drone nodes to `src/drone_control/launch/drone_launch.py`.
 
-The dashboard can be pointed at the current I2C thermal accel path without editing the frontend:
+The dashboard can be pointed at another compatible thermal backend without editing the frontend:
 
 ```bash
 DRONE_LAUNCH_COMMAND='ros2 launch <package> <launch-file> start_rosbridge:=true' \
@@ -74,7 +74,7 @@ colcon build --packages-up-to drone_control
 source install/setup.bash
 ```
 
-For MLX90640 hardware, `sudo i2cdetect -y 1` should normally show `0x33`; if it does not, check power, SDA/SCL, ground, and make sure the module `PS` pin is tied to ground for I2C mode.
+For MI0802 hardware, the default device is `/dev/ttyACM0`; the stable target path is `/dev/serial/by-id/usb-Nuvoton_USB_Virtual_COM-if00`. The ROS user normally needs membership in `dialout`. The MLX90640 package remains available as a fallback but is no longer the frontend thermal source.
 
 For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. The default launch command enables the IMU with `start_imu:=true`; it publishes `sensor_msgs/Imu` on `/imu/data_raw` and chip temperature on `/imu/temperature`.
 

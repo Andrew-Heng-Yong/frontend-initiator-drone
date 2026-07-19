@@ -40,16 +40,16 @@ camera_calibrations:
         data: [485.2, 0.0, 320.0, 0.0, 0.0, 501.4, 240.0, 0.0, 0.0, 0.0, 1.0, 0.0]
 
     thermal_camera:
-      name: mlx90640_thermal
-      driver: mlx90640
-      frame_id: thermal_camera_optical_frame
+      name: mi0802_senxor_thermal
+      driver: mi0802_senxor_driver
+      frame_id: mi0802_thermal_optical_frame
       parent_frame: camera_link
       topic: /thermal/image_raw
-      i2c_bus: 1
-      i2c_address: "0x33"
-      image_width: 32
-      image_height: 24
-      frame_rate: 8.0
+      device: /dev/ttyACM0
+      stable_device: /dev/serial/by-id/usb-Nuvoton_USB_Virtual_COM-if00
+      image_width: 80
+      image_height: 62
+      frame_rate: 0.0  # Sensor-native rate; the driver does not limit publication by default.
       encoding: 32FC1
       temperature_units: celsius
       distortion_model: plumb_bob
@@ -57,7 +57,7 @@ camera_calibrations:
       camera_matrix:
         rows: 3
         cols: 3
-        data: [30.7, 0.0, 16.0, 0.0, 38.1, 12.0, 0.0, 0.0, 1.0]
+        data: [76.8, 0.0, 40.0, 0.0, 98.3, 31.0, 0.0, 0.0, 1.0]
       distortion_coefficients:
         rows: 1
         cols: 5
@@ -69,13 +69,13 @@ camera_calibrations:
       projection_matrix:
         rows: 3
         cols: 4
-        data: [30.7, 0.0, 16.0, 0.0, 0.0, 38.1, 12.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+        data: [76.8, 0.0, 40.0, 0.0, 0.0, 98.3, 31.0, 0.0, 0.0, 0.0, 1.0, 0.0]
 
     # Thermal camera pose relative to the depth optical frame.
     # Translation is meters; rotation is roll, pitch, yaw in radians.
     thermal_to_depth_extrinsics:
       parent_frame: camera_depth_optical_frame
-      child_frame: thermal_camera_optical_frame
+      child_frame: mi0802_thermal_optical_frame
       translation: [0.0, 0.0, 0.0]
       rotation_rpy: [0.0, 0.0, 0.0]
 
