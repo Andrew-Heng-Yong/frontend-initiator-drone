@@ -16,6 +16,9 @@ const clearButton = document.querySelector('#clear-logs');
 const copyButton = document.querySelector('#copy-logs');
 const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
+const pageHeader = document.querySelector('header');
+const canvasPanel = document.querySelector('.canvas-panel');
+const tuningPanel = document.querySelector('.tuning-panel');
 const overlayAlphaInput = document.querySelector('#overlay-alpha');
 const thermalOffsetXInput = document.querySelector('#thermal-offset-x');
 const thermalOffsetYInput = document.querySelector('#thermal-offset-y');
@@ -80,6 +83,7 @@ let latestColor = null;
 let thermalStatus = 'thermal waiting';
 let imuStatus = 'IMU waiting';
 let drawScheduled = false;
+let canvasFitScheduled = false;
 let cameraFrameToken = 0;
 let subscribedTopics = new Set();
 const messageFragments = new Map();
@@ -522,6 +526,49 @@ function setCanvasSize(sourceWidth, sourceHeight) {
     canvas.width = width;
     canvas.height = height;
   }
+  scheduleCanvasFit();
+}
+
+function fitCanvasToViewport() {
+  if (!canvasPanel || canvas.width <= 0 || canvas.height <= 0) return;
+  const rootFontSize = Number.parseFloat(
+    getComputedStyle(document.documentElement).fontSize,
+  ) || 16;
+  const viewportHeight = window.visualViewport
+    ? window.visualViewport.height
+    : window.innerHeight;
+  const headerHeight = pageHeader ? pageHeader.getBoundingClientRect().height : 0;
+  const logHeight = logPanel ? logPanel.getBoundingClientRect().height : viewportHeight * 0.25;
+  const viewerChromeHeight = rootFontSize * 6;
+  const availableHeight = Math.max(
+    rootFontSize * 12,
+    viewportHeight - headerHeight - logHeight - viewerChromeHeight,
+  );
+  const aspectRatio = canvas.width / canvas.height;
+  const modeMaxWidth = rootFontSize * (frontendMode === 'simple' ? 64 : 56);
+  const availableWidth = Math.max(1, canvasPanel.clientWidth);
+  const displayWidth = Math.max(
+    1,
+    Math.min(availableWidth, modeMaxWidth, availableHeight * aspectRatio),
+  );
+  const displayHeight = displayWidth / aspectRatio;
+
+  canvas.style.width = `${Math.floor(displayWidth)}px`;
+  canvas.style.height = `${Math.floor(displayHeight)}px`;
+  if (tuningPanel) {
+    tuningPanel.style.maxHeight = window.matchMedia('(max-width: 760px)').matches
+      ? ''
+      : `${Math.ceil(displayHeight + rootFontSize * 1.5)}px`;
+  }
+}
+
+function scheduleCanvasFit() {
+  if (canvasFitScheduled) return;
+  canvasFitScheduled = true;
+  requestAnimationFrame(() => {
+    canvasFitScheduled = false;
+    fitCanvasToViewport();
+  });
 }
 
 function drawImageData(imageData, sourceWidth, sourceHeight) {
@@ -678,6 +725,7 @@ function applyStreamConfig(stream) {
   flipThermalY = stream.flipThermalY === true;
   setThermalAlignmentUi(stream.alignment);
   setThermalCropperUi(stream.cropper);
+  scheduleCanvasFit();
   if (frontendModeChanged && frontendMode === 'simple') showWaitingForSimpleCrop();
   if (topicsChanged || frontendModeChanged) closeRosbridge();
 }
@@ -1109,6 +1157,7 @@ if (logPanel && logResizeHandle) {
     function resizeLog(moveEvent) {
       const nextHeight = Math.max(minHeight, Math.min(maxHeight, startHeight + startY - moveEvent.clientY));
       logPanel.style.height = `${nextHeight}px`;
+      scheduleCanvasFit();
     }
 
     function stopResize() {
@@ -1121,6 +1170,16 @@ if (logPanel && logResizeHandle) {
     logResizeHandle.addEventListener('pointerup', stopResize);
     logResizeHandle.addEventListener('pointercancel', stopResize);
   });
+}
+
+window.addEventListener('resize', scheduleCanvasFit);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', scheduleCanvasFit);
+}
+if ('ResizeObserver' in window) {
+  const canvasFitObserver = new ResizeObserver(scheduleCanvasFit);
+  if (canvasPanel) canvasFitObserver.observe(canvasPanel);
+  if (logPanel) canvasFitObserver.observe(logPanel);
 }
 
 refresh();
