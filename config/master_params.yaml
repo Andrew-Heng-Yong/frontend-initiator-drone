@@ -61,6 +61,7 @@ camera_streams:
 thermal_dashboard:
   ros__parameters:
     overlay_alpha: 0.5
+    view_zoom_percent: 95.0
     rgb_overlay_enabled: true
     cpu_monitor_enabled: true
     cpu_temperature_paths:
@@ -104,7 +105,7 @@ thermal_dashboard:
     # Thermal-to-depth overlay defaults confirmed from the dashboard controls.
     thermal_alignment:
       offset_x: 0.0
-      offset_y: 0.1
+      offset_y: 0.0
       scale: 0.85
       barrel_distortion: -0.2
       stretch_x: 0.9
