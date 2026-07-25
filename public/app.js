@@ -16,9 +16,9 @@ const clearButton = document.querySelector('#clear-logs');
 const copyButton = document.querySelector('#copy-logs');
 const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
-const pageHeader = document.querySelector('header');
 const canvasPanel = document.querySelector('.canvas-panel');
 const tuningPanel = document.querySelector('.tuning-panel');
+const viewerZoomInput = document.querySelector('#viewer-zoom');
 const overlayAlphaInput = document.querySelector('#overlay-alpha');
 const thermalOffsetXInput = document.querySelector('#thermal-offset-x');
 const thermalOffsetYInput = document.querySelector('#thermal-offset-y');
@@ -44,6 +44,7 @@ let imageTopics = {
 };
 let frontendMode = 'full';
 const SIMPLE_DISPLAY_SIZE = { width: 1024, height: 768 };
+const VIEWER_ZOOM_STORAGE_KEY = 'thermal-dashboard-viewer-zoom';
 let thermalFov = { horizontal: 90, vertical: 68 };
 let cameraFov = { horizontal: 79, vertical: 62 };
 let cameraInfoFov = null;
@@ -84,6 +85,7 @@ let thermalStatus = 'thermal waiting';
 let imuStatus = 'IMU waiting';
 let drawScheduled = false;
 let canvasFitScheduled = false;
+let viewerZoomPercent = readStoredViewerZoom();
 let cameraFrameToken = 0;
 let subscribedTopics = new Set();
 const messageFragments = new Map();
@@ -534,22 +536,12 @@ function fitCanvasToViewport() {
   const rootFontSize = Number.parseFloat(
     getComputedStyle(document.documentElement).fontSize,
   ) || 16;
-  const viewportHeight = window.visualViewport
-    ? window.visualViewport.height
-    : window.innerHeight;
-  const headerHeight = pageHeader ? pageHeader.getBoundingClientRect().height : 0;
-  const logHeight = logPanel ? logPanel.getBoundingClientRect().height : viewportHeight * 0.25;
-  const viewerChromeHeight = rootFontSize * 6;
-  const availableHeight = Math.max(
-    rootFontSize * 12,
-    viewportHeight - headerHeight - logHeight - viewerChromeHeight,
-  );
   const aspectRatio = canvas.width / canvas.height;
   const modeMaxWidth = rootFontSize * (frontendMode === 'simple' ? 64 : 56);
   const availableWidth = Math.max(1, canvasPanel.clientWidth);
   const displayWidth = Math.max(
     1,
-    Math.min(availableWidth, modeMaxWidth, availableHeight * aspectRatio),
+    Math.min(availableWidth, modeMaxWidth) * (viewerZoomPercent / 100),
   );
   const displayHeight = displayWidth / aspectRatio;
 
@@ -569,6 +561,37 @@ function scheduleCanvasFit() {
     canvasFitScheduled = false;
     fitCanvasToViewport();
   });
+}
+
+function readStoredViewerZoom() {
+  try {
+    const stored = window.localStorage.getItem(VIEWER_ZOOM_STORAGE_KEY);
+    if (stored == null) return 75;
+    return clampNumber(
+      stored,
+      30,
+      100,
+      75,
+    );
+  } catch (_) {
+    return 75;
+  }
+}
+
+function updateViewerZoomFromUi(source, formatActive = false) {
+  viewerZoomPercent = clampNumber(
+    inputNumber(source, viewerZoomPercent),
+    30,
+    100,
+    viewerZoomPercent,
+  );
+  setControlValue(viewerZoomInput, viewerZoomPercent, formatActive);
+  try {
+    window.localStorage.setItem(VIEWER_ZOOM_STORAGE_KEY, String(viewerZoomPercent));
+  } catch (_) {
+    // The live control still works when browser storage is unavailable.
+  }
+  scheduleCanvasFit();
 }
 
 function drawImageData(imageData, sourceWidth, sourceHeight) {
@@ -1082,6 +1105,16 @@ if (overlayAlphaInput) {
   overlayAlphaInput.addEventListener('input', () => updateOverlayAlphaFromUi(overlayAlphaInput));
   overlayAlphaInput.addEventListener('change', () => updateOverlayAlphaFromUi(overlayAlphaInput, true));
   overlayAlphaInput.addEventListener('wheel', (event) => stepNumberInput(overlayAlphaInput, event, updateOverlayAlphaFromUi));
+}
+
+if (viewerZoomInput) {
+  setControlValue(viewerZoomInput, viewerZoomPercent, true);
+  viewerZoomInput.addEventListener('input', () => updateViewerZoomFromUi(viewerZoomInput));
+  viewerZoomInput.addEventListener('change', () => updateViewerZoomFromUi(viewerZoomInput, true));
+  viewerZoomInput.addEventListener(
+    'wheel',
+    (event) => stepNumberInput(viewerZoomInput, event, updateViewerZoomFromUi),
+  );
 }
 
 if (saveParamsButton) {

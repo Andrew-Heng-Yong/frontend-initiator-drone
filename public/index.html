@@ -31,6 +31,14 @@
           </div>
           <div class="tuning-panel" aria-label="Thermal tuning parameters">
             <div class="tuning-group">
+              <h2>View</h2>
+              <p class="tuning-note">Display size only; does not change calibration or ROS.</p>
+              <label class="overlay-alpha">
+                <span>Zoom</span>
+                <input id="viewer-zoom" class="number-field" type="number" min="30" max="100" step="5" value="75" />
+              </label>
+            </div>
+            <div class="tuning-group">
               <h2>Overlay</h2>
               <p class="tuning-note">Live preview. Save to apply alignment to the ROS cropper.</p>
               <label class="overlay-alpha">
@@ -119,6 +127,6 @@
         <pre id="logs">No launch output yet.</pre>
       </section>
     </main>
-    <script src="/app.js?v=20260725-3"></script>
+    <script src="/app.js?v=20260725-4"></script>
   </body>
 </html>

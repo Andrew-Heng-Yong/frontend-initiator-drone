@@ -57,6 +57,8 @@ By default `BASE_VIEW_MODE=full-depth`: the depth image is the main viewport and
 
 The thermal overlay defaults are `Blend=50`, `X=0`, `Y=0`, `Scale=100`, `Barrel=0`, `H=80`, and `V=90`. Its base size comes from the configured FOVs: depth is `79° x 62°`, and thermal is `90° x 68°`.
 
+Full mode also provides a display-only `View > Zoom` control from `30%` to `100%`, defaulting to `75%`. It changes only the browser canvas size, is stored in the browser, and never changes thermal alignment or ROS cropper parameters.
+
 The thermal display is mirrored along the Y axis by default: `thermal_display.flip_x` is enabled and `thermal_display.flip_y` is disabled. Set `THERMAL_FLIP_X=false` to display the sensor-native orientation.
 
 For depth overlay, make sure the Orbbec workspace exists at `~/orbbec_ws/install/setup.bash`:
