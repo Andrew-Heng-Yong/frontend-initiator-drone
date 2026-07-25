@@ -8,6 +8,8 @@ const cpuMini = document.querySelector('#cpu-mini');
 const imuMini = document.querySelector('#imu-mini');
 const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
+const zoomBufferCanvas = document.createElement('canvas');
+const zoomBufferContext = zoomBufferCanvas.getContext('2d');
 const range = document.querySelector('#range');
 const emptyState = document.querySelector('#empty-state');
 const logs = document.querySelector('#logs');
@@ -16,7 +18,6 @@ const clearButton = document.querySelector('#clear-logs');
 const copyButton = document.querySelector('#copy-logs');
 const logPanel = document.querySelector('.log-panel');
 const logResizeHandle = document.querySelector('#log-resize-handle');
-const viewer = document.querySelector('.viewer');
 const viewerZoomInput = document.querySelector('#viewer-zoom');
 const overlayAlphaInput = document.querySelector('#overlay-alpha');
 const thermalOffsetXInput = document.querySelector('#thermal-offset-x');
@@ -358,8 +359,6 @@ async function drawCameraFrame(image) {
       output.data[target + 3] = 255;
     }
   }
-  if (frontendMode !== 'simple') overlayThermalOnCamera(output, width, height);
-
   setCanvasSize(width, height);
   canvas.dataset.stream = 'overlay';
   context.imageSmoothingEnabled = true;
@@ -395,10 +394,9 @@ async function drawCompressedCameraFrame(image) {
   }
   bitmap.close();
 
-  if (frontendMode !== 'simple' && latestThermal) {
+  if (frontendMode !== 'simple') {
     const output = context.getImageData(0, 0, width, height);
-    overlayThermalOnCamera(output, width, height);
-    context.putImageData(output, 0, 0);
+    renderFullComposite(output, width, height);
   }
 
   updateRangeLabel(width, height);
@@ -462,10 +460,6 @@ function drawDepthCameraFrame(image, encoding) {
       output.data[target + 2] = blue;
       output.data[target + 3] = 255;
     }
-  }
-
-  if (frontendMode !== 'simple' && latestThermal) {
-    overlayThermalOnCamera(output, width, height);
   }
 
   setCanvasSize(width, height);
@@ -556,17 +550,59 @@ function updateViewerZoomFromUi(source, formatActive = false) {
   } catch (_) {
     // The live control still works when browser storage is unavailable.
   }
-  applyViewerZoom();
+  if (latestColor) scheduleDraw();
 }
 
-function applyViewerZoom() {
-  if (!viewer) return;
-  viewer.style.zoom = String(viewerZoomPercent / 100);
+function renderFullComposite(baseImage, sourceWidth, sourceHeight) {
+  if (viewerZoomPercent >= 100) {
+    if (latestThermal) overlayThermalOnCamera(baseImage, sourceWidth, sourceHeight);
+    context.putImageData(baseImage, 0, 0);
+    return;
+  }
+  if (
+    zoomBufferCanvas.width !== sourceWidth
+    || zoomBufferCanvas.height !== sourceHeight
+  ) {
+    zoomBufferCanvas.width = sourceWidth;
+    zoomBufferCanvas.height = sourceHeight;
+  }
+  zoomBufferContext.putImageData(baseImage, 0, 0);
+
+  const zoom = viewerZoomPercent / 100;
+  const targetWidth = Math.max(1, Math.round(sourceWidth * zoom));
+  const targetHeight = Math.max(1, Math.round(sourceHeight * zoom));
+  const targetX = Math.round((canvas.width - targetWidth) / 2);
+  const targetY = Math.round((canvas.height - targetHeight) / 2);
+  context.fillStyle = '#000000';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.imageSmoothingEnabled = true;
+  context.drawImage(
+    zoomBufferCanvas,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+    targetX,
+    targetY,
+    targetWidth,
+    targetHeight,
+  );
+  if (latestThermal) {
+    const output = context.getImageData(0, 0, canvas.width, canvas.height);
+    overlayThermalOnCamera(output, targetWidth, targetHeight, {
+      outputWidth: canvas.width,
+      outputHeight: canvas.height,
+      originX: targetX,
+      originY: targetY,
+      pixelScale: zoom,
+    });
+    context.putImageData(output, 0, 0);
+  }
 }
 
 function drawImageData(imageData, sourceWidth, sourceHeight) {
   if (frontendMode !== 'simple') {
-    context.putImageData(imageData, 0, 0);
+    renderFullComposite(imageData, sourceWidth, sourceHeight);
     return;
   }
   context.clearRect(0, 0, canvas.width, canvas.height);
@@ -603,20 +639,29 @@ function depthValues(values) {
   return output;
 }
 
-function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
+function overlayThermalOnCamera(output, cameraWidth, cameraHeight, viewport = {}) {
   if (!latestThermal) return;
   const { values, width, height, low, high } = latestThermal;
   const span = Math.max(high - low, 0.5);
+  const outputWidth = viewport.outputWidth || cameraWidth;
+  const outputHeight = viewport.outputHeight || cameraHeight;
+  const originX = viewport.originX || 0;
+  const originY = viewport.originY || 0;
+  const pixelScale = viewport.pixelScale || 1;
   const overlayWidth = Math.max(width, Math.round(
     cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal) * thermalAlignment.scale * thermalAlignment.stretchX,
   ));
   const overlayHeight = Math.max(height, Math.round(
     cameraHeight * fovFraction(thermalFov.vertical, cameraFov.vertical) * thermalAlignment.scale * thermalAlignment.stretchY,
   ));
-  const left = Math.round((cameraWidth - overlayWidth) / 2 + thermalAlignment.offsetX);
-  const top = Math.round((cameraHeight - overlayHeight) / 2 + thermalAlignment.offsetY);
-  const right = Math.min(cameraWidth, left + overlayWidth);
-  const bottom = Math.min(cameraHeight, top + overlayHeight);
+  const left = Math.round(
+    originX + (cameraWidth - overlayWidth) / 2 + thermalAlignment.offsetX * pixelScale,
+  );
+  const top = Math.round(
+    originY + (cameraHeight - overlayHeight) / 2 + thermalAlignment.offsetY * pixelScale,
+  );
+  const right = Math.min(outputWidth, left + overlayWidth);
+  const bottom = Math.min(outputHeight, top + overlayHeight);
   const drawLeft = Math.max(0, left);
   const drawTop = Math.max(0, top);
   const inverseOverlayWidth = 1 / Math.max(1, overlayWidth);
@@ -647,7 +692,7 @@ function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
       if (!Number.isFinite(temperature)) continue;
 
       const [red, green, blue] = heatColor((temperature - low) / span);
-      const target = (y * cameraWidth + x) * 4;
+      const target = (y * outputWidth + x) * 4;
       output.data[target] = Math.round((1 - overlayAlpha) * output.data[target] + overlayAlpha * red);
       output.data[target + 1] = Math.round((1 - overlayAlpha) * output.data[target + 1] + overlayAlpha * green);
       output.data[target + 2] = Math.round((1 - overlayAlpha) * output.data[target + 2] + overlayAlpha * blue);
@@ -1078,7 +1123,6 @@ if (overlayAlphaInput) {
 
 if (viewerZoomInput) {
   setControlValue(viewerZoomInput, viewerZoomPercent, true);
-  applyViewerZoom();
   viewerZoomInput.addEventListener('input', () => updateViewerZoomFromUi(viewerZoomInput));
   viewerZoomInput.addEventListener('change', () => updateViewerZoomFromUi(viewerZoomInput, true));
   viewerZoomInput.addEventListener(
