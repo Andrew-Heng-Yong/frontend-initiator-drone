@@ -878,7 +878,10 @@ async function saveFullModeParams() {
     });
     saveParamsButton.textContent = 'Saved';
     saveParamsButton.classList.add('saved');
-    connection.textContent = `Saved Full-mode parameters to ${response.file}`;
+    const rosStatus = response.rosCropper && response.rosCropper.applied
+      ? ' Applied to the running ROS cropper.'
+      : ' Restart ROS to apply the saved alignment.';
+    connection.textContent = `Saved Full-mode parameters to ${response.file}.${rosStatus}`;
     setTimeout(() => {
       saveParamsButton.textContent = originalText;
       saveParamsButton.classList.remove('saved');

@@ -86,11 +86,13 @@ let launchProcess = null;
 let activeLaunchCommand = null;
 let activeCropperEnabled = null;
 let activeCropperSettings = null;
+let activeThermalAlignment = null;
 let logs = [];
 let previousCpuStats = null;
 let overlayAlpha = Number(process.env.THERMAL_OVERLAY_ALPHA || DASHBOARD_PARAMS.overlay_alpha || 0.5);
 if (!Number.isFinite(overlayAlpha) || overlayAlpha < 0 || overlayAlpha > 1) overlayAlpha = 0.5;
 let thermalAlignment = readThermalAlignment();
+let savedThermalAlignment = { ...thermalAlignment };
 let thermalCropper = readThermalCropper();
 
 function resolveLocalPath(value) {
@@ -128,11 +130,12 @@ function appendThermalCropperLaunchArgs(command, cropper) {
     depth_fov_vertical: STREAM_CONFIG.cameraFov.vertical,
     thermal_fov_horizontal: STREAM_CONFIG.thermalFov.horizontal,
     thermal_fov_vertical: STREAM_CONFIG.thermalFov.vertical,
-    thermal_offset_x: thermalAlignment.offsetX,
-    thermal_offset_y: thermalAlignment.offsetY,
-    thermal_scale: thermalAlignment.scale,
-    thermal_stretch_x: thermalAlignment.stretchX,
-    thermal_stretch_y: thermalAlignment.stretchY,
+    thermal_offset_x: savedThermalAlignment.offsetX,
+    thermal_offset_y: savedThermalAlignment.offsetY,
+    thermal_scale: savedThermalAlignment.scale,
+    thermal_barrel_distortion: savedThermalAlignment.barrelDistortion,
+    thermal_stretch_x: savedThermalAlignment.stretchX,
+    thermal_stretch_y: savedThermalAlignment.stretchY,
     flip_thermal_x: STREAM_CONFIG.flipThermalX,
     flip_thermal_y: STREAM_CONFIG.flipThermalY,
   };
@@ -463,7 +466,10 @@ function cropperState() {
     active,
     restartRequired: Boolean(
       launchProcess
-      && JSON.stringify(thermalCropper) !== JSON.stringify(activeCropperSettings),
+      && (
+        JSON.stringify(thermalCropper) !== JSON.stringify(activeCropperSettings)
+        || JSON.stringify(savedThermalAlignment) !== JSON.stringify(activeThermalAlignment)
+      ),
     ),
   };
 }
@@ -498,6 +504,78 @@ function readJson(request) {
 function applyOverlayAlpha(alpha) {
   overlayAlpha = alpha;
   return Promise.resolve({ ok: true, applied: true, overlayAlpha });
+}
+
+function applySavedAlignmentToRunningCropper() {
+  if (!launchProcess || !activeCropperEnabled) {
+    return Promise.resolve({ attempted: false, applied: false });
+  }
+
+  const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
+  const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
+  const parameters = {
+    thermal_barrel_distortion: savedThermalAlignment.barrelDistortion,
+    thermal_offset_x: savedThermalAlignment.offsetX,
+    thermal_offset_y: savedThermalAlignment.offsetY,
+    thermal_scale: savedThermalAlignment.scale,
+    thermal_stretch_x: savedThermalAlignment.stretchX,
+    thermal_stretch_y: savedThermalAlignment.stretchY,
+  };
+  const parameterValues = Object.entries(parameters).map(
+    ([name, value]) => `{name: ${name}, value: {type: 3, double_value: ${value}}}`,
+  );
+  const parameterRequest = `{parameters: [${parameterValues.join(', ')}]}`;
+  const command = [
+    `source "${setupFile}"`,
+    `source "${installSetup}"`,
+    'ros2 service call /thermal_cropper_node/set_parameters_atomically '
+      + `rcl_interfaces/srv/SetParametersAtomically '${parameterRequest}'`,
+  ].join(' && ');
+
+  return new Promise((resolve) => {
+    const child = spawn('bash', ['-lc', command], {
+      cwd: ROS_WORKSPACE,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let output = '';
+    let settled = false;
+    let timeout;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(result);
+    };
+    timeout = setTimeout(() => {
+      child.kill('SIGTERM');
+      finish({
+        attempted: true,
+        applied: false,
+        error: 'Timed out while applying parameters to the running cropper.',
+      });
+    }, 10000);
+    child.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+    child.stderr.on('data', (data) => {
+      output += data.toString();
+    });
+    child.on('error', (error) => {
+      finish({ attempted: true, applied: false, error: error.message });
+    });
+    child.on('exit', (code) => {
+      if (code === 0) {
+        activeThermalAlignment = { ...savedThermalAlignment };
+        finish({ attempted: true, applied: true });
+        return;
+      }
+      finish({
+        attempted: true,
+        applied: false,
+        error: output.trim() || `ROS parameter service exited with code ${code}`,
+      });
+    });
+  });
 }
 
 async function setOverlayAlpha(request) {
@@ -538,8 +616,13 @@ async function setThermalAlignment(request) {
     throw new Error('stretchY must be a number from 0.1 to 3.0');
   }
   thermalAlignment = { offsetX, offsetY, scale, barrelDistortion, stretchX, stretchY };
-  saveThermalAlignment();
-  return { ok: true, applied: true, alignment: thermalAlignment };
+  return {
+    ok: true,
+    applied: true,
+    saved: false,
+    frontendPreviewOnly: true,
+    alignment: thermalAlignment,
+  };
 }
 
 async function setThermalCropper(request) {
@@ -582,16 +665,24 @@ async function saveFullModeParams(request) {
   fs.writeFileSync(MASTER_PARAMS_FILE, updateYamlScalars(source, updates));
   overlayAlpha = nextOverlayAlpha;
   thermalAlignment = nextAlignment;
+  savedThermalAlignment = { ...nextAlignment };
   thermalCropper = nextCropper;
   saveThermalAlignment();
   saveThermalCropper();
-  addLog(`Saved Full-mode frontend parameters to ${MASTER_PARAMS_FILE}.`);
+  const rosCropper = await applySavedAlignmentToRunningCropper();
+  addLog(`Saved Full-mode parameters to ${MASTER_PARAMS_FILE}.`);
+  if (rosCropper.applied) {
+    addLog('Applied saved alignment to the running thermal cropper.');
+  } else if (rosCropper.attempted) {
+    addLog(`Could not apply saved alignment to the running cropper: ${rosCropper.error}`);
+  }
   return {
     ok: true,
     saved: true,
     file: MASTER_PARAMS_FILE,
     alignment: thermalAlignment,
     cropper: cropperState(),
+    rosCropper,
     overlayAlpha,
   };
 }
@@ -615,6 +706,7 @@ function startLaunch() {
 
   activeCropperEnabled = launchCropper.enabled;
   activeCropperSettings = launchCropper;
+  activeThermalAlignment = { ...savedThermalAlignment };
   activeLaunchCommand = launchCommand;
   launchProcess = spawn('bash', ['-lc', command], {
     cwd: ROS_WORKSPACE,
@@ -638,6 +730,7 @@ function startLaunch() {
     activeLaunchCommand = null;
     activeCropperEnabled = null;
     activeCropperSettings = null;
+    activeThermalAlignment = null;
   });
   launchProcess.on('exit', (code, signal) => {
     addLog(`Camera launch exited (code ${code}, signal ${signal || 'none'}).`);
@@ -645,6 +738,7 @@ function startLaunch() {
     activeLaunchCommand = null;
     activeCropperEnabled = null;
     activeCropperSettings = null;
+    activeThermalAlignment = null;
   });
   return { ok: true, alreadyRunning: false };
 }
@@ -661,6 +755,7 @@ function stopLaunch() {
     activeLaunchCommand = null;
     activeCropperEnabled = null;
     activeCropperSettings = null;
+    activeThermalAlignment = null;
   }
   return { ok: true, alreadyStopped: false };
 }
