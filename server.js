@@ -123,6 +123,17 @@ function appendThermalCropperLaunchArgs(command, cropper) {
     highlight_max_temp: cropper.highlightMaxTemp,
     highlight_min_delta_from_frame_low: cropper.highlightMinDeltaFromFrameLow,
     highlight_max_delta_from_frame_high: cropper.highlightMaxDeltaFromFrameHigh,
+    depth_fov_horizontal: STREAM_CONFIG.cameraFov.horizontal,
+    depth_fov_vertical: STREAM_CONFIG.cameraFov.vertical,
+    thermal_fov_horizontal: STREAM_CONFIG.thermalFov.horizontal,
+    thermal_fov_vertical: STREAM_CONFIG.thermalFov.vertical,
+    thermal_offset_x: thermalAlignment.offsetX,
+    thermal_offset_y: thermalAlignment.offsetY,
+    thermal_scale: thermalAlignment.scale,
+    thermal_stretch_x: thermalAlignment.stretchX,
+    thermal_stretch_y: thermalAlignment.stretchY,
+    flip_thermal_x: STREAM_CONFIG.flipThermalX,
+    flip_thermal_y: STREAM_CONFIG.flipThermalY,
   };
   return Object.entries(args).reduce(
     (configured, [name, value]) => setLaunchArgument(configured, name, value),

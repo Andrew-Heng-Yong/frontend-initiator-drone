@@ -559,15 +559,14 @@ function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
   if (!latestThermal) return;
   const { values, width, height, low, high } = latestThermal;
   const span = Math.max(high - low, 0.5);
-  const cropperActive = thermalCropper && thermalCropper.active;
-  const overlayWidth = cropperActive ? cameraWidth : Math.max(width, Math.round(
+  const overlayWidth = Math.max(width, Math.round(
     cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal) * thermalAlignment.scale * thermalAlignment.stretchX,
   ));
-  const overlayHeight = cropperActive ? cameraHeight : Math.max(height, Math.round(
+  const overlayHeight = Math.max(height, Math.round(
     cameraHeight * fovFraction(thermalFov.vertical, cameraFov.vertical) * thermalAlignment.scale * thermalAlignment.stretchY,
   ));
-  const left = cropperActive ? 0 : Math.round((cameraWidth - overlayWidth) / 2 + thermalAlignment.offsetX);
-  const top = cropperActive ? 0 : Math.round((cameraHeight - overlayHeight) / 2 + thermalAlignment.offsetY);
+  const left = Math.round((cameraWidth - overlayWidth) / 2 + thermalAlignment.offsetX);
+  const top = Math.round((cameraHeight - overlayHeight) / 2 + thermalAlignment.offsetY);
   const right = Math.min(cameraWidth, left + overlayWidth);
   const bottom = Math.min(cameraHeight, top + overlayHeight);
   const drawLeft = Math.max(0, left);

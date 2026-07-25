@@ -86,6 +86,8 @@ If the thermal image is visible but does not line up with depth, use a small hot
 
 The ROS cropper node uses highlighted thermal pixels to publish `/camera/depth/cropped/image_raw` and `/thermal/cropped/image_raw`. In simple mode it does not publish uncropped fallback frames while no thermal region is present. Valid regions publish rectangular crops around the selected thermal cluster and the frontend scales the crop into its fixed display. Each crop unit covers `crop_unit_thermal_pixels` square thermal pixels, clusters count diagonal neighbors, `min_region_size` rejects small clusters, and `inflation_radius_thermal_pixels` expands the crop region. Cropper tuning values live in the `thermal_cropper` block in `config/master_params.yaml` and are passed to `thermal_cropper_node` at launch.
 
+The frontend and ROS cropper receive the same FOV, alignment, stretch, and axis-flip launch parameters. Cropped thermal frames remain in their native 80×62 coordinates, so Full mode applies that shared transform instead of stretching the thermal mask across the complete depth frame.
+
 Full mode exposes the crop unit, minimum region, inflation, temperature bounds, frame-relative delta bounds, and empty-frame passthrough settings in the Cropper panel. Changes are persisted to `.thermal-cropper.json` and applied only on the next ROS start.
 
 Use **Save to parameter file** in the Full-mode tuning panel to write the current Blend, overlay alignment, and cropper controls into the loaded `master_params.yaml`. The button also keeps the alignment and cropper sidecar files synchronized with those values.
