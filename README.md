@@ -15,11 +15,13 @@ cd ../frontend-initiator-drone
 npm start
 ```
 
-Open `http://<robot-ip>:4173`. The Start button sources ROS 2, sources the built workspace, then launches the drone ROS graph with rosbridge enabled. By default it tries:
+Open `http://<robot-ip>:4173`. The Start button sources ROS 2, sources the built workspace, then launches the drone ROS graph with rosbridge enabled. The saved Cropper checkbox controls both cropper launch arguments. For example, when enabled it launches:
 
 ```bash
-ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_thermal_cropper:=true thermal_cropper_enabled:=false start_thermal_overlay:=false
+ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_thermal_cropper:=true thermal_cropper_enabled:=true start_thermal_overlay:=false
 ```
+
+When cleared, both cropper arguments are set to `false`, so the cropper node is not launched.
 
 Runtime defaults are loaded from `config/master_params.yaml`. Camera intrinsics, distortion, and camera-frame transforms live separately in `config/camera_calibrations.yaml`, and the master params file points to it with `camera_calibrations_params_file`. Environment variables still override YAML values, so one-off test runs do not require editing the params files.
 
@@ -51,7 +53,7 @@ Use the actual launch command/topic for the active backend. The server logs the 
 
 The dashboard also subscribes to `/camera/depth/camera_info` by default and displays the depth intrinsics-derived FOV for debugging. Overlay sizing uses the configured `depth_fov_horizontal` and `depth_fov_vertical` params unless `USE_CAMERA_INFO_FOV=true` is set. Set `DEPTH_CAMERA_INFO_TOPIC` if your Orbbec driver publishes camera info somewhere else.
 
-By default `BASE_VIEW_MODE=full-depth`: the depth image is the main viewport and thermal is blended into the configured thermal FOV area. The dashboard subscribes to the cropper output topics, but the cropper starts disabled and passes raw frames through until you enable it.
+By default `BASE_VIEW_MODE=full-depth`: the depth image is the main viewport and thermal is blended into the configured thermal FOV area. The Cropper checkbox controls the next ROS launch and never changes the running graph. When selected, the next Start launches the cropper and subscribes to `/camera/depth/cropped/image_raw`, `/camera/depth/cropped/camera_info`, and `/thermal/cropped/image_raw`. When cleared, the next Start omits the cropper node and subscribes directly to the corresponding raw topics.
 
 The thermal overlay defaults to neutral manual alignment (`X=0`, `Y=0`, `Scale=100`, `H=100`, `V=100`). Its size comes from the configured FOVs: depth is `79° x 62°`, and thermal is `90° x 68°`. Because the thermal FOV is wider, its projected overlay extends beyond the depth viewport and is clipped at the depth edges.
 

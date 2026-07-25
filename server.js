@@ -35,14 +35,16 @@ const ORBBEC_SETUP = resolveLocalPath(
 const ALIGNMENT_FILE = resolveLocalPath(process.env.THERMAL_ALIGNMENT_FILE || SYSTEM_PARAMS.alignment_file || path.join(__dirname, '.thermal-alignment.json'));
 const CROPPER_SETTINGS_FILE = resolveLocalPath(process.env.THERMAL_CROPPER_SETTINGS_FILE || SYSTEM_PARAMS.cropper_settings_file || path.join(__dirname, '.thermal-cropper.json'));
 const FRONTEND_MODE = process.env.FRONTEND_MODE || STREAM_PARAMS.frontend_mode || 'full';
-const BASE_LAUNCH_COMMAND = DRONE_PARAMS.launch_command
+const BASE_LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND || DRONE_PARAMS.launch_command
   || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_thermal_cropper:=true thermal_cropper_enabled:=false start_thermal_overlay:=false';
-const LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND || appendThermalCropperLaunchArgs(BASE_LAUNCH_COMMAND);
 const STREAM_CONFIG = {
   frontendMode: FRONTEND_MODE,
   colorTopic: process.env.DEPTH_IMAGE_TOPIC || process.env.COLOR_IMAGE_TOPIC || STREAM_PARAMS.depth_image_topic || STREAM_PARAMS.color_image_topic || '/camera/depth/cropped/image_raw',
   cameraInfoTopic: process.env.DEPTH_CAMERA_INFO_TOPIC || STREAM_PARAMS.depth_camera_info_topic || '/camera/depth/cropped/camera_info',
   thermalTopic: process.env.THERMAL_IMAGE_TOPIC || STREAM_PARAMS.thermal_image_topic || '/thermal/cropped/image_raw',
+  rawColorTopic: process.env.RAW_DEPTH_IMAGE_TOPIC || process.env.DEPTH_IMAGE_TOPIC || STREAM_PARAMS.raw_depth_image_topic || '/camera/depth/image_raw',
+  rawCameraInfoTopic: process.env.RAW_DEPTH_CAMERA_INFO_TOPIC || process.env.DEPTH_CAMERA_INFO_TOPIC || STREAM_PARAMS.raw_depth_camera_info_topic || '/camera/depth/camera_info',
+  rawThermalTopic: process.env.RAW_THERMAL_IMAGE_TOPIC || process.env.THERMAL_IMAGE_TOPIC || STREAM_PARAMS.raw_thermal_image_topic || '/thermal/image_raw',
   imuTopic: process.env.IMU_TOPIC || STREAM_PARAMS.imu_topic || '/imu/data_raw',
   baseViewMode: process.env.BASE_VIEW_MODE || STREAM_PARAMS.base_view_mode || 'full-depth',
   thermalFov: {
@@ -70,6 +72,8 @@ const DEFAULT_THERMAL_CROPPER = {
 };
 
 let launchProcess = null;
+let activeLaunchCommand = null;
+let activeCropperEnabled = null;
 let logs = [];
 let previousCpuStats = null;
 let overlayAlpha = Number(process.env.THERMAL_OVERLAY_ALPHA || DASHBOARD_PARAMS.overlay_alpha || 0.5);
@@ -116,6 +120,27 @@ function appendThermalCropperLaunchArgs(command) {
     .map(([name, value]) => `${name}:=${value}`)
     .join(' ');
   return suffix ? `${command} ${suffix}` : command;
+}
+
+function setLaunchArgument(command, name, value) {
+  const prefix = `${name}:=`;
+  const replacement = `${prefix}${value}`;
+  const tokens = String(command).trim().split(/\s+/);
+  let replaced = false;
+  const output = tokens.flatMap((token) => {
+    if (!token.startsWith(prefix)) return [token];
+    if (replaced) return [];
+    replaced = true;
+    return [replacement];
+  });
+  if (!replaced) output.push(replacement);
+  return output.join(' ');
+}
+
+function launchCommandFor(cropperEnabled) {
+  let command = setLaunchArgument(BASE_LAUNCH_COMMAND, 'start_thermal_cropper', cropperEnabled);
+  command = setLaunchArgument(command, 'thermal_cropper_enabled', cropperEnabled);
+  return appendThermalCropperLaunchArgs(command);
 }
 
 function normalizeLaunchNumber(value, min, max, fallback) {
@@ -237,7 +262,6 @@ function normalizeThermalCropper(settings) {
 }
 
 function readThermalCropper() {
-  if (!LAUNCH_COMMAND.includes('start_thermal_cropper:=true')) return { enabled: false };
   const defaults = normalizeThermalCropper({
     enabled: process.env.THERMAL_CROPPER_ENABLED == null ? DEFAULT_THERMAL_CROPPER.enabled : process.env.THERMAL_CROPPER_ENABLED !== 'false',
   });
@@ -325,6 +349,7 @@ function cpuTemperature() {
 }
 
 function state() {
+  const cropper = cropperState();
   return {
     running: launchProcess !== null,
     logs,
@@ -332,13 +357,32 @@ function state() {
     cpuTemp: cpuTemperature(),
     overlayAlpha,
     rgbOverlayEnabled: true,
-    stream: { ...STREAM_CONFIG, alignment: thermalAlignment, cropper: thermalCropper },
-    launchCommand: LAUNCH_COMMAND,
+    stream: { ...activeStreamConfig(), alignment: thermalAlignment, cropper },
+    launchCommand: activeLaunchCommand || launchCommandFor(thermalCropper.enabled),
     params: {
       master: MASTER_PARAMS_FILE,
       cameraCalibrations: CAMERA_CALIBRATIONS_PARAMS_FILE,
       cameraCalibrationsLoaded: Boolean(CAMERA_CALIBRATIONS_PARAMS.camera_calibrations),
     },
+  };
+}
+
+function activeStreamConfig() {
+  if (launchProcess && activeCropperEnabled) return STREAM_CONFIG;
+  return {
+    ...STREAM_CONFIG,
+    colorTopic: STREAM_CONFIG.rawColorTopic,
+    cameraInfoTopic: STREAM_CONFIG.rawCameraInfoTopic,
+    thermalTopic: STREAM_CONFIG.rawThermalTopic,
+  };
+}
+
+function cropperState() {
+  const active = Boolean(launchProcess && activeCropperEnabled);
+  return {
+    enabled: thermalCropper.enabled,
+    active,
+    restartRequired: Boolean(launchProcess && thermalCropper.enabled !== active),
   };
 }
 
@@ -413,32 +457,16 @@ async function setThermalAlignment(request) {
 async function setThermalCropper(request) {
   thermalCropper = normalizeThermalCropper(await readJson(request));
   saveThermalCropper();
-  applyThermalCropperParams();
-  return { ok: true, applied: true, cropper: thermalCropper };
-}
-
-function applyThermalCropperParams() {
-  if (!launchProcess) return;
-  const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
-  const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
-  const paramCommands = `ros2 param set /thermal_cropper_node enabled ${thermalCropper.enabled}`;
-  const command = [
-    `source "${setupFile}"`,
-    `source "${installSetup}"`,
-    paramCommands,
-  ].join(' && ');
-  const paramProcess = spawn('bash', ['-lc', command], {
-    cwd: ROS_WORKSPACE,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  paramProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
-  paramProcess.stderr.on('data', (data) => addLog(`Cropper param error: ${data.toString().trim()}`));
-  paramProcess.on('error', (error) => addLog(`Could not tune cropper node: ${error.message}`));
+  const cropper = cropperState();
+  addLog(`Cropper ${thermalCropper.enabled ? 'enabled' : 'disabled'} for the next ROS start; the running graph is unchanged.`);
+  return { ok: true, saved: true, appliesOnNextStart: true, cropper };
 }
 
 function startLaunch() {
   if (launchProcess) return { ok: true, alreadyRunning: true };
 
+  const launchCropper = thermalCropper.enabled;
+  const launchCommand = launchCommandFor(launchCropper);
   const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
   const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
   const command = [
@@ -448,9 +476,11 @@ function startLaunch() {
     `source "${ORBBEC_SETUP}"`,
     `if [ ! -f "${installSetup}" ]; then echo "Missing workspace setup file: ${installSetup}. Run colcon build first."; exit 1; fi`,
     `source "${installSetup}"`,
-    LAUNCH_COMMAND,
+    launchCommand,
   ].join(' && ');
 
+  activeCropperEnabled = launchCropper;
+  activeLaunchCommand = launchCommand;
   launchProcess = spawn('bash', ['-lc', command], {
     cwd: ROS_WORKSPACE,
     detached: true,
@@ -459,18 +489,25 @@ function startLaunch() {
   addLog(`Starting depth camera launch with rosbridge (PID ${launchProcess.pid}).`);
   addLog(`ROS distro: ${ROS_DISTRO}; workspace: ${ROS_WORKSPACE}`);
   addLog(`Depth camera required; thermal-only mode disabled; Orbbec setup: ${ORBBEC_SETUP}`);
-  addLog(`Launch command: ${LAUNCH_COMMAND}`);
+  addLog(`Launch command: ${launchCommand}`);
   addLog(`Params: master=${MASTER_PARAMS_FILE}; camera_calibrations=${CAMERA_CALIBRATIONS_PARAMS_FILE}`);
   addLog(`Frontend mode: ${STREAM_CONFIG.frontendMode}`);
-  addLog(`Stream topics: base=${STREAM_CONFIG.colorTopic}; thermal=${STREAM_CONFIG.thermalTopic}; imu=${STREAM_CONFIG.imuTopic}`);
+  const stream = activeStreamConfig();
+  addLog(`Stream topics: base=${stream.colorTopic}; thermal=${stream.thermalTopic}; imu=${stream.imuTopic}`);
   addLog(`Base view mode: ${STREAM_CONFIG.baseViewMode}`);
-  setTimeout(applyThermalCropperParams, 3000);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));
-  launchProcess.on('error', (error) => addLog(`Launch error: ${error.message}`));
+  launchProcess.on('error', (error) => {
+    addLog(`Launch error: ${error.message}`);
+    launchProcess = null;
+    activeLaunchCommand = null;
+    activeCropperEnabled = null;
+  });
   launchProcess.on('exit', (code, signal) => {
     addLog(`Camera launch exited (code ${code}, signal ${signal || 'none'}).`);
     launchProcess = null;
+    activeLaunchCommand = null;
+    activeCropperEnabled = null;
   });
   return { ok: true, alreadyRunning: false };
 }
@@ -484,6 +521,8 @@ function stopLaunch() {
   } catch (error) {
     if (error.code !== 'ESRCH') throw error;
     launchProcess = null;
+    activeLaunchCommand = null;
+    activeCropperEnabled = null;
   }
   return { ok: true, alreadyStopped: false };
 }

@@ -39,7 +39,7 @@ let baseViewMode = 'full-depth';
 let flipThermalX = true;
 let flipThermalY = true;
 let thermalAlignment = { offsetX: 0, offsetY: 0, scale: 1, stretchX: 1, stretchY: 1 };
-let thermalCropper = { enabled: true };
+let thermalCropper = { enabled: true, active: false, restartRequired: false };
 
 let rosSocket;
 let activeImageTopic = null;
@@ -538,7 +538,7 @@ function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
   if (!latestThermal) return;
   const { values, width, height, low, high } = latestThermal;
   const span = Math.max(high - low, 0.5);
-  const cropperActive = thermalCropper && thermalCropper.enabled;
+  const cropperActive = thermalCropper && thermalCropper.active;
   const overlayWidth = cropperActive ? cameraWidth : Math.max(width, Math.round(
     cameraWidth * fovFraction(thermalFov.horizontal, cameraFov.horizontal) * thermalAlignment.scale * thermalAlignment.stretchX,
   ));
@@ -638,7 +638,11 @@ function formatOneDecimal(value) {
 }
 
 function normalizeCropperSettings(settings) {
-  return { enabled: !settings || settings.enabled !== false };
+  return {
+    enabled: !settings || settings.enabled !== false,
+    active: Boolean(settings && settings.active),
+    restartRequired: Boolean(settings && settings.restartRequired),
+  };
 }
 
 function setControlValue(control, value, force = false) {
@@ -762,10 +766,12 @@ function updateThermalAlignmentFromUi(source, formatActive = false) {
 
 async function updateThermalCropperFromUi() {
   thermalCropper = normalizeCropperSettings({
+    ...thermalCropper,
     enabled: cropperEnabledInput ? cropperEnabledInput.checked : thermalCropper.enabled,
   });
   try {
-    await request('/api/thermal-cropper', thermalCropper);
+    const response = await request('/api/thermal-cropper', thermalCropper);
+    setThermalCropperUi(response.cropper);
   } catch (error) {
     connection.textContent = error.message;
   }
