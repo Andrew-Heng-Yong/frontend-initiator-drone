@@ -88,6 +88,7 @@ thermal_dashboard:
 
     thermal_cropper:
       enabled: true
+      passthrough_when_no_region: true
       crop_unit_thermal_pixels: 2
       min_region_size: 15
       inflation_radius_thermal_pixels: 2
@@ -98,15 +99,15 @@ thermal_dashboard:
 
     # Increment this whenever optical geometry changes so saved hand-tuned values
     # from an older camera setup are not reused.
-    thermal_alignment_revision: fov-79x62-thermal-90x68
+    thermal_alignment_revision: fov-79x62-thermal-90x68-h80-v90
 
-    # Neutral thermal-to-depth alignment. FOV alone determines the overlay size.
+    # Thermal-to-depth overlay defaults confirmed from the dashboard controls.
     thermal_alignment:
       offset_x: 0.0
       offset_y: 0.0
       scale: 1.0
-      stretch_x: 1.0
-      stretch_y: 1.0
+      stretch_x: 0.8
+      stretch_y: 0.9
 
     thermal_alignment_limits:
       offset_x: [-320.0, 320.0]

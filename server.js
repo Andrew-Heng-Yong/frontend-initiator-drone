@@ -64,16 +64,27 @@ const DEFAULT_THERMAL_ALIGNMENT = {
   offsetX: THERMAL_ALIGNMENT_PARAMS.offset_x ?? 0,
   offsetY: THERMAL_ALIGNMENT_PARAMS.offset_y ?? 0,
   scale: THERMAL_ALIGNMENT_PARAMS.scale ?? 1,
-  stretchX: THERMAL_ALIGNMENT_PARAMS.stretch_x ?? 1,
-  stretchY: THERMAL_ALIGNMENT_PARAMS.stretch_y ?? 1,
+  stretchX: THERMAL_ALIGNMENT_PARAMS.stretch_x ?? 0.8,
+  stretchY: THERMAL_ALIGNMENT_PARAMS.stretch_y ?? 0.9,
 };
 const DEFAULT_THERMAL_CROPPER = {
   enabled: THERMAL_CROPPER_PARAMS.enabled !== false,
+  passthroughWhenNoRegion: THERMAL_CROPPER_PARAMS.passthrough_when_no_region == null
+    ? FRONTEND_MODE !== 'simple'
+    : THERMAL_CROPPER_PARAMS.passthrough_when_no_region !== false,
+  cropUnitThermalPixels: normalizeLaunchInteger(THERMAL_CROPPER_PARAMS.crop_unit_thermal_pixels, 1, 16, 2),
+  minRegionSize: normalizeLaunchInteger(THERMAL_CROPPER_PARAMS.min_region_size, 1, 768, 4),
+  inflationRadiusThermalPixels: normalizeLaunchInteger(THERMAL_CROPPER_PARAMS.inflation_radius_thermal_pixels, 0, 32, 0),
+  highlightMinTemp: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_min_temp, -100, 1000, 25),
+  highlightMaxTemp: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_max_temp, -100, 1000, 40),
+  highlightMinDeltaFromFrameLow: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_min_delta_from_frame_low, 0, 1000, 3),
+  highlightMaxDeltaFromFrameHigh: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_max_delta_from_frame_high, 0, 1000, 1000),
 };
 
 let launchProcess = null;
 let activeLaunchCommand = null;
 let activeCropperEnabled = null;
+let activeCropperSettings = null;
 let logs = [];
 let previousCpuStats = null;
 let overlayAlpha = Number(process.env.THERMAL_OVERLAY_ALPHA || DASHBOARD_PARAMS.overlay_alpha || 0.5);
@@ -100,26 +111,23 @@ function rosParams(nodeName) {
   return (((MASTER_PARAMS[nodeName] || {}).ros__parameters) || {});
 }
 
-function appendThermalCropperLaunchArgs(command) {
+function appendThermalCropperLaunchArgs(command, cropper) {
   if (!command.includes('start_thermal_cropper:=true')) return command;
   const args = {
-    crop_unit_thermal_pixels: normalizeLaunchInteger(THERMAL_CROPPER_PARAMS.crop_unit_thermal_pixels, 1, 16, 2),
-    thermal_cropper_enabled: THERMAL_CROPPER_PARAMS.enabled !== false,
-    passthrough_when_no_region: THERMAL_CROPPER_PARAMS.passthrough_when_no_region == null
-      ? FRONTEND_MODE !== 'simple'
-      : THERMAL_CROPPER_PARAMS.passthrough_when_no_region !== false,
-    min_region_size: normalizeLaunchInteger(THERMAL_CROPPER_PARAMS.min_region_size, 1, 768, 4),
-    inflation_radius_thermal_pixels: normalizeLaunchInteger(THERMAL_CROPPER_PARAMS.inflation_radius_thermal_pixels, 0, 32, 0),
-    highlight_min_temp: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_min_temp, -100, 1000, 25),
-    highlight_max_temp: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_max_temp, -100, 1000, 40),
-    highlight_min_delta_from_frame_low: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_min_delta_from_frame_low, 0, 1000, 3),
-    highlight_max_delta_from_frame_high: normalizeLaunchNumber(THERMAL_CROPPER_PARAMS.highlight_max_delta_from_frame_high, 0, 1000, 1000),
+    crop_unit_thermal_pixels: cropper.cropUnitThermalPixels,
+    thermal_cropper_enabled: cropper.enabled,
+    passthrough_when_no_region: cropper.passthroughWhenNoRegion,
+    min_region_size: cropper.minRegionSize,
+    inflation_radius_thermal_pixels: cropper.inflationRadiusThermalPixels,
+    highlight_min_temp: cropper.highlightMinTemp,
+    highlight_max_temp: cropper.highlightMaxTemp,
+    highlight_min_delta_from_frame_low: cropper.highlightMinDeltaFromFrameLow,
+    highlight_max_delta_from_frame_high: cropper.highlightMaxDeltaFromFrameHigh,
   };
-  const suffix = Object.entries(args)
-    .filter(([name]) => !command.includes(`${name}:=`))
-    .map(([name, value]) => `${name}:=${value}`)
-    .join(' ');
-  return suffix ? `${command} ${suffix}` : command;
+  return Object.entries(args).reduce(
+    (configured, [name, value]) => setLaunchArgument(configured, name, value),
+    command,
+  );
 }
 
 function setLaunchArgument(command, name, value) {
@@ -137,10 +145,10 @@ function setLaunchArgument(command, name, value) {
   return output.join(' ');
 }
 
-function launchCommandFor(cropperEnabled) {
-  let command = setLaunchArgument(BASE_LAUNCH_COMMAND, 'start_thermal_cropper', cropperEnabled);
-  command = setLaunchArgument(command, 'thermal_cropper_enabled', cropperEnabled);
-  return appendThermalCropperLaunchArgs(command);
+function launchCommandFor(cropper) {
+  let command = setLaunchArgument(BASE_LAUNCH_COMMAND, 'start_thermal_cropper', cropper.enabled);
+  command = setLaunchArgument(command, 'thermal_cropper_enabled', cropper.enabled);
+  return appendThermalCropperLaunchArgs(command, cropper);
 }
 
 function normalizeLaunchNumber(value, min, max, fallback) {
@@ -208,6 +216,49 @@ function parseYamlScalar(value) {
   return Number.isFinite(number) && value !== '' ? number : value;
 }
 
+function formatYamlScalar(value) {
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  const number = Number(value);
+  if (Number.isFinite(number)) return String(number);
+  return JSON.stringify(String(value));
+}
+
+function updateYamlScalars(source, updates) {
+  const newline = source.includes('\r\n') ? '\r\n' : '\n';
+  const trailingNewline = source.endsWith('\n');
+  const lines = source.split(/\r?\n/);
+  const stack = [];
+  const found = new Set();
+
+  lines.forEach((rawLine, index) => {
+    const contentWithoutComment = rawLine.split('#')[0].replace(/\s+$/, '');
+    if (!contentWithoutComment.trim()) return;
+
+    const indent = contentWithoutComment.match(/^ */)[0].length;
+    const content = contentWithoutComment.trim();
+    const match = content.match(/^([^:]+):(.*)$/);
+    if (!match) return;
+
+    while (stack.length && indent <= stack[stack.length - 1].indent) stack.pop();
+    const key = match[1].trim();
+    const pathName = [...stack.map((entry) => entry.key), key].join('.');
+    if (updates.has(pathName)) {
+      const commentIndex = rawLine.indexOf('#');
+      const comment = commentIndex >= 0 ? ` ${rawLine.slice(commentIndex).trim()}` : '';
+      lines[index] = `${' '.repeat(indent)}${key}: ${formatYamlScalar(updates.get(pathName))}${comment}`;
+      found.add(pathName);
+    }
+
+    if (!match[2].trim()) stack.push({ indent, key });
+  });
+
+  const missing = [...updates.keys()].filter((pathName) => !found.has(pathName));
+  if (missing.length) throw new Error(`Missing params in YAML: ${missing.join(', ')}`);
+
+  const result = lines.join(newline);
+  return trailingNewline && !result.endsWith(newline) ? `${result}${newline}` : result;
+}
+
 function requiredNumber(name, value) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
@@ -258,11 +309,25 @@ function readThermalAlignment() {
 }
 
 function normalizeThermalCropper(settings) {
-  return { enabled: !settings || settings.enabled !== false };
+  const candidate = settings || {};
+  return {
+    enabled: candidate.enabled !== false,
+    passthroughWhenNoRegion: candidate.passthroughWhenNoRegion == null
+      ? DEFAULT_THERMAL_CROPPER.passthroughWhenNoRegion
+      : candidate.passthroughWhenNoRegion !== false,
+    cropUnitThermalPixels: normalizeLaunchInteger(candidate.cropUnitThermalPixels, 1, 16, DEFAULT_THERMAL_CROPPER.cropUnitThermalPixels),
+    minRegionSize: normalizeLaunchInteger(candidate.minRegionSize, 1, 768, DEFAULT_THERMAL_CROPPER.minRegionSize),
+    inflationRadiusThermalPixels: normalizeLaunchInteger(candidate.inflationRadiusThermalPixels, 0, 32, DEFAULT_THERMAL_CROPPER.inflationRadiusThermalPixels),
+    highlightMinTemp: normalizeLaunchNumber(candidate.highlightMinTemp, -100, 1000, DEFAULT_THERMAL_CROPPER.highlightMinTemp),
+    highlightMaxTemp: normalizeLaunchNumber(candidate.highlightMaxTemp, -100, 1000, DEFAULT_THERMAL_CROPPER.highlightMaxTemp),
+    highlightMinDeltaFromFrameLow: normalizeLaunchNumber(candidate.highlightMinDeltaFromFrameLow, 0, 1000, DEFAULT_THERMAL_CROPPER.highlightMinDeltaFromFrameLow),
+    highlightMaxDeltaFromFrameHigh: normalizeLaunchNumber(candidate.highlightMaxDeltaFromFrameHigh, 0, 1000, DEFAULT_THERMAL_CROPPER.highlightMaxDeltaFromFrameHigh),
+  };
 }
 
 function readThermalCropper() {
   const defaults = normalizeThermalCropper({
+    ...DEFAULT_THERMAL_CROPPER,
     enabled: process.env.THERMAL_CROPPER_ENABLED == null ? DEFAULT_THERMAL_CROPPER.enabled : process.env.THERMAL_CROPPER_ENABLED !== 'false',
   });
   if (STREAM_CONFIG.frontendMode === 'simple') return defaults;
@@ -358,7 +423,7 @@ function state() {
     overlayAlpha,
     rgbOverlayEnabled: true,
     stream: { ...activeStreamConfig(), alignment: thermalAlignment, cropper },
-    launchCommand: activeLaunchCommand || launchCommandFor(thermalCropper.enabled),
+    launchCommand: activeLaunchCommand || launchCommandFor(thermalCropper),
     params: {
       master: MASTER_PARAMS_FILE,
       cameraCalibrations: CAMERA_CALIBRATIONS_PARAMS_FILE,
@@ -380,9 +445,12 @@ function activeStreamConfig() {
 function cropperState() {
   const active = Boolean(launchProcess && activeCropperEnabled);
   return {
-    enabled: thermalCropper.enabled,
+    ...thermalCropper,
     active,
-    restartRequired: Boolean(launchProcess && thermalCropper.enabled !== active),
+    restartRequired: Boolean(
+      launchProcess
+      && JSON.stringify(thermalCropper) !== JSON.stringify(activeCropperSettings),
+    ),
   };
 }
 
@@ -462,10 +530,55 @@ async function setThermalCropper(request) {
   return { ok: true, saved: true, appliesOnNextStart: true, cropper };
 }
 
+async function saveFullModeParams(request) {
+  const body = await readJson(request);
+  const nextOverlayAlpha = Number(body.overlayAlpha);
+  if (!Number.isFinite(nextOverlayAlpha) || nextOverlayAlpha < 0 || nextOverlayAlpha > 1) {
+    throw new Error('overlayAlpha must be a number from 0.0 to 1.0');
+  }
+
+  const nextAlignment = normalizeThermalAlignment(body.alignment || {});
+  const nextCropper = normalizeThermalCropper(body.cropper || {});
+  const updates = new Map([
+    ['thermal_dashboard.ros__parameters.overlay_alpha', nextOverlayAlpha],
+    ['thermal_dashboard.ros__parameters.thermal_alignment.offset_x', nextAlignment.offsetX],
+    ['thermal_dashboard.ros__parameters.thermal_alignment.offset_y', nextAlignment.offsetY],
+    ['thermal_dashboard.ros__parameters.thermal_alignment.scale', nextAlignment.scale],
+    ['thermal_dashboard.ros__parameters.thermal_alignment.stretch_x', nextAlignment.stretchX],
+    ['thermal_dashboard.ros__parameters.thermal_alignment.stretch_y', nextAlignment.stretchY],
+    ['thermal_dashboard.ros__parameters.thermal_cropper.enabled', nextCropper.enabled],
+    ['thermal_dashboard.ros__parameters.thermal_cropper.passthrough_when_no_region', nextCropper.passthroughWhenNoRegion],
+    ['thermal_dashboard.ros__parameters.thermal_cropper.crop_unit_thermal_pixels', nextCropper.cropUnitThermalPixels],
+    ['thermal_dashboard.ros__parameters.thermal_cropper.min_region_size', nextCropper.minRegionSize],
+    ['thermal_dashboard.ros__parameters.thermal_cropper.inflation_radius_thermal_pixels', nextCropper.inflationRadiusThermalPixels],
+    ['thermal_dashboard.ros__parameters.thermal_cropper.highlight_min_temp', nextCropper.highlightMinTemp],
+    ['thermal_dashboard.ros__parameters.thermal_cropper.highlight_max_temp', nextCropper.highlightMaxTemp],
+    ['thermal_dashboard.ros__parameters.thermal_cropper.highlight_min_delta_from_frame_low', nextCropper.highlightMinDeltaFromFrameLow],
+    ['thermal_dashboard.ros__parameters.thermal_cropper.highlight_max_delta_from_frame_high', nextCropper.highlightMaxDeltaFromFrameHigh],
+  ]);
+
+  const source = fs.readFileSync(MASTER_PARAMS_FILE, 'utf8');
+  fs.writeFileSync(MASTER_PARAMS_FILE, updateYamlScalars(source, updates));
+  overlayAlpha = nextOverlayAlpha;
+  thermalAlignment = nextAlignment;
+  thermalCropper = nextCropper;
+  saveThermalAlignment();
+  saveThermalCropper();
+  addLog(`Saved Full-mode frontend parameters to ${MASTER_PARAMS_FILE}.`);
+  return {
+    ok: true,
+    saved: true,
+    file: MASTER_PARAMS_FILE,
+    alignment: thermalAlignment,
+    cropper: cropperState(),
+    overlayAlpha,
+  };
+}
+
 function startLaunch() {
   if (launchProcess) return { ok: true, alreadyRunning: true };
 
-  const launchCropper = thermalCropper.enabled;
+  const launchCropper = { ...thermalCropper };
   const launchCommand = launchCommandFor(launchCropper);
   const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
   const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
@@ -479,7 +592,8 @@ function startLaunch() {
     launchCommand,
   ].join(' && ');
 
-  activeCropperEnabled = launchCropper;
+  activeCropperEnabled = launchCropper.enabled;
+  activeCropperSettings = launchCropper;
   activeLaunchCommand = launchCommand;
   launchProcess = spawn('bash', ['-lc', command], {
     cwd: ROS_WORKSPACE,
@@ -502,12 +616,14 @@ function startLaunch() {
     launchProcess = null;
     activeLaunchCommand = null;
     activeCropperEnabled = null;
+    activeCropperSettings = null;
   });
   launchProcess.on('exit', (code, signal) => {
     addLog(`Camera launch exited (code ${code}, signal ${signal || 'none'}).`);
     launchProcess = null;
     activeLaunchCommand = null;
     activeCropperEnabled = null;
+    activeCropperSettings = null;
   });
   return { ok: true, alreadyRunning: false };
 }
@@ -523,6 +639,7 @@ function stopLaunch() {
     launchProcess = null;
     activeLaunchCommand = null;
     activeCropperEnabled = null;
+    activeCropperSettings = null;
   }
   return { ok: true, alreadyStopped: false };
 }
@@ -542,6 +659,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/overlay-alpha') return sendJson(response, 200, await setOverlayAlpha(request));
     if (request.method === 'POST' && url.pathname === '/api/thermal-alignment') return sendJson(response, 200, await setThermalAlignment(request));
     if (request.method === 'POST' && url.pathname === '/api/thermal-cropper') return sendJson(response, 200, await setThermalCropper(request));
+    if (request.method === 'POST' && url.pathname === '/api/full-mode-params') return sendJson(response, 200, await saveFullModeParams(request));
 
     const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
     const filePath = path.resolve(__dirname, 'public', file);

@@ -23,6 +23,15 @@ const thermalScaleInput = document.querySelector('#thermal-scale');
 const thermalStretchXInput = document.querySelector('#thermal-stretch-x');
 const thermalStretchYInput = document.querySelector('#thermal-stretch-y');
 const cropperEnabledInput = document.querySelector('#cropper-enabled');
+const cropperPassthroughInput = document.querySelector('#cropper-passthrough');
+const cropperUnitInput = document.querySelector('#cropper-unit');
+const cropperMinRegionInput = document.querySelector('#cropper-min-region');
+const cropperInflationInput = document.querySelector('#cropper-inflation');
+const cropperMinTempInput = document.querySelector('#cropper-min-temp');
+const cropperMaxTempInput = document.querySelector('#cropper-max-temp');
+const cropperLowDeltaInput = document.querySelector('#cropper-low-delta');
+const cropperHighDeltaInput = document.querySelector('#cropper-high-delta');
+const saveParamsButton = document.querySelector('#save-params');
 let imageTopics = {
   color: '/camera/depth/image_raw',
   cameraInfo: '/camera/depth/camera_info',
@@ -38,8 +47,20 @@ let useCameraInfoFov = false;
 let baseViewMode = 'full-depth';
 let flipThermalX = true;
 let flipThermalY = false;
-let thermalAlignment = { offsetX: 0, offsetY: 0, scale: 1, stretchX: 1, stretchY: 1 };
-let thermalCropper = { enabled: true, active: false, restartRequired: false };
+let thermalAlignment = { offsetX: 0, offsetY: 0, scale: 1, stretchX: 0.8, stretchY: 0.9 };
+let thermalCropper = {
+  enabled: true,
+  active: false,
+  restartRequired: false,
+  passthroughWhenNoRegion: true,
+  cropUnitThermalPixels: 2,
+  minRegionSize: 15,
+  inflationRadiusThermalPixels: 2,
+  highlightMinTemp: 28,
+  highlightMaxTemp: 40,
+  highlightMinDeltaFromFrameLow: 3,
+  highlightMaxDeltaFromFrameHigh: 1000,
+};
 
 let rosSocket;
 let activeImageTopic = null;
@@ -581,8 +602,8 @@ function setThermalAlignmentUi(alignment) {
   const offsetX = clampNumber(alignment && alignment.offsetX, -1000, 1000, 0);
   const offsetY = clampNumber(alignment && alignment.offsetY, -1000, 1000, 0);
   const scale = clampNumber(alignment && alignment.scale, 0.1, 3, 1);
-  const stretchX = clampNumber(alignment && alignment.stretchX, 0.1, 3, 1);
-  const stretchY = clampNumber(alignment && alignment.stretchY, 0.1, 3, 1);
+  const stretchX = clampNumber(alignment && alignment.stretchX, 0.1, 3, 0.8);
+  const stretchY = clampNumber(alignment && alignment.stretchY, 0.1, 3, 0.9);
   thermalAlignment = { offsetX, offsetY, scale, stretchX, stretchY };
   setControlValue(thermalOffsetXInput, offsetX);
   setControlValue(thermalOffsetYInput, offsetY);
@@ -595,6 +616,14 @@ function setThermalCropperUi(cropper) {
   if (!cropper) return;
   thermalCropper = normalizeCropperSettings(cropper);
   if (cropperEnabledInput) cropperEnabledInput.checked = thermalCropper.enabled;
+  if (cropperPassthroughInput) cropperPassthroughInput.checked = thermalCropper.passthroughWhenNoRegion;
+  setControlValue(cropperUnitInput, thermalCropper.cropUnitThermalPixels);
+  setControlValue(cropperMinRegionInput, thermalCropper.minRegionSize);
+  setControlValue(cropperInflationInput, thermalCropper.inflationRadiusThermalPixels);
+  setControlValue(cropperMinTempInput, thermalCropper.highlightMinTemp);
+  setControlValue(cropperMaxTempInput, thermalCropper.highlightMaxTemp);
+  setControlValue(cropperLowDeltaInput, thermalCropper.highlightMinDeltaFromFrameLow);
+  setControlValue(cropperHighDeltaInput, thermalCropper.highlightMaxDeltaFromFrameHigh);
 }
 
 function applyStreamConfig(stream) {
@@ -638,10 +667,19 @@ function formatOneDecimal(value) {
 }
 
 function normalizeCropperSettings(settings) {
+  const candidate = settings || {};
   return {
-    enabled: !settings || settings.enabled !== false,
-    active: Boolean(settings && settings.active),
-    restartRequired: Boolean(settings && settings.restartRequired),
+    enabled: candidate.enabled !== false,
+    active: Boolean(candidate.active),
+    restartRequired: Boolean(candidate.restartRequired),
+    passthroughWhenNoRegion: candidate.passthroughWhenNoRegion !== false,
+    cropUnitThermalPixels: Math.round(clampNumber(candidate.cropUnitThermalPixels, 1, 16, 2)),
+    minRegionSize: Math.round(clampNumber(candidate.minRegionSize, 1, 768, 15)),
+    inflationRadiusThermalPixels: Math.round(clampNumber(candidate.inflationRadiusThermalPixels, 0, 32, 2)),
+    highlightMinTemp: clampNumber(candidate.highlightMinTemp, -100, 1000, 28),
+    highlightMaxTemp: clampNumber(candidate.highlightMaxTemp, -100, 1000, 40),
+    highlightMinDeltaFromFrameLow: clampNumber(candidate.highlightMinDeltaFromFrameLow, 0, 1000, 3),
+    highlightMaxDeltaFromFrameHigh: clampNumber(candidate.highlightMaxDeltaFromFrameHigh, 0, 1000, 1000),
   };
 }
 
@@ -764,16 +802,58 @@ function updateThermalAlignmentFromUi(source, formatActive = false) {
   }, 150);
 }
 
-async function updateThermalCropperFromUi() {
-  thermalCropper = normalizeCropperSettings({
+function readThermalCropperFromUi() {
+  return normalizeCropperSettings({
     ...thermalCropper,
     enabled: cropperEnabledInput ? cropperEnabledInput.checked : thermalCropper.enabled,
+    passthroughWhenNoRegion: cropperPassthroughInput
+      ? cropperPassthroughInput.checked
+      : thermalCropper.passthroughWhenNoRegion,
+    cropUnitThermalPixels: inputNumber(cropperUnitInput, thermalCropper.cropUnitThermalPixels),
+    minRegionSize: inputNumber(cropperMinRegionInput, thermalCropper.minRegionSize),
+    inflationRadiusThermalPixels: inputNumber(cropperInflationInput, thermalCropper.inflationRadiusThermalPixels),
+    highlightMinTemp: inputNumber(cropperMinTempInput, thermalCropper.highlightMinTemp),
+    highlightMaxTemp: inputNumber(cropperMaxTempInput, thermalCropper.highlightMaxTemp),
+    highlightMinDeltaFromFrameLow: inputNumber(cropperLowDeltaInput, thermalCropper.highlightMinDeltaFromFrameLow),
+    highlightMaxDeltaFromFrameHigh: inputNumber(cropperHighDeltaInput, thermalCropper.highlightMaxDeltaFromFrameHigh),
   });
+}
+
+async function updateThermalCropperFromUi() {
+  thermalCropper = readThermalCropperFromUi();
   try {
     const response = await request('/api/thermal-cropper', thermalCropper);
     setThermalCropperUi(response.cropper);
   } catch (error) {
     connection.textContent = error.message;
+  }
+}
+
+async function saveFullModeParams() {
+  updateOverlayAlphaFromUi(overlayAlphaInput, true);
+  updateThermalAlignmentFromUi(thermalStretchYInput, true);
+  thermalCropper = readThermalCropperFromUi();
+  setThermalCropperUi(thermalCropper);
+
+  const originalText = saveParamsButton.textContent;
+  saveParamsButton.disabled = true;
+  try {
+    const response = await request('/api/full-mode-params', {
+      overlayAlpha,
+      alignment: thermalAlignment,
+      cropper: thermalCropper,
+    });
+    saveParamsButton.textContent = 'Saved';
+    saveParamsButton.classList.add('saved');
+    connection.textContent = `Saved Full-mode parameters to ${response.file}`;
+    setTimeout(() => {
+      saveParamsButton.textContent = originalText;
+      saveParamsButton.classList.remove('saved');
+    }, 1500);
+  } catch (error) {
+    connection.textContent = `Parameter save failed: ${error.message}`;
+  } finally {
+    saveParamsButton.disabled = false;
   }
 }
 
@@ -889,14 +969,32 @@ function depthColor(value) {
   input.addEventListener('wheel', (event) => stepNumberInput(input, event, updateThermalAlignmentFromUi));
 });
 
-if (cropperEnabledInput) {
-  cropperEnabledInput.addEventListener('change', () => updateThermalCropperFromUi());
-}
+[cropperEnabledInput, cropperPassthroughInput].forEach((input) => {
+  if (input) input.addEventListener('change', () => updateThermalCropperFromUi());
+});
+
+[
+  cropperUnitInput,
+  cropperMinRegionInput,
+  cropperInflationInput,
+  cropperMinTempInput,
+  cropperMaxTempInput,
+  cropperLowDeltaInput,
+  cropperHighDeltaInput,
+].forEach((input) => {
+  if (!input) return;
+  input.addEventListener('change', () => updateThermalCropperFromUi());
+  input.addEventListener('wheel', (event) => stepNumberInput(input, event, updateThermalCropperFromUi));
+});
 
 if (overlayAlphaInput) {
   overlayAlphaInput.addEventListener('input', () => updateOverlayAlphaFromUi(overlayAlphaInput));
   overlayAlphaInput.addEventListener('change', () => updateOverlayAlphaFromUi(overlayAlphaInput, true));
   overlayAlphaInput.addEventListener('wheel', (event) => stepNumberInput(overlayAlphaInput, event, updateOverlayAlphaFromUi));
+}
+
+if (saveParamsButton) {
+  saveParamsButton.addEventListener('click', () => saveFullModeParams());
 }
 
 if (startToggle) {

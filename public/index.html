@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Thermal Node</title>
-    <link rel="stylesheet" href="/styles.css?v=20260724-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260724-2" />
   </head>
   <body>
     <main>
@@ -50,20 +50,54 @@
               </label>
               <label class="overlay-alpha">
                 <span>H</span>
-                <input id="thermal-stretch-x" class="number-field" type="number" min="50" max="150" step="0.1" value="100.0" />
+                <input id="thermal-stretch-x" class="number-field" type="number" min="50" max="150" step="0.1" value="80.0" />
               </label>
               <label class="overlay-alpha">
                 <span>V</span>
-                <input id="thermal-stretch-y" class="number-field" type="number" min="50" max="150" step="0.1" value="100.0" />
+                <input id="thermal-stretch-y" class="number-field" type="number" min="50" max="150" step="0.1" value="90.0" />
               </label>
             </div>
             <div class="tuning-group">
               <h2>Cropper</h2>
+              <p class="tuning-note">Saved for the next ROS start.</p>
               <label class="check-field">
                 <input id="cropper-enabled" type="checkbox" />
                 <span>Launch on next start</span>
               </label>
+              <label class="check-field">
+                <input id="cropper-passthrough" type="checkbox" />
+                <span>Pass through when empty</span>
+              </label>
+              <label class="overlay-alpha">
+                <span>Crop unit</span>
+                <input id="cropper-unit" class="number-field" type="number" min="1" max="16" step="1" value="2" />
+              </label>
+              <label class="overlay-alpha">
+                <span>Min region</span>
+                <input id="cropper-min-region" class="number-field" type="number" min="1" max="768" step="1" value="15" />
+              </label>
+              <label class="overlay-alpha">
+                <span>Inflation</span>
+                <input id="cropper-inflation" class="number-field" type="number" min="0" max="32" step="1" value="2" />
+              </label>
+              <label class="overlay-alpha">
+                <span>Min °C</span>
+                <input id="cropper-min-temp" class="number-field" type="number" min="-100" max="1000" step="0.1" value="28.0" />
+              </label>
+              <label class="overlay-alpha">
+                <span>Max °C</span>
+                <input id="cropper-max-temp" class="number-field" type="number" min="-100" max="1000" step="0.1" value="40.0" />
+              </label>
+              <label class="overlay-alpha">
+                <span>Low delta</span>
+                <input id="cropper-low-delta" class="number-field" type="number" min="0" max="1000" step="0.1" value="3.0" />
+              </label>
+              <label class="overlay-alpha">
+                <span>High delta</span>
+                <input id="cropper-high-delta" class="number-field" type="number" min="0" max="1000" step="0.1" value="1000.0" />
+              </label>
             </div>
+            <button id="save-params" class="save-params" type="button">Save to parameter file</button>
           </div>
         </div>
       </section>
@@ -80,6 +114,6 @@
         <pre id="logs">No launch output yet.</pre>
       </section>
     </main>
-    <script src="/app.js?v=20260724-5"></script>
+    <script src="/app.js?v=20260724-8"></script>
   </body>
 </html>
