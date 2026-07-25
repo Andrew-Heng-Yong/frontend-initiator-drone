@@ -57,7 +57,7 @@ const STREAM_CONFIG = {
   },
   useCameraInfoFov: process.env.USE_CAMERA_INFO_FOV ? process.env.USE_CAMERA_INFO_FOV === 'true' : STREAM_PARAMS.use_camera_info_fov === true,
   flipThermalX: process.env.THERMAL_FLIP_X ? process.env.THERMAL_FLIP_X !== 'false' : (DASHBOARD_PARAMS.thermal_display || {}).flip_x !== false,
-  flipThermalY: process.env.THERMAL_FLIP_Y ? process.env.THERMAL_FLIP_Y !== 'false' : (DASHBOARD_PARAMS.thermal_display || {}).flip_y !== false,
+  flipThermalY: process.env.THERMAL_FLIP_Y ? process.env.THERMAL_FLIP_Y === 'true' : (DASHBOARD_PARAMS.thermal_display || {}).flip_y === true,
 };
 const MAX_LOG_LINES = Number(SYSTEM_PARAMS.max_log_lines || 160);
 const DEFAULT_THERMAL_ALIGNMENT = {

@@ -37,7 +37,7 @@ let cameraInfoFov = null;
 let useCameraInfoFov = false;
 let baseViewMode = 'full-depth';
 let flipThermalX = true;
-let flipThermalY = true;
+let flipThermalY = false;
 let thermalAlignment = { offsetX: 0, offsetY: 0, scale: 1, stretchX: 1, stretchY: 1 };
 let thermalCropper = { enabled: true, active: false, restartRequired: false };
 
@@ -620,7 +620,7 @@ function applyStreamConfig(stream) {
   baseViewMode = stream.baseViewMode === 'thermal-crop' ? 'thermal-crop' : 'full-depth';
   cameraFov = useCameraInfoFov && cameraInfoFov ? cameraInfoFov : finiteFov(stream.cameraFov, cameraFov);
   flipThermalX = stream.flipThermalX !== false;
-  flipThermalY = stream.flipThermalY !== false;
+  flipThermalY = stream.flipThermalY === true;
   setThermalAlignmentUi(stream.alignment);
   setThermalCropperUi(stream.cropper);
   if (frontendModeChanged && frontendMode === 'simple') showWaitingForSimpleCrop();
