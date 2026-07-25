@@ -25,7 +25,7 @@ Runtime defaults are loaded from `config/master_params.yaml`. Camera intrinsics,
 
 Set `camera_streams.ros__parameters.frontend_mode` to choose the browser display:
 
-- `simple`: subscribe only to the thermal-cropped depth output and throttled IMU data, then scale valid crops into a fixed `640x480` window. Full-size passthrough frames are ignored while the cropper waits for a thermal region.
+- `simple`: subscribe only to the thermal-cropped depth output and throttled IMU data, then place valid crops in a fixed `1024x768` depth window. Full-size passthrough frames are ignored while the cropper waits for a thermal region.
 - `full`: subscribe to depth, thermal, camera info, and IMU topics for the full overlay/tuning dashboard.
 
 If the Orbbec setup is missing, the server logs the missing setup path and exits instead of launching thermal-only mode.
@@ -40,10 +40,10 @@ The dashboard can be pointed at another compatible thermal backend without editi
 DRONE_LAUNCH_COMMAND='ros2 launch <package> <launch-file> start_rosbridge:=true' \
 DEPTH_IMAGE_TOPIC=/camera/depth/image_raw \
 THERMAL_IMAGE_TOPIC=/thermal/image_raw \
-DEPTH_FOV_HORIZONTAL=67 \
-DEPTH_FOV_VERTICAL=53.6 \
-THERMAL_FOV_HORIZONTAL=55 \
-THERMAL_FOV_VERTICAL=35 \
+DEPTH_FOV_HORIZONTAL=79 \
+DEPTH_FOV_VERTICAL=62 \
+THERMAL_FOV_HORIZONTAL=90 \
+THERMAL_FOV_VERTICAL=68 \
 npm start
 ```
 
@@ -53,7 +53,7 @@ The dashboard also subscribes to `/camera/depth/camera_info` by default and disp
 
 By default `BASE_VIEW_MODE=full-depth`: the depth image is the main viewport and thermal is blended into the configured thermal FOV area. The dashboard subscribes to the cropper output topics, but the cropper starts disabled and passes raw frames through until you enable it.
 
-The baked fallback thermal alignment is `X=10`, `Y=0`, `Scale=80`, `H=80`, `V=100`. This keeps vertical zoom unchanged and shrinks horizontal coverage from the right edge, matching the observed case where the right side aligned while the left side was too far left. The saved `.thermal-alignment.json` file still overrides these defaults after manual tuning.
+The thermal overlay defaults to neutral manual alignment (`X=0`, `Y=0`, `Scale=100`, `H=100`, `V=100`). Its size comes from the configured FOVs: depth is `79° x 62°`, and thermal is `90° x 68°`. Because the thermal FOV is wider, its projected overlay extends beyond the depth viewport and is clipped at the depth edges.
 
 For depth overlay, make sure the Orbbec workspace exists at `~/orbbec_ws/install/setup.bash`:
 
@@ -82,7 +82,7 @@ If the thermal image is visible but does not line up with depth, use a small hot
 
 The ROS cropper node uses highlighted thermal pixels to publish `/camera/depth/cropped/image_raw` and `/thermal/cropped/image_raw`. In simple mode it does not publish uncropped fallback frames while no thermal region is present. Valid regions publish rectangular crops around the selected thermal cluster and the frontend scales the crop into its fixed display. Each crop unit covers `crop_unit_thermal_pixels` square thermal pixels, clusters count diagonal neighbors, `min_region_size` rejects small clusters, and `inflation_radius_thermal_pixels` expands the crop region. Cropper tuning values live in the `thermal_cropper` block in `config/master_params.yaml` and are passed to `thermal_cropper_node` at launch.
 
-The built-in dashboard calibration defaults are `Overlay=50.0`, `X=25.0`, `Y=-10.0`, `Scale=100.0`, `H=79.6`, and `V=115.4`. Delete `.thermal-alignment.json` to return to these defaults after local tuning.
+The built-in dashboard calibration defaults are `Overlay=50.0`, `X=0.0`, `Y=0.0`, `Scale=100.0`, `H=100.0`, and `V=100.0`. Saved alignment files carry a geometry revision, so calibration from an older FOV setup is ignored automatically.
 
 Set `ROS2_WORKSPACE` when the ROS workspace is not beside this directory. The dashboard defaults to ROS 2 Jazzy; set `ROS_DISTRO` if you are using another distro, and `PORT` to change the dashboard port.
 

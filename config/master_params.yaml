@@ -39,10 +39,10 @@ camera_streams:
     thermal_image_topic: /thermal/cropped/image_raw
     imu_topic: /imu/data_raw
     imu_temperature_topic: /imu/temperature
-    depth_fov_horizontal: 67.0
-    depth_fov_vertical: 53.6
-    thermal_fov_horizontal: 55.0
-    thermal_fov_vertical: 35.0
+    depth_fov_horizontal: 79.0
+    depth_fov_vertical: 62.0
+    thermal_fov_horizontal: 90.0
+    thermal_fov_vertical: 68.0
 
     depth_image_type: sensor_msgs/msg/Image
     depth_camera_info_type: sensor_msgs/msg/CameraInfo
@@ -92,12 +92,16 @@ thermal_dashboard:
       highlight_min_delta_from_frame_low: 3.0
       highlight_max_delta_from_frame_high: 1000.0
 
-    # Thermal-to-depth overlay alignment. These match the current server defaults.
+    # Increment this whenever optical geometry changes so saved hand-tuned values
+    # from an older camera setup are not reused.
+    thermal_alignment_revision: fov-79x62-thermal-90x68
+
+    # Neutral thermal-to-depth alignment. FOV alone determines the overlay size.
     thermal_alignment:
-      offset_x: 10.0
+      offset_x: 0.0
       offset_y: 0.0
-      scale: 0.8
-      stretch_x: 0.8
+      scale: 1.0
+      stretch_x: 1.0
       stretch_y: 1.0
 
     thermal_alignment_limits:

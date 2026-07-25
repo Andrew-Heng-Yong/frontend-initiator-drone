@@ -30,9 +30,9 @@ let imageTopics = {
   imu: '/imu/data_raw',
 };
 let frontendMode = 'full';
-const SIMPLE_DISPLAY_SIZE = { width: 640, height: 480 };
-let thermalFov = { horizontal: 55, vertical: 35 };
-let cameraFov = { horizontal: 67, vertical: 53.6 };
+const SIMPLE_DISPLAY_SIZE = { width: 1024, height: 768 };
+let thermalFov = { horizontal: 90, vertical: 68 };
+let cameraFov = { horizontal: 79, vertical: 62 };
 let cameraInfoFov = null;
 let useCameraInfoFov = false;
 let baseViewMode = 'full-depth';
@@ -221,7 +221,9 @@ function scheduleDraw() {
 function fovFraction(innerDegrees, outerDegrees) {
   const inner = Math.tan((innerDegrees * Math.PI / 180) / 2);
   const outer = Math.tan((outerDegrees * Math.PI / 180) / 2);
-  return outer > 0 ? Math.max(0, Math.min(1, inner / outer)) : 1;
+  // Do not cap this at 1: the 90°x68° thermal frame extends beyond
+  // the 79°x62° depth viewport, so its projected size must be larger.
+  return outer > 0 ? Math.max(0, inner / outer) : 1;
 }
 
 function updateCameraInfo(info) {

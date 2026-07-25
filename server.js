@@ -14,6 +14,7 @@ const DRONE_PARAMS = rosParams('drone_control');
 const STREAM_PARAMS = rosParams('camera_streams');
 const DASHBOARD_PARAMS = rosParams('thermal_dashboard');
 const THERMAL_ALIGNMENT_PARAMS = DASHBOARD_PARAMS.thermal_alignment || {};
+const THERMAL_ALIGNMENT_REVISION = String(DASHBOARD_PARAMS.thermal_alignment_revision || 'default');
 const THERMAL_CROPPER_PARAMS = DASHBOARD_PARAMS.thermal_cropper || {};
 const CAMERA_CALIBRATIONS_PARAMS_FILE = resolveLocalPath(
   process.env.CAMERA_CALIBRATIONS_PARAMS
@@ -45,8 +46,8 @@ const STREAM_CONFIG = {
   imuTopic: process.env.IMU_TOPIC || STREAM_PARAMS.imu_topic || '/imu/data_raw',
   baseViewMode: process.env.BASE_VIEW_MODE || STREAM_PARAMS.base_view_mode || 'full-depth',
   thermalFov: {
-    horizontal: Number(process.env.THERMAL_FOV_HORIZONTAL || STREAM_PARAMS.thermal_fov_horizontal || 55),
-    vertical: Number(process.env.THERMAL_FOV_VERTICAL || STREAM_PARAMS.thermal_fov_vertical || 35),
+    horizontal: Number(process.env.THERMAL_FOV_HORIZONTAL || STREAM_PARAMS.thermal_fov_horizontal || 90),
+    vertical: Number(process.env.THERMAL_FOV_VERTICAL || STREAM_PARAMS.thermal_fov_vertical || 68),
   },
   cameraFov: {
     horizontal: requiredNumber('camera_streams.depth_fov_horizontal', process.env.DEPTH_FOV_HORIZONTAL || STREAM_PARAMS.depth_fov_horizontal),
@@ -57,10 +58,10 @@ const STREAM_CONFIG = {
 };
 const MAX_LOG_LINES = Number(SYSTEM_PARAMS.max_log_lines || 160);
 const DEFAULT_THERMAL_ALIGNMENT = {
-  offsetX: THERMAL_ALIGNMENT_PARAMS.offset_x ?? 10,
+  offsetX: THERMAL_ALIGNMENT_PARAMS.offset_x ?? 0,
   offsetY: THERMAL_ALIGNMENT_PARAMS.offset_y ?? 0,
-  scale: THERMAL_ALIGNMENT_PARAMS.scale ?? 0.8,
-  stretchX: THERMAL_ALIGNMENT_PARAMS.stretch_x ?? 0.8,
+  scale: THERMAL_ALIGNMENT_PARAMS.scale ?? 1,
+  stretchX: THERMAL_ALIGNMENT_PARAMS.stretch_x ?? 1,
   stretchY: THERMAL_ALIGNMENT_PARAMS.stretch_y ?? 1,
 };
 const DEFAULT_THERMAL_CROPPER = {
@@ -221,7 +222,10 @@ function readThermalAlignment() {
     stretchY: process.env.THERMAL_STRETCH_Y || DEFAULT_THERMAL_ALIGNMENT.stretchY,
   });
   try {
-    return normalizeThermalAlignment(JSON.parse(fs.readFileSync(ALIGNMENT_FILE, 'utf8')));
+    const saved = JSON.parse(fs.readFileSync(ALIGNMENT_FILE, 'utf8'));
+    return saved.revision === THERMAL_ALIGNMENT_REVISION
+      ? normalizeThermalAlignment(saved)
+      : defaults;
   } catch (_) {
     return defaults;
   }
@@ -254,7 +258,10 @@ function saveThermalCropper() {
 
 function saveThermalAlignment() {
   try {
-    fs.writeFileSync(ALIGNMENT_FILE, `${JSON.stringify(thermalAlignment, null, 2)}\n`);
+    fs.writeFileSync(ALIGNMENT_FILE, `${JSON.stringify({
+      revision: THERMAL_ALIGNMENT_REVISION,
+      ...thermalAlignment,
+    }, null, 2)}\n`);
   } catch (error) {
     addLog(`Could not save thermal alignment: ${error.message}`);
   }
