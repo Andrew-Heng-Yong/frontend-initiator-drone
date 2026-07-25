@@ -104,11 +104,11 @@ thermal_dashboard:
     # Thermal-to-depth overlay defaults confirmed from the dashboard controls.
     thermal_alignment:
       offset_x: 0.0
-      offset_y: 0.0
-      scale: 1.0
-      barrel_distortion: 0.0
-      stretch_x: 0.8
-      stretch_y: 0.9
+      offset_y: 0.1
+      scale: 0.85
+      barrel_distortion: -0.2
+      stretch_x: 0.9
+      stretch_y: 1.0
 
     thermal_alignment_limits:
       offset_x: [-320.0, 320.0]
