@@ -75,6 +75,7 @@ thermal_dashboard:
       default_height: 62
       minimum_temperature_span: 0.5
       flip_x: true
+      flip_y: true
       color_map:
         - [20, 28, 65]
         - [37, 104, 183]

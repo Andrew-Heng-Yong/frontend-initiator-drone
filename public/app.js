@@ -37,6 +37,7 @@ let cameraInfoFov = null;
 let useCameraInfoFov = false;
 let baseViewMode = 'full-depth';
 let flipThermalX = true;
+let flipThermalY = true;
 let thermalAlignment = { offsetX: 0, offsetY: 0, scale: 1, stretchX: 1, stretchY: 1 };
 let thermalCropper = { enabled: true };
 
@@ -552,7 +553,8 @@ function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
   const drawTop = Math.max(0, top);
 
   for (let y = drawTop; y < bottom; y += 1) {
-    const thermalY = Math.max(0, Math.min(height - 1, Math.floor(((y - top) / Math.max(1, overlayHeight)) * height)));
+    const scaledY = Math.max(0, Math.min(height - 1, Math.floor(((y - top) / Math.max(1, overlayHeight)) * height)));
+    const thermalY = flipThermalY ? height - 1 - scaledY : scaledY;
     for (let x = drawLeft; x < right; x += 1) {
       const scaledX = Math.max(0, Math.min(width - 1, Math.floor(((x - left) / Math.max(1, overlayWidth)) * width)));
       const thermalX = flipThermalX ? width - 1 - scaledX : scaledX;
@@ -618,6 +620,7 @@ function applyStreamConfig(stream) {
   baseViewMode = stream.baseViewMode === 'thermal-crop' ? 'thermal-crop' : 'full-depth';
   cameraFov = useCameraInfoFov && cameraInfoFov ? cameraInfoFov : finiteFov(stream.cameraFov, cameraFov);
   flipThermalX = stream.flipThermalX !== false;
+  flipThermalY = stream.flipThermalY !== false;
   setThermalAlignmentUi(stream.alignment);
   setThermalCropperUi(stream.cropper);
   if (frontendModeChanged && frontendMode === 'simple') showWaitingForSimpleCrop();
