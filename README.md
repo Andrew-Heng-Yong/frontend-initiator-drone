@@ -55,7 +55,7 @@ The dashboard also subscribes to `/camera/depth/camera_info` by default and disp
 
 By default `BASE_VIEW_MODE=full-depth`: the depth image is the main viewport and thermal is blended into the configured thermal FOV area. The Cropper checkbox controls the next ROS launch and never changes the running graph. When selected, the next Start launches the cropper and subscribes to `/camera/depth/cropped/image_raw`, `/camera/depth/cropped/camera_info`, and `/thermal/cropped/image_raw`. When cleared, the next Start omits the cropper node and subscribes directly to the corresponding raw topics.
 
-The thermal overlay defaults are `Blend=50`, `X=0`, `Y=0`, `Scale=100`, `H=80`, and `V=90`. Its base size comes from the configured FOVs: depth is `79° x 62°`, and thermal is `90° x 68°`.
+The thermal overlay defaults are `Blend=50`, `X=0`, `Y=0`, `Scale=100`, `Barrel=0`, `H=80`, and `V=90`. Its base size comes from the configured FOVs: depth is `79° x 62°`, and thermal is `90° x 68°`.
 
 The thermal display is mirrored along the Y axis by default: `thermal_display.flip_x` is enabled and `thermal_display.flip_y` is disabled. Set `THERMAL_FLIP_X=false` to display the sensor-native orientation.
 
@@ -82,17 +82,17 @@ For MI0802 hardware, the default device is `/dev/ttyACM0`; the stable target pat
 
 For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. The default launch command enables the IMU with `start_imu:=true`; it publishes `sensor_msgs/Imu` on `/imu/data_raw` and chip temperature on `/imu/temperature`.
 
-If the thermal image is visible but does not line up with depth, use a small hot target such as a candle or warm hand and tune the dashboard `X`, `Y`, `Scale`, `H`, and `V` controls until the thermal hot spot lands on the same depth object. The dashboard saves the tuned values in `.thermal-alignment.json`; they can also be seeded with `THERMAL_OFFSET_X`, `THERMAL_OFFSET_Y`, `THERMAL_SCALE`, `THERMAL_STRETCH_X`, and `THERMAL_STRETCH_Y`.
+If the thermal image is visible but does not line up with depth, use a small hot target such as a candle or warm hand and tune the dashboard `X`, `Y`, `Scale`, `Barrel`, `H`, and `V` controls until the thermal hot spot lands on the same depth object. `Barrel` applies signed radial distortion to the thermal overlay in Full mode: `0` disables it, positive values contract the image near the edges, and negative values expand it while leaving the center fixed. The dashboard saves the tuned values in `.thermal-alignment.json`; they can also be seeded with `THERMAL_OFFSET_X`, `THERMAL_OFFSET_Y`, `THERMAL_SCALE`, `THERMAL_BARREL_DISTORTION`, `THERMAL_STRETCH_X`, and `THERMAL_STRETCH_Y`.
 
 The ROS cropper node uses highlighted thermal pixels to publish `/camera/depth/cropped/image_raw` and `/thermal/cropped/image_raw`. In simple mode it does not publish uncropped fallback frames while no thermal region is present. Valid regions publish rectangular crops around the selected thermal cluster and the frontend scales the crop into its fixed display. Each crop unit covers `crop_unit_thermal_pixels` square thermal pixels, clusters count diagonal neighbors, `min_region_size` rejects small clusters, and `inflation_radius_thermal_pixels` expands the crop region. Cropper tuning values live in the `thermal_cropper` block in `config/master_params.yaml` and are passed to `thermal_cropper_node` at launch.
 
-The frontend and ROS cropper receive the same FOV, alignment, stretch, and axis-flip launch parameters. Cropped thermal frames remain in their native 80×62 coordinates, so Full mode applies that shared transform instead of stretching the thermal mask across the complete depth frame.
+The frontend and ROS cropper receive the same FOV, linear alignment, stretch, and axis-flip launch parameters. `Barrel` is a Full-mode frontend correction and is not passed to the cropper. Cropped thermal frames remain in their native 80×62 coordinates, so Full mode applies the configured transform instead of stretching the thermal mask across the complete depth frame.
 
 Full mode exposes the crop unit, minimum region, inflation, temperature bounds, frame-relative delta bounds, and empty-frame passthrough settings in the Cropper panel. Changes are persisted to `.thermal-cropper.json` and applied only on the next ROS start.
 
 Use **Save to parameter file** in the Full-mode tuning panel to write the current Blend, overlay alignment, and cropper controls into the loaded `master_params.yaml`. The button also keeps the alignment and cropper sidecar files synchronized with those values.
 
-The built-in dashboard calibration defaults are `Overlay=50.0`, `X=0.0`, `Y=0.0`, `Scale=100.0`, `H=80.0`, and `V=90.0`. Saved alignment files carry a geometry revision, so calibration from an older setup is ignored automatically.
+The built-in dashboard calibration defaults are `Overlay=50.0`, `X=0.0`, `Y=0.0`, `Scale=100.0`, `Barrel=0.000`, `H=80.0`, and `V=90.0`. Saved alignment files carry a geometry revision, so calibration from an older setup is ignored automatically.
 
 Set `ROS2_WORKSPACE` when the ROS workspace is not beside this directory. The dashboard defaults to ROS 2 Jazzy; set `ROS_DISTRO` if you are using another distro, and `PORT` to change the dashboard port.
 

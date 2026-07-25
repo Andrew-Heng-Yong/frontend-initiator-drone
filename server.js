@@ -64,6 +64,7 @@ const DEFAULT_THERMAL_ALIGNMENT = {
   offsetX: THERMAL_ALIGNMENT_PARAMS.offset_x ?? 0,
   offsetY: THERMAL_ALIGNMENT_PARAMS.offset_y ?? 0,
   scale: THERMAL_ALIGNMENT_PARAMS.scale ?? 1,
+  barrelDistortion: THERMAL_ALIGNMENT_PARAMS.barrel_distortion ?? 0,
   stretchX: THERMAL_ALIGNMENT_PARAMS.stretch_x ?? 0.8,
   stretchY: THERMAL_ALIGNMENT_PARAMS.stretch_y ?? 0.9,
 };
@@ -291,6 +292,7 @@ function normalizeThermalAlignment(alignment) {
     offsetX: Number.isFinite(offsetX) ? Math.max(-1000, Math.min(1000, offsetX)) : 0,
     offsetY: Number.isFinite(offsetY) ? Math.max(-1000, Math.min(1000, offsetY)) : 0,
     scale: Number.isFinite(scale) && scale > 0 ? Math.max(0.1, Math.min(3, scale)) : 1,
+    barrelDistortion: normalizeLaunchNumber(alignment.barrelDistortion, -1, 1, 0),
     stretchX: normalizeAlignmentScale(alignment.stretchX),
     stretchY: normalizeAlignmentScale(alignment.stretchY),
   };
@@ -306,6 +308,7 @@ function readThermalAlignment() {
     offsetX: process.env.THERMAL_OFFSET_X || DEFAULT_THERMAL_ALIGNMENT.offsetX,
     offsetY: process.env.THERMAL_OFFSET_Y || DEFAULT_THERMAL_ALIGNMENT.offsetY,
     scale: process.env.THERMAL_SCALE || DEFAULT_THERMAL_ALIGNMENT.scale,
+    barrelDistortion: process.env.THERMAL_BARREL_DISTORTION || DEFAULT_THERMAL_ALIGNMENT.barrelDistortion,
     stretchX: process.env.THERMAL_STRETCH_X || DEFAULT_THERMAL_ALIGNMENT.stretchX,
     stretchY: process.env.THERMAL_STRETCH_Y || DEFAULT_THERMAL_ALIGNMENT.stretchY,
   });
@@ -511,6 +514,9 @@ async function setThermalAlignment(request) {
   const offsetX = Number(body.offsetX);
   const offsetY = Number(body.offsetY);
   const scale = Number(body.scale);
+  const barrelDistortion = body.barrelDistortion == null
+    ? thermalAlignment.barrelDistortion
+    : Number(body.barrelDistortion);
   const stretchX = body.stretchX == null ? 1 : Number(body.stretchX);
   const stretchY = body.stretchY == null ? 1 : Number(body.stretchY);
   if (!Number.isFinite(offsetX) || offsetX < -1000 || offsetX > 1000) {
@@ -522,13 +528,16 @@ async function setThermalAlignment(request) {
   if (!Number.isFinite(scale) || scale < 0.1 || scale > 3) {
     throw new Error('scale must be a number from 0.1 to 3.0');
   }
+  if (!Number.isFinite(barrelDistortion) || barrelDistortion < -1 || barrelDistortion > 1) {
+    throw new Error('barrelDistortion must be a number from -1.0 to 1.0');
+  }
   if (!Number.isFinite(stretchX) || stretchX < 0.1 || stretchX > 3) {
     throw new Error('stretchX must be a number from 0.1 to 3.0');
   }
   if (!Number.isFinite(stretchY) || stretchY < 0.1 || stretchY > 3) {
     throw new Error('stretchY must be a number from 0.1 to 3.0');
   }
-  thermalAlignment = { offsetX, offsetY, scale, stretchX, stretchY };
+  thermalAlignment = { offsetX, offsetY, scale, barrelDistortion, stretchX, stretchY };
   saveThermalAlignment();
   return { ok: true, applied: true, alignment: thermalAlignment };
 }
@@ -555,6 +564,7 @@ async function saveFullModeParams(request) {
     ['thermal_dashboard.ros__parameters.thermal_alignment.offset_x', nextAlignment.offsetX],
     ['thermal_dashboard.ros__parameters.thermal_alignment.offset_y', nextAlignment.offsetY],
     ['thermal_dashboard.ros__parameters.thermal_alignment.scale', nextAlignment.scale],
+    ['thermal_dashboard.ros__parameters.thermal_alignment.barrel_distortion', nextAlignment.barrelDistortion],
     ['thermal_dashboard.ros__parameters.thermal_alignment.stretch_x', nextAlignment.stretchX],
     ['thermal_dashboard.ros__parameters.thermal_alignment.stretch_y', nextAlignment.stretchY],
     ['thermal_dashboard.ros__parameters.thermal_cropper.enabled', nextCropper.enabled],

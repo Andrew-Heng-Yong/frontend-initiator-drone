@@ -106,6 +106,7 @@ thermal_dashboard:
       offset_x: 0.0
       offset_y: 0.0
       scale: 1.0
+      barrel_distortion: 0.0
       stretch_x: 0.8
       stretch_y: 0.9
 
@@ -113,6 +114,7 @@ thermal_dashboard:
       offset_x: [-320.0, 320.0]
       offset_y: [-240.0, 240.0]
       scale: [0.5, 1.5]
+      barrel_distortion: [-1.0, 1.0]
       stretch_x: [0.5, 1.5]
       stretch_y: [0.5, 1.5]
       overlay_alpha: [0.0, 1.0]

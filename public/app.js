@@ -20,6 +20,7 @@ const overlayAlphaInput = document.querySelector('#overlay-alpha');
 const thermalOffsetXInput = document.querySelector('#thermal-offset-x');
 const thermalOffsetYInput = document.querySelector('#thermal-offset-y');
 const thermalScaleInput = document.querySelector('#thermal-scale');
+const thermalBarrelDistortionInput = document.querySelector('#thermal-barrel-distortion');
 const thermalStretchXInput = document.querySelector('#thermal-stretch-x');
 const thermalStretchYInput = document.querySelector('#thermal-stretch-y');
 const cropperEnabledInput = document.querySelector('#cropper-enabled');
@@ -47,7 +48,14 @@ let useCameraInfoFov = false;
 let baseViewMode = 'full-depth';
 let flipThermalX = true;
 let flipThermalY = false;
-let thermalAlignment = { offsetX: 0, offsetY: 0, scale: 1, stretchX: 0.8, stretchY: 0.9 };
+let thermalAlignment = {
+  offsetX: 0,
+  offsetY: 0,
+  scale: 1,
+  barrelDistortion: 0,
+  stretchX: 0.8,
+  stretchY: 0.9,
+};
 let thermalCropper = {
   enabled: true,
   active: false,
@@ -571,13 +579,30 @@ function overlayThermalOnCamera(output, cameraWidth, cameraHeight) {
   const bottom = Math.min(cameraHeight, top + overlayHeight);
   const drawLeft = Math.max(0, left);
   const drawTop = Math.max(0, top);
+  const inverseOverlayWidth = 1 / Math.max(1, overlayWidth);
+  const inverseOverlayHeight = 1 / Math.max(1, overlayHeight);
+  const barrelDistortion = thermalAlignment.barrelDistortion;
 
   for (let y = drawTop; y < bottom; y += 1) {
-    const scaledY = Math.max(0, Math.min(height - 1, Math.floor(((y - top) / Math.max(1, overlayHeight)) * height)));
-    const thermalY = flipThermalY ? height - 1 - scaledY : scaledY;
+    const destinationY = (y - top) * inverseOverlayHeight;
     for (let x = drawLeft; x < right; x += 1) {
-      const scaledX = Math.max(0, Math.min(width - 1, Math.floor(((x - left) / Math.max(1, overlayWidth)) * width)));
+      const destinationX = (x - left) * inverseOverlayWidth;
+      let sourceX = destinationX;
+      let sourceY = destinationY;
+      if (barrelDistortion !== 0) {
+        const normalizedX = destinationX * 2 - 1;
+        const normalizedY = destinationY * 2 - 1;
+        const radiusSquared = (normalizedX * normalizedX + normalizedY * normalizedY) / 2;
+        const radialScale = 1 + barrelDistortion * radiusSquared;
+        sourceX = (normalizedX * radialScale + 1) / 2;
+        sourceY = (normalizedY * radialScale + 1) / 2;
+      }
+      if (sourceX < 0 || sourceX >= 1 || sourceY < 0 || sourceY >= 1) continue;
+
+      const scaledX = Math.max(0, Math.min(width - 1, Math.floor(sourceX * width)));
+      const scaledY = Math.max(0, Math.min(height - 1, Math.floor(sourceY * height)));
       const thermalX = flipThermalX ? width - 1 - scaledX : scaledX;
+      const thermalY = flipThermalY ? height - 1 - scaledY : scaledY;
       const temperature = values[thermalY * width + thermalX];
       if (!Number.isFinite(temperature)) continue;
 
@@ -601,12 +626,14 @@ function setThermalAlignmentUi(alignment) {
   const offsetX = clampNumber(alignment && alignment.offsetX, -1000, 1000, 0);
   const offsetY = clampNumber(alignment && alignment.offsetY, -1000, 1000, 0);
   const scale = clampNumber(alignment && alignment.scale, 0.1, 3, 1);
+  const barrelDistortion = clampNumber(alignment && alignment.barrelDistortion, -1, 1, 0);
   const stretchX = clampNumber(alignment && alignment.stretchX, 0.1, 3, 0.8);
   const stretchY = clampNumber(alignment && alignment.stretchY, 0.1, 3, 0.9);
-  thermalAlignment = { offsetX, offsetY, scale, stretchX, stretchY };
+  thermalAlignment = { offsetX, offsetY, scale, barrelDistortion, stretchX, stretchY };
   setControlValue(thermalOffsetXInput, offsetX);
   setControlValue(thermalOffsetYInput, offsetY);
   setControlValue(thermalScaleInput, scale * 100);
+  setControlValue(thermalBarrelDistortionInput, barrelDistortion);
   setControlValue(thermalStretchXInput, stretchX * 100);
   setControlValue(thermalStretchYInput, stretchY * 100);
 }
@@ -661,8 +688,9 @@ function clampNumber(value, min, max, fallback) {
   return Math.max(min, Math.min(max, number));
 }
 
-function formatOneDecimal(value) {
-  return Number(value).toFixed(1);
+function formatControlValue(control, value) {
+  const precision = control === thermalBarrelDistortionInput ? 3 : 1;
+  return Number(value).toFixed(precision);
 }
 
 function normalizeCropperSettings(settings) {
@@ -684,7 +712,7 @@ function normalizeCropperSettings(settings) {
 
 function setControlValue(control, value, force = false) {
   if (!control || (!force && document.activeElement === control)) return;
-  control.value = formatOneDecimal(value);
+  control.value = formatControlValue(control, value);
 }
 
 function inputNumber(control, fallback) {
@@ -708,7 +736,7 @@ function stepNumberInput(input, event, onChange) {
     Number.isFinite(max) ? max : Infinity,
     fallback,
   );
-  input.value = formatOneDecimal(next);
+  input.value = formatControlValue(input, next);
   onChange(input, true);
 }
 
@@ -770,6 +798,10 @@ function updateThermalAlignmentFromUi(source, formatActive = false) {
     thermalScaleInput,
     thermalAlignment.scale * 100,
   ), 50, 150, thermalAlignment.scale * 100);
+  const barrelDistortion = clampNumber(inputNumber(
+    thermalBarrelDistortionInput,
+    thermalAlignment.barrelDistortion,
+  ), -1, 1, thermalAlignment.barrelDistortion);
   const stretchXPercent = clampNumber(inputNumber(
     thermalStretchXInput,
     thermalAlignment.stretchX * 100,
@@ -782,12 +814,14 @@ function updateThermalAlignmentFromUi(source, formatActive = false) {
     offsetX,
     offsetY,
     scale: scalePercent / 100,
+    barrelDistortion,
     stretchX: stretchXPercent / 100,
     stretchY: stretchYPercent / 100,
   };
   setControlValue(thermalOffsetXInput, offsetX, formatActive);
   setControlValue(thermalOffsetYInput, offsetY, formatActive);
   setControlValue(thermalScaleInput, scalePercent, formatActive);
+  setControlValue(thermalBarrelDistortionInput, barrelDistortion, formatActive);
   setControlValue(thermalStretchXInput, stretchXPercent, formatActive);
   setControlValue(thermalStretchYInput, stretchYPercent, formatActive);
   if (latestColor) scheduleDraw();
@@ -961,7 +995,14 @@ function depthColor(value) {
   return start.map((component, index) => Math.round(component + (end[index] - component) * mix));
 }
 
-[thermalOffsetXInput, thermalOffsetYInput, thermalScaleInput, thermalStretchXInput, thermalStretchYInput].forEach((input) => {
+[
+  thermalOffsetXInput,
+  thermalOffsetYInput,
+  thermalScaleInput,
+  thermalBarrelDistortionInput,
+  thermalStretchXInput,
+  thermalStretchYInput,
+].forEach((input) => {
   if (!input) return;
   input.addEventListener('input', () => updateThermalAlignmentFromUi(input));
   input.addEventListener('change', () => updateThermalAlignmentFromUi(input, true));
