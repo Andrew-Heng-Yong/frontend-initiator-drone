@@ -327,7 +327,7 @@ function readThermalAlignment() {
 
 function normalizeThermalCropper(settings) {
   const candidate = settings || {};
-  return {
+  const normalized = {
     enabled: candidate.enabled !== false,
     passthroughWhenNoRegion: candidate.passthroughWhenNoRegion == null
       ? DEFAULT_THERMAL_CROPPER.passthroughWhenNoRegion
@@ -340,6 +340,10 @@ function normalizeThermalCropper(settings) {
     highlightMinDeltaFromFrameLow: normalizeLaunchNumber(candidate.highlightMinDeltaFromFrameLow, 0, 1000, DEFAULT_THERMAL_CROPPER.highlightMinDeltaFromFrameLow),
     highlightMaxDeltaFromFrameHigh: normalizeLaunchNumber(candidate.highlightMaxDeltaFromFrameHigh, 0, 1000, DEFAULT_THERMAL_CROPPER.highlightMaxDeltaFromFrameHigh),
   };
+  if (STREAM_CONFIG.frontendMode !== 'simple' && normalized.enabled) {
+    normalized.passthroughWhenNoRegion = true;
+  }
+  return normalized;
 }
 
 function readThermalCropper() {
