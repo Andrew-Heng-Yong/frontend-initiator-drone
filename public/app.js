@@ -1160,7 +1160,7 @@ if (calibrateVioButton) {
       const response = await request('/api/vio/calibrate');
       calibrateVioButton.textContent = 'Keep still...';
       connection.textContent = response.message || 'Full VIO calibration started. Keep the drone stationary.';
-      await new Promise((resolve) => setTimeout(resolve, 1250));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (error) {
       connection.textContent = error.message;
     } finally {
