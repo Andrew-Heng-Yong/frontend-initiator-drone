@@ -4,6 +4,7 @@ const statusDot = document.querySelector('#status-dot');
 const statusText = document.querySelector('#status-text');
 const connection = document.querySelector('#connection');
 const startToggle = document.querySelector('#start-toggle');
+const calibrateVioButton = document.querySelector('#calibrate-vio');
 const cpuMini = document.querySelector('#cpu-mini');
 const imuMini = document.querySelector('#imu-mini');
 const canvas = document.querySelector('#thermal-canvas');
@@ -87,6 +88,7 @@ let drawScheduled = false;
 let viewerZoomPercent = readStoredViewerZoom();
 let cameraFrameToken = 0;
 let subscribedTopics = new Set();
+let calibrationRequestActive = false;
 const messageFragments = new Map();
 
 function setRunning(running) {
@@ -96,6 +98,7 @@ function setRunning(running) {
   stopButton.disabled = !running;
   if (!running) closeRosbridge();
   if (startToggle) startToggle.textContent = running ? 'Stop node' : 'Start node';
+  if (calibrateVioButton) calibrateVioButton.disabled = !running || calibrationRequestActive;
 }
 
 async function request(path, body) {
@@ -1144,6 +1147,27 @@ if (startToggle) {
       await refresh();
     } catch (error) {
       connection.textContent = error.message;
+    }
+  });
+}
+
+if (calibrateVioButton) {
+  calibrateVioButton.addEventListener('click', async () => {
+    calibrationRequestActive = true;
+    calibrateVioButton.disabled = true;
+    calibrateVioButton.textContent = 'Starting...';
+    try {
+      const response = await request('/api/vio/calibrate');
+      calibrateVioButton.textContent = 'Keep still...';
+      connection.textContent = response.message || 'Full VIO calibration started. Keep the drone stationary.';
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+    } catch (error) {
+      connection.textContent = error.message;
+    } finally {
+      calibrationRequestActive = false;
+      calibrateVioButton.textContent = 'Calibrate all';
+      calibrateVioButton.disabled = !statusDot.classList.contains('running');
+      await refresh();
     }
   });
 }

@@ -84,6 +84,12 @@ For MI0802 hardware, the default device is `/dev/ttyACM0`; the stable target pat
 
 For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. The default launch command enables the IMU with `start_imu:=true`; it publishes `sensor_msgs/Imu` on `/imu/data_raw` and chip temperature on `/imu/temperature`.
 
+The header's **Calibrate all** button calls `/vio/calibrate`. Use it only while the drone is
+stationary. It resets the VIO odometry origin and visual tracker, then re-estimates gyro bias,
+accelerometer bias, and gravity alignment from the configured stationary sample window. The
+button is enabled only while the drone launch is running, and progress is written to Launch
+output.
+
 If the thermal image is visible but does not line up with depth, use a small hot target such as a candle or warm hand and tune the dashboard `X`, `Y`, `Scale`, `Barrel`, `H`, and `V` controls until the thermal hot spot lands on the same depth object. `Barrel` applies signed radial distortion to the thermal overlay in Full mode: `0` disables it, positive values contract the image near the edges, and negative values expand it while leaving the center fixed. Edits are a browser preview only. **Save to parameter file** commits the transform to `.thermal-alignment.json` and `master_params.yaml`; it is applied immediately when the ROS cropper is running, or passed to the cropper on its next start. Values can also be seeded with `THERMAL_OFFSET_X`, `THERMAL_OFFSET_Y`, `THERMAL_SCALE`, `THERMAL_BARREL_DISTORTION`, `THERMAL_STRETCH_X`, and `THERMAL_STRETCH_Y`.
 
 The ROS cropper node uses highlighted thermal pixels to publish `/camera/depth/cropped/image_raw` and `/thermal/cropped/image_raw`. In simple mode it does not publish uncropped fallback frames while no thermal region is present. Valid regions publish rectangular crops around the selected thermal cluster and the frontend scales the crop into its fixed display. Each crop unit covers `crop_unit_thermal_pixels` square thermal pixels, clusters count diagonal neighbors, `min_region_size` rejects small clusters, and `inflation_radius_thermal_pixels` expands the crop region. Cropper tuning values live in the `thermal_cropper` block in `config/master_params.yaml` and are passed to `thermal_cropper_node` at launch.

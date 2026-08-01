@@ -36,7 +36,7 @@ const ALIGNMENT_FILE = resolveLocalPath(process.env.THERMAL_ALIGNMENT_FILE || SY
 const CROPPER_SETTINGS_FILE = resolveLocalPath(process.env.THERMAL_CROPPER_SETTINGS_FILE || SYSTEM_PARAMS.cropper_settings_file || path.join(__dirname, '.thermal-cropper.json'));
 const FRONTEND_MODE = process.env.FRONTEND_MODE || STREAM_PARAMS.frontend_mode || 'full';
 const BASE_LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND || DRONE_PARAMS.launch_command
-  || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_thermal_cropper:=true thermal_cropper_enabled:=false start_thermal_overlay:=false';
+  || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_vio:=true start_thermal_cropper:=true thermal_cropper_enabled:=false start_thermal_overlay:=false';
 const STREAM_CONFIG = {
   frontendMode: FRONTEND_MODE,
   colorTopic: process.env.DEPTH_IMAGE_TOPIC || process.env.COLOR_IMAGE_TOPIC || STREAM_PARAMS.depth_image_topic || STREAM_PARAMS.color_image_topic || '/camera/depth/cropped/image_raw',
@@ -582,6 +582,53 @@ function applySavedAlignmentToRunningCropper() {
   });
 }
 
+function calibrateVio() {
+  if (!launchProcess) {
+    return Promise.reject(new Error('Start the drone nodes before calibrating VIO.'));
+  }
+
+  const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
+  const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
+  const command = [
+    `source "${setupFile}"`,
+    `source "${installSetup}"`,
+    "timeout 5s ros2 service call /vio/calibrate std_srvs/srv/Trigger '{}'",
+  ].join(' && ');
+  addLog('Requesting full VIO calibration; keep the drone stationary.');
+
+  return new Promise((resolve, reject) => {
+    const child = spawn('bash', ['-lc', command], {
+      cwd: ROS_WORKSPACE,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let output = '';
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      callback(value);
+    };
+    child.stdout.on('data', (data) => { output += data.toString(); });
+    child.stderr.on('data', (data) => { output += data.toString(); });
+    child.on('error', (error) => finish(reject, error));
+    child.on('exit', (code) => {
+      const text = output.trim();
+      if (code !== 0) {
+        finish(reject, new Error(text || `VIO calibration service exited with code ${code}`));
+        return;
+      }
+      if (!/success\s*[=:]\s*(?:true|True)\b/.test(text)) {
+        finish(reject, new Error(text || 'VIO calibration request was rejected.'));
+        return;
+      }
+      const messageMatch = text.match(/message\s*[=:]\s*['\"]([^'\"]+)['\"]/);
+      const message = messageMatch ? messageMatch[1] : 'Full VIO calibration started. Keep the drone stationary.';
+      addLog(message);
+      finish(resolve, { ok: true, started: true, message });
+    });
+  });
+}
+
 async function setOverlayAlpha(request) {
   const body = await readJson(request);
   const alpha = Number(body.alpha);
@@ -776,6 +823,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/start') return sendJson(response, 200, startLaunch());
     if (request.method === 'POST' && url.pathname === '/api/stop') return sendJson(response, 200, stopLaunch());
     if (request.method === 'POST' && url.pathname === '/api/logs/clear') return sendJson(response, 200, clearLogs());
+    if (request.method === 'POST' && url.pathname === '/api/vio/calibrate') return sendJson(response, 200, await calibrateVio());
     if (request.method === 'POST' && url.pathname === '/api/overlay-alpha') return sendJson(response, 200, await setOverlayAlpha(request));
     if (request.method === 'POST' && url.pathname === '/api/thermal-alignment') return sendJson(response, 200, await setThermalAlignment(request));
     if (request.method === 'POST' && url.pathname === '/api/thermal-cropper') return sendJson(response, 200, await setThermalCropper(request));

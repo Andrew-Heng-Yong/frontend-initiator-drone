@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Thermal Node</title>
-    <link rel="stylesheet" href="/styles.css?v=20260725-2" />
+    <link rel="stylesheet" href="/styles.css?v=20260731-1" />
   </head>
   <body>
     <main>
@@ -13,6 +13,13 @@
           <button id="start-toggle" class="start">Start node</button>
           <p id="connection">Waiting to start.</p>
         </div>
+        <button
+          id="calibrate-vio"
+          class="calibrate"
+          type="button"
+          disabled
+          title="Reset VIO and recalibrate gyro bias, accelerometer bias, and gravity alignment. Keep the drone stationary."
+        >Calibrate all</button>
         <div class="imu-mini" id="imu-mini" aria-live="polite">IMU waiting</div>
         <div class="cpu-mini" id="cpu-mini" aria-hidden="false"></div>
         <div class="status"><span id="status-dot"></span><span id="status-text">Stopped</span></div>
@@ -127,6 +134,6 @@
         <pre id="logs">No launch output yet.</pre>
       </section>
     </main>
-    <script src="/app.js?v=20260725-6"></script>
+    <script src="/app.js?v=20260731-1"></script>
   </body>
 </html>
