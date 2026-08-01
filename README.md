@@ -88,7 +88,8 @@ The header's **Calibrate all** button calls `/vio/calibrate`. Use it only while 
 stationary. It resets the VIO odometry origin and visual tracker, then re-estimates gyro bias,
 accelerometer bias, and gravity alignment from the configured stationary sample window. The
 button is enabled only while the drone launch is running, and progress is written to Launch
-output.
+output. VIO also performs this full stationary calibration automatically whenever it starts;
+the button is for repeating it without restarting the launch.
 
 If the thermal image is visible but does not line up with depth, use a small hot target such as a candle or warm hand and tune the dashboard `X`, `Y`, `Scale`, `Barrel`, `H`, and `V` controls until the thermal hot spot lands on the same depth object. `Barrel` applies signed radial distortion to the thermal overlay in Full mode: `0` disables it, positive values contract the image near the edges, and negative values expand it while leaving the center fixed. Edits are a browser preview only. **Save to parameter file** commits the transform to `.thermal-alignment.json` and `master_params.yaml`; it is applied immediately when the ROS cropper is running, or passed to the cropper on its next start. Values can also be seeded with `THERMAL_OFFSET_X`, `THERMAL_OFFSET_Y`, `THERMAL_SCALE`, `THERMAL_BARREL_DISTORTION`, `THERMAL_STRETCH_X`, and `THERMAL_STRETCH_Y`.
 
