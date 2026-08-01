@@ -82,9 +82,9 @@ source install/setup.bash
 
 For MI0802 hardware, the default device is `/dev/ttyACM0`; the stable target path is `/dev/serial/by-id/usb-Nuvoton_USB_Virtual_COM-if00`. The ROS user normally needs membership in `dialout`. The MLX90640 package remains available as a fallback but is no longer the frontend thermal source.
 
-For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. The default launch command enables the IMU with `start_imu:=true`; it publishes unmodified `sensor_msgs/Imu` samples on `/imu/data_raw` and chip temperature on `/imu/temperature`. After VIO calibration, the frontend reads the bias- and gravity-corrected `/imu/data_calibrated` stream, which is approximately zero while the drone remains stationary.
+For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. The default launch command enables the IMU with `start_imu:=true`; it publishes unmodified `sensor_msgs/Imu` samples on `/imu/data_raw` and chip temperature on `/imu/temperature`. After VIO calibration, the frontend reads `/imu/data_calibrated`, whose gyro and acceleration are zero-referenced to the stationary calibration pose and therefore display approximately zero while the drone remains still in that pose.
 
-When `start_vio:=true`, startup launches the IMU and VIO first. The depth/RGB camera, thermal driver, cropper, and thermal overlay wait for the latched `/vio/calibrated` completion signal. If VIO calibration does not complete, those delayed nodes remain stopped.
+There is no calibration startup gate: the depth/RGB camera, IMU, VIO, cropper, rosbridge, and thermal pipeline begin launching together. VIO calibration continues independently from the first 20 IMU samples.
 
 The header's **Calibrate all** button calls `/vio/calibrate`. Use it only while the drone is
 stationary. It resets the VIO odometry origin and visual tracker, then re-estimates gyro bias,
