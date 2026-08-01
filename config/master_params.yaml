@@ -41,7 +41,7 @@ camera_streams:
     raw_depth_image_topic: /camera/depth/image_raw
     raw_depth_camera_info_topic: /camera/depth/camera_info
     raw_thermal_image_topic: /thermal/image_raw
-    imu_topic: /imu/data_raw
+    imu_topic: /imu/data_calibrated
     imu_temperature_topic: /imu/temperature
     depth_fov_horizontal: 79.0
     depth_fov_vertical: 62.0

@@ -45,7 +45,7 @@ const STREAM_CONFIG = {
   rawColorTopic: process.env.RAW_DEPTH_IMAGE_TOPIC || process.env.DEPTH_IMAGE_TOPIC || STREAM_PARAMS.raw_depth_image_topic || '/camera/depth/image_raw',
   rawCameraInfoTopic: process.env.RAW_DEPTH_CAMERA_INFO_TOPIC || process.env.DEPTH_CAMERA_INFO_TOPIC || STREAM_PARAMS.raw_depth_camera_info_topic || '/camera/depth/camera_info',
   rawThermalTopic: process.env.RAW_THERMAL_IMAGE_TOPIC || process.env.THERMAL_IMAGE_TOPIC || STREAM_PARAMS.raw_thermal_image_topic || '/thermal/image_raw',
-  imuTopic: process.env.IMU_TOPIC || STREAM_PARAMS.imu_topic || '/imu/data_raw',
+  imuTopic: process.env.IMU_TOPIC || STREAM_PARAMS.imu_topic || '/imu/data_calibrated',
   baseViewMode: process.env.BASE_VIEW_MODE || STREAM_PARAMS.base_view_mode || 'full-depth',
   thermalFov: {
     horizontal: Number(process.env.THERMAL_FOV_HORIZONTAL || STREAM_PARAMS.thermal_fov_horizontal || 90),

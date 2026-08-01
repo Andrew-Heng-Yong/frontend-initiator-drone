@@ -18,7 +18,7 @@ npm start
 Open `http://<robot-ip>:4173`. The Start button sources ROS 2, sources the built workspace, then launches the drone ROS graph with rosbridge enabled. The saved Cropper checkbox controls both cropper launch arguments. For example, when enabled it launches:
 
 ```bash
-ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_thermal_cropper:=true thermal_cropper_enabled:=true start_thermal_overlay:=false
+ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_vio:=true start_thermal_cropper:=true thermal_cropper_enabled:=true start_thermal_overlay:=false
 ```
 
 When cleared, both cropper arguments are set to `false`, so the cropper node is not launched.
@@ -82,7 +82,9 @@ source install/setup.bash
 
 For MI0802 hardware, the default device is `/dev/ttyACM0`; the stable target path is `/dev/serial/by-id/usb-Nuvoton_USB_Virtual_COM-if00`. The ROS user normally needs membership in `dialout`. The MLX90640 package remains available as a fallback but is no longer the frontend thermal source.
 
-For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. The default launch command enables the IMU with `start_imu:=true`; it publishes `sensor_msgs/Imu` on `/imu/data_raw` and chip temperature on `/imu/temperature`.
+For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. The default launch command enables the IMU with `start_imu:=true`; it publishes unmodified `sensor_msgs/Imu` samples on `/imu/data_raw` and chip temperature on `/imu/temperature`. After VIO calibration, the frontend reads the bias- and gravity-corrected `/imu/data_calibrated` stream, which is approximately zero while the drone remains stationary.
+
+When `start_vio:=true`, startup launches the IMU and VIO first. The depth/RGB camera, thermal driver, cropper, and thermal overlay wait for the latched `/vio/calibrated` completion signal. If VIO calibration does not complete, those delayed nodes remain stopped.
 
 The header's **Calibrate all** button calls `/vio/calibrate`. Use it only while the drone is
 stationary. It resets the VIO odometry origin and visual tracker, then re-estimates gyro bias,

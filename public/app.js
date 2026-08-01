@@ -41,7 +41,7 @@ let imageTopics = {
   color: '/camera/depth/image_raw',
   cameraInfo: '/camera/depth/camera_info',
   thermal: '/thermal/image_raw',
-  imu: '/imu/data_raw',
+  imu: '/imu/data_calibrated',
 };
 let frontendMode = 'full';
 const SIMPLE_DISPLAY_SIZE = { width: 1024, height: 768 };
