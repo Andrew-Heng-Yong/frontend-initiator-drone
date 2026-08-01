@@ -82,13 +82,13 @@ source install/setup.bash
 
 For MI0802 hardware, the default device is `/dev/ttyACM0`; the stable target path is `/dev/serial/by-id/usb-Nuvoton_USB_Virtual_COM-if00`. The ROS user normally needs membership in `dialout`. The MLX90640 package remains available as a fallback but is no longer the frontend thermal source.
 
-For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. The default launch command enables the IMU with `start_imu:=true`; it publishes unmodified `sensor_msgs/Imu` samples on `/imu/data_raw` and chip temperature on `/imu/temperature`. After VIO calibration, the frontend reads `/imu/data_calibrated`, whose gyro and acceleration are zero-referenced to the stationary calibration pose and therefore display approximately zero while the drone remains still in that pose.
+For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. At startup the driver logs the device identity and reads back the actual gyro/accelerometer ranges instead of assuming its register writes succeeded. It publishes unmodified `sensor_msgs/Imu` samples on `/imu/data_raw` and chip temperature on `/imu/temperature`. After VIO calibration, the frontend reads `/imu/data_calibrated`, whose gyro is bias-corrected and whose acceleration has gravity removed using the current estimated attitude, so a stationary sensor reads approximately zero at any orientation.
 
 There is no calibration startup gate: the depth/RGB camera, IMU, VIO, cropper, rosbridge, and thermal pipeline begin launching together. VIO startup alignment independently uses 100 IMU samples; the manual **Calibrate all** action remains at 20 samples.
 
 The header's **Calibrate all** button calls `/vio/calibrate`. Use it only while the drone is
 stationary. It resets the VIO odometry origin and visual tracker, then re-estimates gyro bias,
-accelerometer bias, and gravity alignment from the configured stationary sample window. The
+accelerometer scale, and gravity alignment from the configured stationary sample window. The
 button is enabled only while the drone launch is running, and progress is written to Launch
 output. VIO also performs this full stationary calibration automatically whenever it starts;
 the button is for repeating it without restarting the launch.
