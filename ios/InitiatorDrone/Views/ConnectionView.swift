@@ -132,7 +132,7 @@ struct ConnectionView: View {
                 result.isReachable ? "Dashboard reachable" : "Not reachable",
                 systemImage: result.isReachable ? "checkmark.circle.fill" : "xmark.octagon.fill"
             )
-            .foregroundStyle(result.isReachable ? .green : .red)
+            .foregroundStyle(result.isReachable ? Color.green : Color.red)
 
             LabeledContent("Round trip", value: String(format: "%.0f ms", result.latency * 1000))
             LabeledContent("ROS graph", value: result.graphRunning ? "Running" : "Stopped")

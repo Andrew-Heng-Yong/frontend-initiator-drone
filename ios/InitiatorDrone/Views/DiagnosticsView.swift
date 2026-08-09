@@ -114,7 +114,7 @@ struct DiagnosticsView: View {
                         Spacer()
                         Text(String(format: "%.1f Hz", health.rateHz))
                             .font(.system(.subheadline, design: .monospaced))
-                            .foregroundStyle(health.isSilent ? .red : .primary)
+                            .foregroundStyle(health.isSilent ? Color.red : Color.primary)
                     }
                     Text(health.topic.topicName)
                         .font(.system(size: 10, design: .monospaced))
@@ -229,7 +229,12 @@ struct DiagnosticsView: View {
                 LabeledContent("|a|") {
                     Text(String(format: "%.2f m/s²", imu.accelerationMagnitude))
                         .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(abs(imu.accelerationMagnitude - 9.81) < 0.5 ? .primary : .orange)
+                        // Both branches must be the same type: `.primary` alone
+                        // is a HierarchicalShapeStyle, which will not unify
+                        // with a Color.
+                        .foregroundStyle(
+                            abs(imu.accelerationMagnitude - 9.81) < 0.5 ? Color.primary : Color.orange
+                        )
                 }
                 LabeledContent("Angular rate") {
                     Text(String(
