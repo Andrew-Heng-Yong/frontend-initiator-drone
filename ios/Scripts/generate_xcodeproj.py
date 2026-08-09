@@ -23,11 +23,41 @@ ROOT = os.path.abspath(os.path.join(HERE, ".."))
 PROJECT_NAME = "InitiatorDrone"
 APP_TARGET = "InitiatorDrone"
 TEST_TARGET = "InitiatorDroneTests"
-BUNDLE_ID = "com.initiatordrone.app"
 DEPLOYMENT_TARGET = "16.0"
 SWIFT_VERSION = "5.0"
 
 PROJECT_DIR = os.path.join(ROOT, f"{PROJECT_NAME}.xcodeproj")
+
+# Signing lives outside the generated project.
+#
+# Setting a team in Xcode's Signing & Capabilities pane writes into
+# project.pbxproj, which this script overwrites — so the team would vanish the
+# next time anyone added a source file. Instead it is read from
+# Scripts/signing.local (git-ignored) or the environment, and baked in on every
+# regeneration.
+SIGNING_FILE = os.path.join(HERE, "signing.local")
+DEFAULT_BUNDLE_ID = "com.initiatordrone.app"
+
+
+def load_signing():
+    """Reads DEVELOPMENT_TEAM and PRODUCT_BUNDLE_IDENTIFIER, if configured."""
+    values = {}
+    if os.path.isfile(SIGNING_FILE):
+        with open(SIGNING_FILE, encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                values[key.strip()] = value.strip()
+
+    # The environment wins, so a one-off build can override the file.
+    for key in ("DEVELOPMENT_TEAM", "PRODUCT_BUNDLE_IDENTIFIER"):
+        if os.environ.get(key):
+            values[key] = os.environ[key]
+
+    values.setdefault("PRODUCT_BUNDLE_IDENTIFIER", DEFAULT_BUNDLE_ID)
+    return values
 
 _counter = [0]
 
@@ -113,6 +143,10 @@ def emit_groups(node, file_refs, lines):
 
 
 def generate():
+    signing = load_signing()
+    team = signing.get("DEVELOPMENT_TEAM")
+    bundle_id = signing["PRODUCT_BUNDLE_IDENTIFIER"]
+
     app_sources = swift_files(os.path.join(ROOT, "InitiatorDrone"))
     test_sources = swift_files(os.path.join(ROOT, "Tests"))
 
@@ -447,7 +481,7 @@ def generate():
         return settings
 
     def app_settings():
-        return {
+        settings = {
             "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
             "CODE_SIGN_STYLE": "Automatic",
             "CURRENT_PROJECT_VERSION": "1",
@@ -455,24 +489,30 @@ def generate():
             "INFOPLIST_FILE": "InitiatorDrone/Resources/Info.plist",
             "LD_RUNPATH_SEARCH_PATHS": '(\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"@executable_path/Frameworks",\n\t\t\t\t)',
             "MARKETING_VERSION": "1.0",
-            "PRODUCT_BUNDLE_IDENTIFIER": BUNDLE_ID,
+            "PRODUCT_BUNDLE_IDENTIFIER": bundle_id,
             "PRODUCT_NAME": '"$(TARGET_NAME)"',
             "SWIFT_EMIT_LOC_STRINGS": "YES",
             "TARGETED_DEVICE_FAMILY": '"1,2"',
         }
+        if team:
+            settings["DEVELOPMENT_TEAM"] = team
+        return settings
 
     def test_settings():
-        return {
+        settings = {
             "BUNDLE_LOADER": '"$(TEST_HOST)"',
             "CODE_SIGN_STYLE": "Automatic",
             "CURRENT_PROJECT_VERSION": "1",
             "GENERATE_INFOPLIST_FILE": "YES",
             "MARKETING_VERSION": "1.0",
-            "PRODUCT_BUNDLE_IDENTIFIER": BUNDLE_ID + ".tests",
+            "PRODUCT_BUNDLE_IDENTIFIER": bundle_id + ".tests",
             "PRODUCT_NAME": '"$(TARGET_NAME)"',
             "TARGETED_DEVICE_FAMILY": '"1,2"',
             "TEST_HOST": f'"$(BUILT_PRODUCTS_DIR)/{APP_TARGET}.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/{APP_TARGET}"',
         }
+        if team:
+            settings["DEVELOPMENT_TEAM"] = team
+        return settings
 
     def emit_config(config_id, name, settings):
         add(f"\t\t{config_id} /* {name} */ = {{")
@@ -571,6 +611,11 @@ def generate():
     print(f"Generated {os.path.relpath(PROJECT_DIR, ROOT)}")
     print(f"  app target:  {len(app_sources)} Swift files")
     print(f"  test target: {len(test_sources)} Swift files")
+    print(f"  bundle id:   {bundle_id}")
+    if team:
+        print(f"  team:        {team}")
+    else:
+        print("  team:        not set — see Scripts/signing.local.example")
     if not os.path.isdir(fixtures_dir):
         print("  WARNING: Resources/Fixtures is missing; run generate_fixtures.py")
     if not os.path.isfile(info_plist):

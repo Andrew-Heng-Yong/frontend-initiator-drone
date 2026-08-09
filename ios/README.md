@@ -27,11 +27,98 @@ python3 Scripts/generate_xcodeproj.py     # only needed after adding/removing fi
 open InitiatorDrone.xcodeproj
 ```
 
-Set your signing team on the `InitiatorDrone` target, then run on a device.
 Deployment target is iOS 16; iPhone and iPad, portrait and landscape.
 
 ARKit needs a real device. In the simulator everything except the camera view
 works, and the live view says so instead of showing a black rectangle.
+
+## Install on your iPhone or iPad
+
+Once installed the app is a normal app: it launches from the home screen and
+talks to the robot over Wi-Fi with no Mac involved. The Mac is only needed to
+build and install it, and again when the signature expires.
+
+### 1. Configure signing (once)
+
+```bash
+cd ios
+cp Scripts/signing.local.example Scripts/signing.local
+```
+
+Fill in your Team ID and a bundle identifier of your own, then:
+
+```bash
+python3 Scripts/generate_xcodeproj.py
+```
+
+Find your Team ID in Xcode ▸ Settings ▸ Accounts — add your Apple ID if it is
+not there, and the ID appears next to your team. A free Apple ID works; it shows
+as *(Personal Team)*.
+
+`signing.local` is git-ignored and read on every regeneration. Do **not** set the
+team in Xcode's Signing & Capabilities pane instead: that writes into
+`project.pbxproj`, which the generator overwrites the next time anyone adds a
+source file.
+
+Bundle identifiers are globally unique, so `com.initiatordrone.app` may already
+be registered to someone else. If you see *"Failed to register bundle
+identifier"*, put your own reverse-DNS prefix in `signing.local` and regenerate.
+
+### 2. Prepare the device (once)
+
+- Connect it by USB and tap **Trust** on the device.
+- iOS 16+: **Settings ▸ Privacy & Security ▸ Developer Mode**, turn it on, and
+  restart when prompted. The device will not accept a development build without
+  this.
+
+### 3. Build a Release build
+
+Debug builds are unoptimised and noticeably heavier — the difference is real for
+a long AR session. In Xcode: **Product ▸ Scheme ▸ Edit Scheme ▸ Run ▸ Info ▸
+Build Configuration → Release**, and untick *Debug executable* so the app does
+not wait for the debugger when launched from the home screen.
+
+Then pick your device in the run-destination menu at the top and press **⌘R**.
+
+Equivalent from the command line:
+
+```bash
+xcodebuild -project InitiatorDrone.xcodeproj \
+           -scheme InitiatorDrone \
+           -configuration Release \
+           -destination 'generic/platform=iOS' \
+           build
+```
+
+### 4. Trust the certificate on the device
+
+First launch will refuse with *"Untrusted Developer"*. On the device:
+**Settings ▸ General ▸ VPN & Device Management** ▸ your Apple ID ▸ **Trust**.
+
+### 5. Unplug
+
+The app now runs standalone. Two prompts appear on first launch and both matter:
+
+- **Camera** — required for the AR view.
+- **Local Network** — required to reach the robot. Denying it makes every
+  connection fail silently with no error the app can detect, which looks exactly
+  like a robot that is switched off. If you tapped Don't Allow, re-enable it in
+  **Settings ▸ Initiator ▸ Local Network**.
+
+The phone and the robot must be on the same Wi-Fi network and subnet.
+
+### How long it lasts
+
+| Account | App works for | Notes |
+| --- | --- | --- |
+| Free Apple ID | **7 days** | Then it refuses to launch; re-run from Xcode to renew. Max 3 sideloaded apps per device. |
+| Paid Developer Program ($99/yr) | **1 year** | Also unlocks TestFlight and ad-hoc `.ipa` distribution, so you can install without a cable. |
+
+Re-signing on a free account does not lose anything: saved robots, colour maps
+and settings live in `UserDefaults` and survive a reinstall over the top.
+
+If you plan to keep this on a drone-flying phone for months, the paid account is
+the difference between renewing weekly and renewing annually.
 
 ### Try it without the drone
 
