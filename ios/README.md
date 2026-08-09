@@ -1,0 +1,287 @@
+# Initiator — iPhone / iPad app
+
+A native SwiftUI + ARKit app for watching the Initiator drone from a phone: the
+robot's cropped depth and thermal streams, its VIO pose, and a marker drawn into
+the live camera view where the robot actually is in the room.
+
+Visualisation and diagnostics only. **The app sends no flight-control commands.**
+
+```
+ios/
+  InitiatorDrone/
+    App/        app entry point and the object graph
+    Core/       pure Swift: geometry, imaging, rosbridge wire layer  (unit tested)
+    Services/   connection orchestration, HTTP client, image pipeline (unit tested)
+    AR/         ARKit session, alignment, SceneKit scene            (iOS only)
+    Views/      SwiftUI screens                                     (iOS only)
+    Resources/  Info.plist and the mock rosbridge fixtures
+  Tests/        XCTest suite
+  Scripts/      project generator, fixture generator, headless test runner
+```
+
+## Build and run
+
+```bash
+cd ios
+python3 Scripts/generate_xcodeproj.py     # only needed after adding/removing files
+open InitiatorDrone.xcodeproj
+```
+
+Set your signing team on the `InitiatorDrone` target, then run on a device.
+Deployment target is iOS 16; iPhone and iPad, portrait and landscape.
+
+ARKit needs a real device. In the simulator everything except the camera view
+works, and the live view says so instead of showing a black rectangle.
+
+### Try it without the drone
+
+On the **Robot** tab, tap **Run on fixtures**. A simulated rosbridge server
+replays synthesised depth, thermal, odometry, IMU and status messages through
+the real message path — same subscribe commands, same JSON envelopes, same
+decoders. Everything except Start/Stop/Calibrate behaves as it does against a
+live robot, including the reconnect logic (Diagnostics ▸ ⋯ ▸ *Simulate Wi-Fi
+drop*).
+
+## Connecting to a robot
+
+| What | Where |
+| --- | --- |
+| Dashboard HTTP | `http://<robot-ip>:4173` |
+| rosbridge WebSocket | `ws://<robot-ip>:9090` |
+
+Enter the address on the **Robot** tab. Paste style does not matter — a bare IP,
+`http://10.0.0.5:4173/`, or a `.local` name all normalise to the same host.
+**Test connection** round-trips `GET /api/state` and reports latency and whether
+the ROS graph is running. Robots are saved, most-recent first, and the app
+reconnects automatically after a drop with exponential backoff and jitter.
+
+`NSAllowsLocalNetworking` is set in `Info.plist` so plain HTTP and `ws://` to a
+local address work without weakening App Transport Security for the internet at
+large.
+
+## Topics and endpoints it expects
+
+Subscriptions:
+
+| Topic | Type |
+| --- | --- |
+| `/camera/depth/cropped/image_raw` | `sensor_msgs/msg/Image` |
+| `/thermal/cropped/image_raw` | `sensor_msgs/msg/Image` |
+| `/camera/depth/cropped/camera_info` | `sensor_msgs/msg/CameraInfo` |
+| `/vio/odometry` | `nav_msgs/msg/Odometry` |
+| `/vio/calibrated` | `std_msgs/msg/Bool` |
+| `/vio/visual_tracking` | `std_msgs/msg/Bool` |
+| `/imu/data_calibrated` | `sensor_msgs/msg/Imu` |
+
+Dashboard API: `GET /api/state`, `POST /api/start`, `POST /api/stop`,
+`POST /api/vio/calibrate`.
+
+> **None of these exist in the workspace yet.** The current `ros2-initiator-drone`
+> build publishes an RGB human-tracking stack (`/camera/color/image_raw`,
+> `/human_pose/debug_image`, …) with depth disabled, no thermal node, and no VIO;
+> `server.js` implements `/api/state`, `/api/start`, `/api/stop` and
+> `/api/logs/clear` but not `/api/vio/calibrate`. The app is built to the
+> interface above and will show every one of these topics as silent until the
+> robot side catches up. See "Robot-side work still needed" below.
+
+## Screens
+
+**Live** — the camera view with the robot drawn into it, plus the depth and
+thermal streams in depth-only / thermal-only / blended / picture-in-picture
+modes, Start, Stop, Calibrate, and Align. Status pills across the top cover the
+link, VIO calibration, robot tracking, phone AR tracking, and alignment. The
+metric strip shows image fps, odometry rate, and the robot's position and
+orientation.
+
+**Robot** — address entry, connection test, saved robots, fixtures mode.
+
+**Diagnostics** — per-topic rate and last-message age, the full VIO pose and
+twist, IMU values with a gravity sanity check, phone AR pose, stream statistics
+including dropped frames, and the raw rosbridge log.
+
+**Settings** — depth and thermal colour maps (fixed or auto range, six ramps),
+thermal scale and offset, wire format, image throttle, odometry staleness and
+extrapolation, AR scene options.
+
+## How the robot ends up in the right place
+
+Three transforms, kept separate on purpose so a bug in one is visible.
+
+**1. Axis convention.** ROS `odom`/`base_link` is REP-103: right-handed, metres,
+`+X` forward, `+Y` left, `+Z` up. ARKit world is right-handed, metres, `+X`
+right, `+Y` up, `+Z` toward the viewer. So:
+
+```
+ROS +X (forward) -> ARKit -Z
+ROS +Y (left)    -> ARKit -X
+ROS +Z (up)      -> ARKit +Y
+```
+
+Both frames are right-handed and metric, so this is a pure rotation with
+determinant `+1` — no mirroring, no unit scaling. `FrameConversion` is the only
+place this mapping exists, and `GeometryTests` pins down every claim in that
+paragraph, including that the converted orientation lands a SceneKit node's `-Z`
+forward axis exactly along the robot's `+X`.
+
+**2. Alignment.** Nothing connects ARKit's world origin (wherever the session
+started) to the robot's `odom` origin (wherever VIO initialised) until the
+operator says so. Two ways to say it:
+
+- **"The robot is here"** — stand at the robot, point the phone the way the
+  robot faces, tap once. This is the intended flow for the "open the app at the
+  robot, then walk around" workflow. Only the phone's heading is used, so the
+  tilt of the phone in your hand does not tip the robot frame.
+- **"Place on a surface"** — aim the crosshair at the floor where the robot
+  started, tap to drop the origin, then dial in the heading.
+
+Either produces a `RobotAlignment`: a position plus a yaw about the vertical
+axis. Roll and pitch are deliberately not adjustable — both frames are already
+gravity-aligned, and allowing them would let a sloppy placement tilt the whole
+scene. Nudge controls and a height offset are there for touching up a placement
+that is close but visibly off.
+
+AprilTag or another automatic method is the obvious next step. It would produce
+exactly the same `RobotAlignment` and nothing downstream would change.
+
+**3. Time.** The odometry buffer is keyed to the robot's ROS clock; rendering
+happens on the phone's. `ClockOffsetEstimator` recovers the difference with a
+minimum-delay filter over a sliding window, which matters because a Raspberry Pi
+without an RTC can be hours off. The SceneKit render callback then samples the
+buffer at the exact instant it is about to draw and interpolates — linear on
+position, shortest-path spherical on orientation. Drawing the newest message
+directly instead makes the marker stutter and lag.
+
+Past the newest sample the marker holds still by default. Extrapolation from the
+reported twist is available in Settings but off, because a marker that keeps
+gliding on invented motion is worse than one that visibly stops.
+
+## Trusting the pose
+
+`/vio/odometry` continuing to publish proves only that the VIO node is alive. An
+estimator that has lost its features keeps dead-reckoning off the IMU and keeps
+publishing a pose that drifts away from reality, smoothly and convincingly. So
+the app reports the robot as tracking only when it is calibrated **and**
+visually tracking **and** the messages are fresh:
+
+| Condition | Shown as |
+| --- | --- |
+| No odometry for longer than the staleness threshold | **Stale**, marker hidden |
+| `/vio/calibrated` false | **Not calibrated**, marker hidden |
+| Calibrated, `/vio/visual_tracking` false | **Tracking lost**, marker amber |
+| All three good | **Tracking**, marker green |
+
+Staleness is checked before the flags: a "tracking is fine" message from thirty
+seconds ago is not evidence of anything.
+
+Calibrate is disabled unless `GET /api/state` reports the graph running, and the
+live view says why any disabled control is disabled.
+
+## Keeping the stream from piling up
+
+Four layers, outermost first:
+
+1. **Throttle at the robot.** Subscriptions carry `throttle_rate` (66 ms by
+   default, ~15 fps) and `queue_length: 1`. Frames that are never sent cannot
+   queue anywhere.
+2. **`LatestOnlySlot`.** A one-deep mailbox between the socket and the decoder.
+   A `DispatchQueue.async` per frame is an unbounded queue; this replaces the
+   pending frame instead of appending. Memory is bounded by one frame however
+   far behind the decoder falls.
+3. **Reusable buffers.** The colour-map renderer writes into a buffer it keeps
+   between frames rather than allocating one per frame.
+4. **Bounded history.** The odometry buffer is capped by both sample count and
+   time span; rate trackers and the log ring are capped too.
+
+Dropped-frame counts are on the Diagnostics screen. A number climbing steadily
+means the throttle is set faster than this phone and link can keep up.
+
+Phone motion comes from ARKit's visual-inertial fusion only. CoreMotion
+acceleration is never double-integrated anywhere — that drifts metres within
+seconds.
+
+## Tests
+
+```bash
+Scripts/run-core-tests.sh
+```
+
+177 tests, no Xcode required. The suite compiles `Core/`, `Services/` and
+`Tests/` for macOS with `swiftc` and runs them against a small XCTest shim; the
+same files run unmodified under `⌘U` in Xcode, which additionally covers the AR
+and SwiftUI layers by building them.
+
+```
+PASS GeometryTests            29 passed,   0 failed
+PASS ROSImageDecoderTests     25 passed,   0 failed
+PASS OdometryTests            28 passed,   0 failed
+PASS RosbridgeTests           42 passed,   0 failed
+PASS RenderingTests           28 passed,   0 failed
+PASS ConnectionTests          22 passed,   0 failed
+PASS ImageStreamSoakTests      3 passed,   0 failed
+```
+
+Coverage of the things most likely to be silently wrong:
+
+- **Image decoding** — every supported encoding, row padding via `step`,
+  big-endian payloads, unaligned row starts, truncated data, and the ROS
+  convention that a zero in a 16-bit depth frame means "no return" and must
+  become `NaN` rather than a wall at the lens.
+- **Quaternions and coordinates** — algebra, matrix round-trips through all four
+  trace branches, shortest-path slerp across the double cover, the full ROS ↔
+  ARKit axis mapping including a handedness check, and the alignment pipeline
+  round-tripping back to `odom`.
+- **Odometry interpolation** — interpolation, clamping at both ends, twist
+  extrapolation in the body frame, out-of-order and duplicate stamps, bounded
+  history, staleness, and clock-offset recovery under varying latency.
+- **Reconnection** — the backoff curve and jitter bounds as pure functions, plus
+  an end-to-end run where the fixture transport drops the link the way Wi-Fi
+  does (no close handshake, just silence) and the client is required to notice,
+  back off, reconnect, re-subscribe, and resume data.
+- **Memory over a long stream** — `ImageStreamSoakTests` drives the decode →
+  colour-map → `CGImage` path and asserts resident memory does not grow with
+  frame count. It defaults to 1,500 frames; the full 30-minute equivalent runs
+  with `INITIATOR_SOAK_FRAMES=27000 Scripts/run-core-tests.sh` and passes (a leak
+  of even a few KB per frame fails at that scale). A separate test floods the
+  pipeline and requires the drop counter to rise rather than the queue.
+
+Fixtures in `InitiatorDrone/Resources/Fixtures/` are real rosbridge frames with
+hand-picked payloads, so the tests assert exact decoded values. Regenerate with
+`python3 Scripts/generate_fixtures.py`.
+
+## Wire format
+
+JSON by default. CBOR (Settings ▸ Image stream) is worth switching on if it
+works with your rosbridge: `uint8[]` fields arrive as RFC 8746 tag-64 byte
+strings instead of base64, which is about a third less traffic and skips a
+decode pass. Needs `rosbridge_suite` 0.11 or newer — switch back to JSON if
+frames stop arriving after changing it.
+
+## Robot-side work still needed
+
+The app is complete against the interface it was specified for. To use it
+against real hardware, `ros2-initiator-drone` and `server.js` need:
+
+1. **Depth** — `enable_depth` is `false` in `drone_settings.yaml`, and there is
+   no cropper publishing `/camera/depth/cropped/image_raw` or the matching
+   `camera_info`.
+2. **Thermal** — the MLX90640 nodes were removed in commit `318e17f`. A node
+   publishing `/thermal/cropped/image_raw` needs to come back. If it publishes
+   `mono16`, set the counts-to-Celsius scale in Settings (0.01 for
+   centi-degrees, which is the default).
+3. **VIO** — nothing publishes `/vio/odometry`, `/vio/calibrated`,
+   `/vio/visual_tracking` or `/imu/data_calibrated`. `/vio/odometry` should be
+   `odom` → `base_link` in REP-103 axes, with the twist in the child frame.
+4. **`POST /api/vio/calibrate`** — `server.js` has `/api/state`, `/api/start`,
+   `/api/stop` and `/api/logs/clear`. The calibrate endpoint needs adding; the
+   app expects a JSON body and treats a missing `ok` field as success, and
+   refuses to call it at all unless `/api/state` reports the graph running.
+
+Until then, fixtures mode is the way to exercise the app.
+
+## Not built yet
+
+- Point-cloud generation and `PointCloud2` — out of scope for this version. The
+  camera frustum drawn from `CameraInfo` is the placeholder for it.
+- AprilTag or automatic alignment.
+- Depth/thermal reprojected into the AR scene. The alignment pipeline it depends
+  on wants validating against real hardware first.

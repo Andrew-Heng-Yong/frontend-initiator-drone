@@ -1,0 +1,7 @@
+{
+  "op": "publish",
+  "topic": "/vio/visual_tracking",
+  "msg": {
+    "data": false
+  }
+}

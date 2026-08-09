@@ -1,0 +1,19 @@
+{
+  "op": "publish",
+  "topic": "/thermal/cropped/image_raw",
+  "msg": {
+    "header": {
+      "stamp": {
+        "sec": 1717430002,
+        "nanosec": 500000000
+      },
+      "frame_id": "thermal_frame"
+    },
+    "height": 2,
+    "width": 3,
+    "encoding": "mono16",
+    "is_bigendian": 0,
+    "step": 6,
+    "data": "NAjKCFYOAAD//wgH"
+  }
+}

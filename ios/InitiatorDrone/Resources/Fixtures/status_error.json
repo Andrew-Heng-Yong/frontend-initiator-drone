@@ -1,0 +1,6 @@
+{
+  "op": "status",
+  "level": "error",
+  "msg": "Topic /vio/odometry does not exist",
+  "id": "initiator-drone-/vio/odometry"
+}

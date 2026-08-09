@@ -1,0 +1,19 @@
+{
+  "op": "publish",
+  "topic": "/camera/depth/cropped/image_raw",
+  "msg": {
+    "header": {
+      "stamp": {
+        "sec": 1717430001,
+        "nanosec": 0
+      },
+      "frame_id": "camera_depth_optical_frame"
+    },
+    "height": 2,
+    "width": 2,
+    "encoding": "32FC1",
+    "is_bigendian": 0,
+    "step": 8,
+    "data": "AAAAPwAAoD8AAAAAAACAvw=="
+  }
+}
