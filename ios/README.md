@@ -40,29 +40,40 @@ build and install it, and again when the signature expires.
 
 ### 1. Configure signing (once)
 
+Open the project, select the **InitiatorDrone** target ▸ **Signing &
+Capabilities**, tick *Automatically manage signing*, and pick your team. A free
+Apple ID works; it appears as *(Personal Team)*.
+
+That is the whole step. Xcode issues a development certificate and works out the
+Team ID for you — which matters, because **Xcode never displays the Team ID for a
+Personal Team**, and it does not exist at all until that certificate is created.
+
+Then pin it so it survives project regeneration:
+
 ```bash
 cd ios
-cp Scripts/signing.local.example Scripts/signing.local
-```
-
-Fill in your Team ID and a bundle identifier of your own, then:
-
-```bash
 python3 Scripts/generate_xcodeproj.py
 ```
 
-Find your Team ID in Xcode ▸ Settings ▸ Accounts — add your Apple ID if it is
-not there, and the ID appears next to your team. A free Apple ID works; it shows
-as *(Personal Team)*.
+The generator recovers the team from the project, a provisioning profile, or the
+`OU` field of your signing certificate, and prints it. Copy that value into
+`Scripts/signing.local` (git-ignored):
 
-`signing.local` is git-ignored and read on every regeneration. Do **not** set the
-team in Xcode's Signing & Capabilities pane instead: that writes into
+```bash
+cp Scripts/signing.local.example Scripts/signing.local
+# replace the placeholders with the values the generator printed
+```
+
+Pinning it matters because setting the team in Xcode writes into
 `project.pbxproj`, which the generator overwrites the next time anyone adds a
-source file.
+source file. Placeholder values from the example file are ignored rather than
+baked in, so a half-edited `signing.local` fails loudly instead of producing a
+signing error that names no cause.
 
 Bundle identifiers are globally unique, so `com.initiatordrone.app` may already
 be registered to someone else. If you see *"Failed to register bundle
-identifier"*, put your own reverse-DNS prefix in `signing.local` and regenerate.
+identifier"*, change it in Xcode to your own reverse-DNS prefix, then re-run the
+generator to pick it up.
 
 ### 2. Prepare the device (once)
 

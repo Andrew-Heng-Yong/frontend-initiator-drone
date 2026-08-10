@@ -34,9 +34,11 @@ PROJECT_DIR = os.path.join(ROOT, f"{PROJECT_NAME}.xcodeproj")
 # project.pbxproj, which this script overwrites — so the team would vanish the
 # next time anyone added a source file. Instead it is read from
 # Scripts/signing.local (git-ignored) or the environment, and baked in on every
-# regeneration.
+# regeneration. Each developer keeps their own signing.local, so two people
+# signing with two different Apple IDs do not tread on each other.
 SIGNING_FILE = os.path.join(HERE, "signing.local")
 DEFAULT_BUNDLE_ID = "com.initiatordrone.app"
+PLACEHOLDER_TEAMS = {"ABCDE12345", "XXXXXXXXXX", ""}
 
 
 def load_signing():
@@ -56,8 +58,115 @@ def load_signing():
         if os.environ.get(key):
             values[key] = os.environ[key]
 
+    # Copying signing.local.example and forgetting to edit it is the obvious
+    # mistake, and baking "ABCDE12345" into the project produces a signing error
+    # that says nothing about the cause. Placeholders are filtered at every
+    # source, including the previous project.pbxproj — otherwise one bad run
+    # would keep re-seeding itself.
+    if is_placeholder_team(values.get("DEVELOPMENT_TEAM")):
+        if values.get("DEVELOPMENT_TEAM"):
+            print(f"  note: ignoring placeholder DEVELOPMENT_TEAM in {os.path.basename(SIGNING_FILE)}")
+        values.pop("DEVELOPMENT_TEAM", None)
+    if is_placeholder_bundle(values.get("PRODUCT_BUNDLE_IDENTIFIER")):
+        if values.get("PRODUCT_BUNDLE_IDENTIFIER"):
+            print(f"  note: ignoring placeholder bundle id in {os.path.basename(SIGNING_FILE)}")
+        values.pop("PRODUCT_BUNDLE_IDENTIFIER", None)
+
+    source = "signing.local" if values.get("DEVELOPMENT_TEAM") else None
+
+    # Nothing configured: recover whatever Xcode already worked out, so setting
+    # the team once in Signing & Capabilities is enough and nobody has to go
+    # hunting for a Team ID that Xcode never displays.
+    if not values.get("DEVELOPMENT_TEAM"):
+        detected, detected_source = detect_team()
+        if detected and not is_placeholder_team(detected):
+            values["DEVELOPMENT_TEAM"] = detected
+            source = detected_source
+
+    # A bundle id that Xcode already accepted is likewise worth keeping.
+    if not values.get("PRODUCT_BUNDLE_IDENTIFIER"):
+        existing = read_setting_from_project("PRODUCT_BUNDLE_IDENTIFIER")
+        if existing and not existing.endswith(".tests") and not is_placeholder_bundle(existing):
+            values["PRODUCT_BUNDLE_IDENTIFIER"] = existing
+
     values.setdefault("PRODUCT_BUNDLE_IDENTIFIER", DEFAULT_BUNDLE_ID)
+    values["_team_source"] = source or ""
     return values
+
+
+def is_placeholder_team(value):
+    return (value or "").strip().upper() in PLACEHOLDER_TEAMS
+
+
+def is_placeholder_bundle(value):
+    return "yourname" in (value or "").lower()
+
+
+def read_setting_from_project(name):
+    """Reads a build setting out of the current project.pbxproj, if it exists."""
+    path = os.path.join(PROJECT_DIR, "project.pbxproj")
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if stripped.startswith(name + " = "):
+                return stripped[len(name) + 3:].rstrip(";").strip().strip('"')
+    return None
+
+
+def detect_team():
+    """Finds a Team ID from what Xcode has already produced on this Mac.
+
+    Apple never shows the Team ID for a Personal Team in the Accounts pane, and
+    it does not exist at all until Xcode issues a development certificate. Once
+    it has, the ID shows up in three places; any of them will do.
+    """
+    # 1. The project itself, if a team was set in Xcode's UI.
+    existing = read_setting_from_project("DEVELOPMENT_TEAM")
+    if existing:
+        return existing, "the current project.pbxproj"
+
+    # 2. A provisioning profile Xcode downloaded.
+    profiles_dir = os.path.expanduser("~/Library/MobileDevice/Provisioning Profiles")
+    if os.path.isdir(profiles_dir):
+        import plistlib
+
+        for name in sorted(os.listdir(profiles_dir)):
+            if not name.endswith((".mobileprovision", ".provisionprofile")):
+                continue
+            path = os.path.join(profiles_dir, name)
+            result = subprocess.run(
+                ["security", "cms", "-D", "-i", path], capture_output=True
+            )
+            if result.returncode != 0:
+                continue
+            try:
+                plist = plistlib.loads(result.stdout)
+            except Exception:
+                continue
+            identifiers = plist.get("TeamIdentifier") or []
+            if identifiers:
+                return identifiers[0], f"provisioning profile {name}"
+
+    # 3. The signing certificate: its Organizational Unit is the Team ID.
+    result = subprocess.run(
+        ["security", "find-certificate", "-a", "-c", "Apple Development", "-p"],
+        capture_output=True,
+    )
+    if result.returncode == 0 and result.stdout:
+        subject = subprocess.run(
+            ["openssl", "x509", "-noout", "-subject"],
+            input=result.stdout,
+            capture_output=True,
+        )
+        text = subject.stdout.decode("utf-8", "replace")
+        for part in text.replace("/", ",").split(","):
+            part = part.strip()
+            if part.startswith("OU="):
+                return part[3:].strip(), "your Apple Development certificate"
+
+    return None, None
 
 _counter = [0]
 
@@ -613,9 +722,14 @@ def generate():
     print(f"  test target: {len(test_sources)} Swift files")
     print(f"  bundle id:   {bundle_id}")
     if team:
-        print(f"  team:        {team}")
+        origin = signing.get("_team_source") or "signing.local"
+        print(f"  team:        {team}  (from {origin})")
+        if origin != "signing.local":
+            print("               write it into Scripts/signing.local to pin it")
     else:
-        print("  team:        not set — see Scripts/signing.local.example")
+        print("  team:        none yet — set it once in Xcode:")
+        print("               target ▸ Signing & Capabilities ▸ Team,")
+        print("               then re-run this script to pick it up.")
     if not os.path.isdir(fixtures_dir):
         print("  WARNING: Resources/Fixtures is missing; run generate_fixtures.py")
     if not os.path.isfile(info_plist):
