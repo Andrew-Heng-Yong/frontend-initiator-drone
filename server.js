@@ -36,7 +36,7 @@ const ALIGNMENT_FILE = resolveLocalPath(process.env.THERMAL_ALIGNMENT_FILE || SY
 const CROPPER_SETTINGS_FILE = resolveLocalPath(process.env.THERMAL_CROPPER_SETTINGS_FILE || SYSTEM_PARAMS.cropper_settings_file || path.join(__dirname, '.thermal-cropper.json'));
 const FRONTEND_MODE = process.env.FRONTEND_MODE || STREAM_PARAMS.frontend_mode || 'full';
 const BASE_LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND || DRONE_PARAMS.launch_command
-  || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_vio:=true start_thermal_cropper:=true thermal_cropper_enabled:=false start_thermal_overlay:=false';
+  || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_vio:=true color_fps:=5 start_thermal_cropper:=true thermal_cropper_enabled:=false start_thermal_overlay:=false';
 const STREAM_CONFIG = {
   frontendMode: FRONTEND_MODE,
   colorTopic: process.env.DEPTH_IMAGE_TOPIC || process.env.COLOR_IMAGE_TOPIC || STREAM_PARAMS.depth_image_topic || STREAM_PARAMS.color_image_topic || '/camera/depth/cropped/image_raw',
@@ -46,6 +46,7 @@ const STREAM_CONFIG = {
   rawCameraInfoTopic: process.env.RAW_DEPTH_CAMERA_INFO_TOPIC || process.env.DEPTH_CAMERA_INFO_TOPIC || STREAM_PARAMS.raw_depth_camera_info_topic || '/camera/depth/camera_info',
   rawThermalTopic: process.env.RAW_THERMAL_IMAGE_TOPIC || process.env.THERMAL_IMAGE_TOPIC || STREAM_PARAMS.raw_thermal_image_topic || '/thermal/image_raw',
   imuTopic: process.env.IMU_TOPIC || STREAM_PARAMS.imu_topic || '/imu/data_calibrated',
+  vioVideoStatusTopic: process.env.VIO_VIDEO_STATUS_TOPIC || STREAM_PARAMS.vio_video_status_topic || '/vio/video_working',
   baseViewMode: process.env.BASE_VIEW_MODE || STREAM_PARAMS.base_view_mode || 'full-depth',
   thermalFov: {
     horizontal: Number(process.env.THERMAL_FOV_HORIZONTAL || STREAM_PARAMS.thermal_fov_horizontal || 90),
@@ -87,6 +88,7 @@ let activeLaunchCommand = null;
 let activeCropperEnabled = null;
 let activeCropperSettings = null;
 let activeThermalAlignment = null;
+let activeVioStaticOverride = null;
 let logs = [];
 let previousCpuStats = null;
 let overlayAlpha = Number(process.env.THERMAL_OVERLAY_ALPHA || DASHBOARD_PARAMS.overlay_alpha || 0.5);
@@ -94,6 +96,7 @@ if (!Number.isFinite(overlayAlpha) || overlayAlpha < 0 || overlayAlpha > 1) over
 let thermalAlignment = readThermalAlignment();
 let savedThermalAlignment = { ...thermalAlignment };
 let thermalCropper = readThermalCropper();
+let vioStaticOverride = DRONE_PARAMS.vio_static_override === true;
 
 function resolveLocalPath(value) {
   if (!value) return value;
@@ -163,6 +166,7 @@ function setLaunchArgument(command, name, value) {
 function launchCommandFor(cropper) {
   let command = setLaunchArgument(BASE_LAUNCH_COMMAND, 'start_thermal_cropper', cropper.enabled);
   command = setLaunchArgument(command, 'thermal_cropper_enabled', cropper.enabled);
+  command = setLaunchArgument(command, 'vio_static_override', vioStaticOverride);
   return appendThermalCropperLaunchArgs(command, cropper);
 }
 
@@ -444,12 +448,23 @@ function state() {
     overlayAlpha,
     rgbOverlayEnabled: true,
     stream: { ...activeStreamConfig(), alignment: thermalAlignment, cropper },
+    vio: vioState(),
     launchCommand: activeLaunchCommand || launchCommandFor(thermalCropper),
     params: {
       master: MASTER_PARAMS_FILE,
       cameraCalibrations: CAMERA_CALIBRATIONS_PARAMS_FILE,
       cameraCalibrationsLoaded: Boolean(CAMERA_CALIBRATIONS_PARAMS.camera_calibrations),
     },
+  };
+}
+
+function vioState() {
+  return {
+    staticOverride: vioStaticOverride,
+    activeStaticOverride: Boolean(launchProcess && activeVioStaticOverride),
+    restartRequired: Boolean(
+      launchProcess && vioStaticOverride !== activeVioStaticOverride
+    ),
   };
 }
 
@@ -586,6 +601,9 @@ function calibrateVio() {
   if (!launchProcess) {
     return Promise.reject(new Error('Start the drone nodes before calibrating VIO.'));
   }
+  if (activeVioStaticOverride) {
+    return Promise.reject(new Error('Disable the VIO static override and restart before calibrating.'));
+  }
 
   const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
   const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
@@ -684,6 +702,24 @@ async function setThermalCropper(request) {
   return { ok: true, saved: true, appliesOnNextStart: true, cropper };
 }
 
+async function setVioStaticOverride(request) {
+  const body = await readJson(request);
+  if (typeof body.enabled !== 'boolean') {
+    throw new Error('enabled must be a boolean');
+  }
+  const source = fs.readFileSync(MASTER_PARAMS_FILE, 'utf8');
+  const updates = new Map([
+    ['drone_control.ros__parameters.vio_static_override', body.enabled],
+  ]);
+  fs.writeFileSync(MASTER_PARAMS_FILE, updateYamlScalars(source, updates));
+  vioStaticOverride = body.enabled;
+  addLog(
+    `VIO static override ${vioStaticOverride ? 'enabled' : 'disabled'} for the next ROS start; `
+      + 'the running graph is unchanged.',
+  );
+  return { ok: true, saved: true, appliesOnNextStart: true, vio: vioState() };
+}
+
 async function saveFullModeParams(request) {
   const body = await readJson(request);
   const nextOverlayAlpha = Number(body.overlayAlpha);
@@ -758,6 +794,7 @@ function startLaunch() {
   activeCropperEnabled = launchCropper.enabled;
   activeCropperSettings = launchCropper;
   activeThermalAlignment = { ...savedThermalAlignment };
+  activeVioStaticOverride = vioStaticOverride;
   activeLaunchCommand = launchCommand;
   launchProcess = spawn('bash', ['-lc', command], {
     cwd: ROS_WORKSPACE,
@@ -782,6 +819,7 @@ function startLaunch() {
     activeCropperEnabled = null;
     activeCropperSettings = null;
     activeThermalAlignment = null;
+    activeVioStaticOverride = null;
   });
   launchProcess.on('exit', (code, signal) => {
     addLog(`Camera launch exited (code ${code}, signal ${signal || 'none'}).`);
@@ -790,6 +828,7 @@ function startLaunch() {
     activeCropperEnabled = null;
     activeCropperSettings = null;
     activeThermalAlignment = null;
+    activeVioStaticOverride = null;
   });
   return { ok: true, alreadyRunning: false };
 }
@@ -807,6 +846,7 @@ function stopLaunch() {
     activeCropperEnabled = null;
     activeCropperSettings = null;
     activeThermalAlignment = null;
+    activeVioStaticOverride = null;
   }
   return { ok: true, alreadyStopped: false };
 }
@@ -824,6 +864,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/stop') return sendJson(response, 200, stopLaunch());
     if (request.method === 'POST' && url.pathname === '/api/logs/clear') return sendJson(response, 200, clearLogs());
     if (request.method === 'POST' && url.pathname === '/api/vio/calibrate') return sendJson(response, 200, await calibrateVio());
+    if (request.method === 'POST' && url.pathname === '/api/vio-static-override') return sendJson(response, 200, await setVioStaticOverride(request));
     if (request.method === 'POST' && url.pathname === '/api/overlay-alpha') return sendJson(response, 200, await setOverlayAlpha(request));
     if (request.method === 'POST' && url.pathname === '/api/thermal-alignment') return sendJson(response, 200, await setThermalAlignment(request));
     if (request.method === 'POST' && url.pathname === '/api/thermal-cropper') return sendJson(response, 200, await setThermalCropper(request));

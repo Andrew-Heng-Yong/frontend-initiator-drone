@@ -19,11 +19,12 @@ drone_control:
   ros__parameters:
     package: drone_control
     launch_file: drone_launch.py
-    launch_command: ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_vio:=true start_thermal_cropper:=true thermal_cropper_enabled:=true start_thermal_overlay:=false
+    launch_command: ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_vio:=true color_fps:=5 start_thermal_cropper:=true thermal_cropper_enabled:=true start_thermal_overlay:=false
     start_rosbridge: true
     start_depth_camera: true
     start_imu: true
     start_vio: true
+    vio_static_override: true
     start_thermal_overlay: false
     start_thermal_cropper: true
     require_depth_camera: true
@@ -42,6 +43,7 @@ camera_streams:
     raw_depth_camera_info_topic: /camera/depth/camera_info
     raw_thermal_image_topic: /thermal/image_raw
     imu_topic: /imu/data_calibrated
+    vio_video_status_topic: /vio/video_working
     imu_temperature_topic: /imu/temperature
     depth_fov_horizontal: 79.0
     depth_fov_vertical: 62.0
@@ -91,12 +93,12 @@ thermal_dashboard:
     thermal_cropper:
       enabled: true
       passthrough_when_no_region: true
-      crop_unit_thermal_pixels: 2
-      min_region_size: 15
-      inflation_radius_thermal_pixels: 2
+      crop_unit_thermal_pixels: 3
+      min_region_size: 3
+      inflation_radius_thermal_pixels: 1
       highlight_min_temp: 28.0
       highlight_max_temp: 40.0
-      highlight_min_delta_from_frame_low: 3.0
+      highlight_min_delta_from_frame_low: 5.5
       highlight_max_delta_from_frame_high: 1000.0
 
     # Increment this whenever optical geometry changes so saved hand-tuned values
