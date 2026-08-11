@@ -8,6 +8,8 @@ const calibrateVioButton = document.querySelector('#calibrate-vio');
 const cpuMini = document.querySelector('#cpu-mini');
 const imuMini = document.querySelector('#imu-mini');
 const vioVideoMini = document.querySelector('#vio-video-mini');
+const vioStaticOverrideInput = document.querySelector('#vio-static-override');
+const vioStaticOverrideLabel = document.querySelector('#vio-static-override-label');
 const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
 const zoomBufferCanvas = document.createElement('canvas');
@@ -88,6 +90,9 @@ let thermalStatus = 'thermal waiting';
 let imuStatus = 'IMU waiting';
 let vioVideoWorking = null;
 let lastVioVideoStatusAt = 0;
+let vioStaticOverride = false;
+let vioStaticOverrideActive = false;
+let vioStaticOverrideRestartRequired = false;
 let drawScheduled = false;
 let viewerZoomPercent = readStoredViewerZoom();
 let cameraFrameToken = 0;
@@ -102,7 +107,9 @@ function setRunning(running) {
   stopButton.disabled = !running;
   if (!running) closeRosbridge();
   if (startToggle) startToggle.textContent = running ? 'Stop node' : 'Start node';
-  if (calibrateVioButton) calibrateVioButton.disabled = !running || calibrationRequestActive;
+  if (calibrateVioButton) {
+    calibrateVioButton.disabled = !running || calibrationRequestActive || vioStaticOverrideActive;
+  }
 }
 
 async function request(path, body) {
@@ -331,6 +338,12 @@ function updateVioVideoStatus(message) {
 
 function renderVioVideoStatus() {
   if (!vioVideoMini) return;
+  vioVideoMini.classList.toggle('override', vioStaticOverrideActive);
+  if (vioStaticOverrideActive) {
+    vioVideoMini.classList.remove('working', 'not-ready');
+    vioVideoMini.textContent = 'VIO static override';
+    return;
+  }
   const statusIsFresh = lastVioVideoStatusAt > 0 && Date.now() - lastVioVideoStatusAt < 3000;
   vioVideoMini.classList.toggle('working', statusIsFresh && vioVideoWorking === true);
   vioVideoMini.classList.toggle('not-ready', statusIsFresh && vioVideoWorking === false);
@@ -341,6 +354,31 @@ function renderVioVideoStatus() {
   } else {
     vioVideoMini.textContent = 'VIO video not ready';
   }
+}
+
+function applyVioState(vio) {
+  const state = vio || {};
+  vioStaticOverride = state.staticOverride === true;
+  vioStaticOverrideActive = state.activeStaticOverride === true;
+  vioStaticOverrideRestartRequired = state.restartRequired === true;
+  if (vioStaticOverrideInput && document.activeElement !== vioStaticOverrideInput) {
+    vioStaticOverrideInput.checked = vioStaticOverride;
+  }
+  const control = vioStaticOverrideInput && vioStaticOverrideInput.closest('.vio-override');
+  if (control) {
+    control.classList.toggle('active', vioStaticOverrideActive);
+    control.classList.toggle('pending', vioStaticOverrideRestartRequired);
+  }
+  if (vioStaticOverrideLabel) {
+    vioStaticOverrideLabel.textContent = vioStaticOverrideRestartRequired
+      ? 'Static VIO (restart)'
+      : 'Static VIO';
+  }
+  if (calibrateVioButton) {
+    const running = statusDot.classList.contains('running');
+    calibrateVioButton.disabled = !running || calibrationRequestActive || vioStaticOverrideActive;
+  }
+  renderVioVideoStatus();
 }
 
 function showWaitingForSimpleCrop() {
@@ -1100,6 +1138,7 @@ async function refresh() {
     const response = await fetch('/api/state');
     const state = await response.json();
     applyStreamConfig(state.stream);
+    applyVioState(state.vio);
     setRunning(state.running);
     renderCpu(state.cpu, state.cpuTemp);
     if (typeof state.overlayAlpha === 'number' && document.activeElement !== overlayAlphaInput) {
@@ -1175,6 +1214,26 @@ if (saveParamsButton) {
   saveParamsButton.addEventListener('click', () => saveFullModeParams());
 }
 
+if (vioStaticOverrideInput) {
+  vioStaticOverrideInput.addEventListener('change', async () => {
+    const previous = vioStaticOverride;
+    const enabled = vioStaticOverrideInput.checked;
+    vioStaticOverrideInput.disabled = true;
+    try {
+      const response = await request('/api/vio-static-override', { enabled });
+      applyVioState(response.vio);
+      connection.textContent = enabled
+        ? 'Static VIO override saved. Restart ROS to skip alignment and output zero motion.'
+        : 'Static VIO override disabled. Restart ROS to restore normal alignment and tracking.';
+    } catch (error) {
+      vioStaticOverrideInput.checked = previous;
+      connection.textContent = error.message;
+    } finally {
+      vioStaticOverrideInput.disabled = false;
+    }
+  });
+}
+
 if (startToggle) {
   startToggle.addEventListener('click', async () => {
     try {
@@ -1203,7 +1262,8 @@ if (calibrateVioButton) {
     } finally {
       calibrationRequestActive = false;
       calibrateVioButton.textContent = 'Calibrate all';
-      calibrateVioButton.disabled = !statusDot.classList.contains('running');
+      calibrateVioButton.disabled =
+        !statusDot.classList.contains('running') || vioStaticOverrideActive;
       await refresh();
     }
   });
