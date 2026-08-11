@@ -1,0 +1,658 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		CC39D263C590774338AEF73E /* ARKitBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E51B1F3267B6C7DFC598B19 /* ARKitBridge.swift */; };
+		A6302C6D615A9742FDF06FF7 /* ARRobotSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 908FF1D0704325FE00E7B7DA /* ARRobotSceneView.swift */; };
+		598F0C424BBC4B9BD78B104F /* ARSessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3BF1BBB19B86E0F6B8A2CAE /* ARSessionController.swift */; };
+		F3438D5199CBF795D90C3C69 /* AlignmentController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB7DA95DA9663FF2AA0226CB /* AlignmentController.swift */; };
+		481C28B0038B3EBD444026FF /* RobotSceneNodes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1625FBC85F54D95E95F1906 /* RobotSceneNodes.swift */; };
+		1E4477920C4DBFB969879F68 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4001C34CC6276A6628CCF14 /* AppModel.swift */; };
+		49E2CB42F4E23FFF78F5A4CE /* InitiatorDroneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFF844C693F9940A0405C3B9 /* InitiatorDroneApp.swift */; };
+		3E77678B4CC2190F77DF0370 /* ClockOffsetEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80BC4F7276FC4C542466C3A /* ClockOffsetEstimator.swift */; };
+		C00054B7E26FF61711449C5E /* FrameConversion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D500D96E8F11D6013910EC7 /* FrameConversion.swift */; };
+		79A6BDBB260CF370AAA806FA /* OdometryBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DBAE1A2533294A56A09DB86 /* OdometryBuffer.swift */; };
+		FE3A2DA15F21277518F0D8A2 /* OdometrySampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9A5566E84D706D4D80AD92E /* OdometrySampler.swift */; };
+		51EE771920471CC0FE4C03C9 /* Pose.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E14CEBC453994169C968FB /* Pose.swift */; };
+		F7045D00E8A036AC2320E97A /* Quaternion.swift in Sources */ = {isa = PBXBuildFile; fileRef = F36F4F8CE688112161037174 /* Quaternion.swift */; };
+		A4F8BF4EC2AF393514B841FC /* Vector3.swift in Sources */ = {isa = PBXBuildFile; fileRef = 472E64F7F4D596801DBF4426 /* Vector3.swift */; };
+		0137158B75802EFDB4F422DC /* ColorRamp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9328D017B51F267DAA6488AE /* ColorRamp.swift */; };
+		80197720D023C618B3F42BB3 /* ROSImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BCAF5158579697330EA0203 /* ROSImage.swift */; };
+		D0FDD4B4F1C84D36A2F98850 /* ROSImageDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1521F35B48F5361E632A5F1 /* ROSImageDecoder.swift */; };
+		E18FD33708FCF8607091243E /* ScalarImageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30A4C0C92B057E8E317C36B /* ScalarImageRenderer.swift */; };
+		9D7C7CDAB661AB6ABFBE8FAA /* RobotEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B6828045A0FFBDEA4DFEE48 /* RobotEndpoint.swift */; };
+		82C337F5CA2F98C18C42B58E /* RobotTrackingStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66C96DF04A0A59DCB2C69AB9 /* RobotTrackingStatus.swift */; };
+		95916FFB1EB3E52383C05D4C /* VIONodeStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8C0DA10E77BE6CE345D9A5 /* VIONodeStatus.swift */; };
+		A9DFAD6FC9173E56122C3243 /* CBORDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DBF4FAB07FA1F50078D7108 /* CBORDecoder.swift */; };
+		29979DDA2A5264B811AD2883 /* LatestOnlySlot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3866B33C1945D5D39CB422EB /* LatestOnlySlot.swift */; };
+		E5FDE5A9E99A554E9978176A /* ROSMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF484E3D449342FBA229CB7A /* ROSMessages.swift */; };
+		19749B9132BDDF4B333E5B87 /* ROSValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52493657FDC448CA214D9EC9 /* ROSValue.swift */; };
+		7EDD15471E81D0D50261408F /* RateTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D02DD970AFA07D0A369557 /* RateTracker.swift */; };
+		BE11BC756EFDC74042EB4530 /* ReconnectPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F939307AFB1568866D13506 /* ReconnectPolicy.swift */; };
+		9E952545A695941FD0A4A6F2 /* RosbridgeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101CE549328D36A1BFE7E5FF /* RosbridgeClient.swift */; };
+		4504CEB1AA1D182ACA722187 /* RosbridgeProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6365DD1F070ACA876D3B35F6 /* RosbridgeProtocol.swift */; };
+		64A069F28D1F35C6ABD0D1B6 /* RosbridgeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6694F660D0C50C26E047CE1 /* RosbridgeTransport.swift */; };
+		A51FE7D6DF51E264B76EC8C7 /* FixtureLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = D26C99A365B387CCBC5EE458 /* FixtureLibrary.swift */; };
+		CC10921658C2910E6630A4D7 /* SimulatedRosbridgeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB1D90B99BDFE52C8BFE46BD /* SimulatedRosbridgeTransport.swift */; };
+		B5E58B5B080BC3A73CF2550D /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D05C5E0A1B51C740C2953D7 /* AppSettings.swift */; };
+		B267645F8DCB94306D67B65D /* DashboardAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB0F8D26C62CDE576117A5E /* DashboardAPI.swift */; };
+		01F4F1A0C8646860E3D9FCAE /* ImageStreamPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D408DE556F17C3391E79B0 /* ImageStreamPipeline.swift */; };
+		F7A688277DD5D2B57DE6026B /* RobotConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80CDBFC61ED480B217875EA3 /* RobotConnection.swift */; };
+		F23E2B55A17E163E8AEFD287 /* RobotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 287B173AC356546E27C0AF99 /* RobotStore.swift */; };
+		64C45C104CED4D4EF04AC527 /* AlignmentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C2856086040BA2FAE2B217 /* AlignmentSheet.swift */; };
+		BC521CB321ED5F15F00101E4 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF80DB233A4829B53F599A6E /* ConnectionView.swift */; };
+		EE2B02C8F939D5B82F69F7CA /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC7669622837CB5CA03419A3 /* DiagnosticsView.swift */; };
+		93B92BD1498CF72A675752F2 /* LiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718932AC9CA22366BE12FF7A /* LiveView.swift */; };
+		B3FAFF2DD6CF4D847DFA670C /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE2BD2BF6F13FFBCD76B63CC /* RootView.swift */; };
+		C09429A238F71E4D326A5F8A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3572D7A91846409AA722A14 /* SettingsView.swift */; };
+		1B5BD89156C6EB65EF41C5F3 /* SensorImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C4BD83C72DE1BA9B420ADD /* SensorImageView.swift */; };
+		8A0CD2A0B5AC5EAB23AD846B /* StatusIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F8AD71CC3187EE46BA55797 /* StatusIndicators.swift */; };
+		0656A253A6894A2698370ED9 /* ConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2B106A26CEA691E2FFD0EB2 /* ConnectionTests.swift */; };
+		6318A29294A2783E7EF3F991 /* GeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0A978D81E1FB29250031E8 /* GeometryTests.swift */; };
+		F14F4420524D584C64170C23 /* ImageStreamSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F3F78994250078C39FDA7FB /* ImageStreamSoakTests.swift */; };
+		D8D2D022272C3521716A6EC2 /* OdometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1575E426BDB4EC9A3B10E732 /* OdometryTests.swift */; };
+		092318CEE0192E74411D9F2A /* ROSImageDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B7C5C89A8BEAE3DF1D356F7 /* ROSImageDecoderTests.swift */; };
+		5CA4D5A7652176831F33FD56 /* RenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E0E59F6D80D9B2BD4975241 /* RenderingTests.swift */; };
+		CDEEC50866E7A6CC6AD1D6D1 /* RosbridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E9939C8F17C0052DE80736 /* RosbridgeTests.swift */; };
+		706F3920A0C0E215587C0E35 /* Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = 5B6543B440C61DC2A1BADCA0 /* Fixtures */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B734D905E4C58A6688E9A749 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A49D03E032E9C8226E2C1C29 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 22E79AFDABC3F5ECB220375A;
+			remoteInfo = InitiatorDrone;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		4E51B1F3267B6C7DFC598B19 /* ARKitBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ARKitBridge.swift"; sourceTree = "<group>"; };
+		908FF1D0704325FE00E7B7DA /* ARRobotSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ARRobotSceneView.swift"; sourceTree = "<group>"; };
+		B3BF1BBB19B86E0F6B8A2CAE /* ARSessionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ARSessionController.swift"; sourceTree = "<group>"; };
+		CB7DA95DA9663FF2AA0226CB /* AlignmentController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AlignmentController.swift"; sourceTree = "<group>"; };
+		D1625FBC85F54D95E95F1906 /* RobotSceneNodes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RobotSceneNodes.swift"; sourceTree = "<group>"; };
+		C4001C34CC6276A6628CCF14 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel.swift"; sourceTree = "<group>"; };
+		FFF844C693F9940A0405C3B9 /* InitiatorDroneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InitiatorDroneApp.swift"; sourceTree = "<group>"; };
+		C80BC4F7276FC4C542466C3A /* ClockOffsetEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ClockOffsetEstimator.swift"; sourceTree = "<group>"; };
+		2D500D96E8F11D6013910EC7 /* FrameConversion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FrameConversion.swift"; sourceTree = "<group>"; };
+		5DBAE1A2533294A56A09DB86 /* OdometryBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OdometryBuffer.swift"; sourceTree = "<group>"; };
+		C9A5566E84D706D4D80AD92E /* OdometrySampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OdometrySampler.swift"; sourceTree = "<group>"; };
+		10E14CEBC453994169C968FB /* Pose.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Pose.swift"; sourceTree = "<group>"; };
+		F36F4F8CE688112161037174 /* Quaternion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Quaternion.swift"; sourceTree = "<group>"; };
+		472E64F7F4D596801DBF4426 /* Vector3.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Vector3.swift"; sourceTree = "<group>"; };
+		9328D017B51F267DAA6488AE /* ColorRamp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ColorRamp.swift"; sourceTree = "<group>"; };
+		6BCAF5158579697330EA0203 /* ROSImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSImage.swift"; sourceTree = "<group>"; };
+		B1521F35B48F5361E632A5F1 /* ROSImageDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSImageDecoder.swift"; sourceTree = "<group>"; };
+		B30A4C0C92B057E8E317C36B /* ScalarImageRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScalarImageRenderer.swift"; sourceTree = "<group>"; };
+		6B6828045A0FFBDEA4DFEE48 /* RobotEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RobotEndpoint.swift"; sourceTree = "<group>"; };
+		66C96DF04A0A59DCB2C69AB9 /* RobotTrackingStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RobotTrackingStatus.swift"; sourceTree = "<group>"; };
+		4A8C0DA10E77BE6CE345D9A5 /* VIONodeStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VIONodeStatus.swift"; sourceTree = "<group>"; };
+		3DBF4FAB07FA1F50078D7108 /* CBORDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CBORDecoder.swift"; sourceTree = "<group>"; };
+		3866B33C1945D5D39CB422EB /* LatestOnlySlot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LatestOnlySlot.swift"; sourceTree = "<group>"; };
+		BF484E3D449342FBA229CB7A /* ROSMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSMessages.swift"; sourceTree = "<group>"; };
+		52493657FDC448CA214D9EC9 /* ROSValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSValue.swift"; sourceTree = "<group>"; };
+		19D02DD970AFA07D0A369557 /* RateTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RateTracker.swift"; sourceTree = "<group>"; };
+		6F939307AFB1568866D13506 /* ReconnectPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReconnectPolicy.swift"; sourceTree = "<group>"; };
+		101CE549328D36A1BFE7E5FF /* RosbridgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RosbridgeClient.swift"; sourceTree = "<group>"; };
+		6365DD1F070ACA876D3B35F6 /* RosbridgeProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RosbridgeProtocol.swift"; sourceTree = "<group>"; };
+		F6694F660D0C50C26E047CE1 /* RosbridgeTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RosbridgeTransport.swift"; sourceTree = "<group>"; };
+		D26C99A365B387CCBC5EE458 /* FixtureLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FixtureLibrary.swift"; sourceTree = "<group>"; };
+		CB1D90B99BDFE52C8BFE46BD /* SimulatedRosbridgeTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SimulatedRosbridgeTransport.swift"; sourceTree = "<group>"; };
+		5D05C5E0A1B51C740C2953D7 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSettings.swift"; sourceTree = "<group>"; };
+		5FB0F8D26C62CDE576117A5E /* DashboardAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DashboardAPI.swift"; sourceTree = "<group>"; };
+		B4D408DE556F17C3391E79B0 /* ImageStreamPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImageStreamPipeline.swift"; sourceTree = "<group>"; };
+		80CDBFC61ED480B217875EA3 /* RobotConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RobotConnection.swift"; sourceTree = "<group>"; };
+		287B173AC356546E27C0AF99 /* RobotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RobotStore.swift"; sourceTree = "<group>"; };
+		25C2856086040BA2FAE2B217 /* AlignmentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AlignmentSheet.swift"; sourceTree = "<group>"; };
+		AF80DB233A4829B53F599A6E /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionView.swift"; sourceTree = "<group>"; };
+		CC7669622837CB5CA03419A3 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DiagnosticsView.swift"; sourceTree = "<group>"; };
+		718932AC9CA22366BE12FF7A /* LiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveView.swift"; sourceTree = "<group>"; };
+		AE2BD2BF6F13FFBCD76B63CC /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RootView.swift"; sourceTree = "<group>"; };
+		D3572D7A91846409AA722A14 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsView.swift"; sourceTree = "<group>"; };
+		53C4BD83C72DE1BA9B420ADD /* SensorImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SensorImageView.swift"; sourceTree = "<group>"; };
+		9F8AD71CC3187EE46BA55797 /* StatusIndicators.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatusIndicators.swift"; sourceTree = "<group>"; };
+		C2B106A26CEA691E2FFD0EB2 /* ConnectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionTests.swift"; sourceTree = "<group>"; };
+		2A0A978D81E1FB29250031E8 /* GeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GeometryTests.swift"; sourceTree = "<group>"; };
+		0F3F78994250078C39FDA7FB /* ImageStreamSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImageStreamSoakTests.swift"; sourceTree = "<group>"; };
+		1575E426BDB4EC9A3B10E732 /* OdometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OdometryTests.swift"; sourceTree = "<group>"; };
+		1B7C5C89A8BEAE3DF1D356F7 /* ROSImageDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSImageDecoderTests.swift"; sourceTree = "<group>"; };
+		4E0E59F6D80D9B2BD4975241 /* RenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RenderingTests.swift"; sourceTree = "<group>"; };
+		C1E9939C8F17C0052DE80736 /* RosbridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RosbridgeTests.swift"; sourceTree = "<group>"; };
+		C150B7C47C3B3A6241DFAD4B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		5B6543B440C61DC2A1BADCA0 /* Fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Fixtures; sourceTree = "<group>"; };
+		3E9DABFA02D968B0B42CD002 /* InitiatorDrone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "InitiatorDrone.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CA33DACD8643877F42C9460A /* InitiatorDroneTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "InitiatorDroneTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3887A76084B48DFF01A85848 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E56981045A24F5F29574ABBC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0005C9513652F5E4DF54E280 /* AR */ = {
+			isa = PBXGroup;
+			children = (
+				4E51B1F3267B6C7DFC598B19 /* ARKitBridge.swift */,
+				908FF1D0704325FE00E7B7DA /* ARRobotSceneView.swift */,
+				B3BF1BBB19B86E0F6B8A2CAE /* ARSessionController.swift */,
+				CB7DA95DA9663FF2AA0226CB /* AlignmentController.swift */,
+				D1625FBC85F54D95E95F1906 /* RobotSceneNodes.swift */,
+			);
+			path = "AR";
+			sourceTree = "<group>";
+		};
+		045E8134B3E23D79243DE055 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				C4001C34CC6276A6628CCF14 /* AppModel.swift */,
+				FFF844C693F9940A0405C3B9 /* InitiatorDroneApp.swift */,
+			);
+			path = "App";
+			sourceTree = "<group>";
+		};
+		A3F4F227E19EFA192308373E /* Geometry */ = {
+			isa = PBXGroup;
+			children = (
+				C80BC4F7276FC4C542466C3A /* ClockOffsetEstimator.swift */,
+				2D500D96E8F11D6013910EC7 /* FrameConversion.swift */,
+				5DBAE1A2533294A56A09DB86 /* OdometryBuffer.swift */,
+				C9A5566E84D706D4D80AD92E /* OdometrySampler.swift */,
+				10E14CEBC453994169C968FB /* Pose.swift */,
+				F36F4F8CE688112161037174 /* Quaternion.swift */,
+				472E64F7F4D596801DBF4426 /* Vector3.swift */,
+			);
+			path = "Geometry";
+			sourceTree = "<group>";
+		};
+		0FED4A6FD3C3D24985572F74 /* Imaging */ = {
+			isa = PBXGroup;
+			children = (
+				9328D017B51F267DAA6488AE /* ColorRamp.swift */,
+				6BCAF5158579697330EA0203 /* ROSImage.swift */,
+				B1521F35B48F5361E632A5F1 /* ROSImageDecoder.swift */,
+				B30A4C0C92B057E8E317C36B /* ScalarImageRenderer.swift */,
+			);
+			path = "Imaging";
+			sourceTree = "<group>";
+		};
+		9BB779BFFFF773002F806F16 /* Model */ = {
+			isa = PBXGroup;
+			children = (
+				6B6828045A0FFBDEA4DFEE48 /* RobotEndpoint.swift */,
+				66C96DF04A0A59DCB2C69AB9 /* RobotTrackingStatus.swift */,
+				4A8C0DA10E77BE6CE345D9A5 /* VIONodeStatus.swift */,
+			);
+			path = "Model";
+			sourceTree = "<group>";
+		};
+		91FC742326D0631B06DD1805 /* ROS */ = {
+			isa = PBXGroup;
+			children = (
+				3DBF4FAB07FA1F50078D7108 /* CBORDecoder.swift */,
+				3866B33C1945D5D39CB422EB /* LatestOnlySlot.swift */,
+				BF484E3D449342FBA229CB7A /* ROSMessages.swift */,
+				52493657FDC448CA214D9EC9 /* ROSValue.swift */,
+				19D02DD970AFA07D0A369557 /* RateTracker.swift */,
+				6F939307AFB1568866D13506 /* ReconnectPolicy.swift */,
+				101CE549328D36A1BFE7E5FF /* RosbridgeClient.swift */,
+				6365DD1F070ACA876D3B35F6 /* RosbridgeProtocol.swift */,
+				F6694F660D0C50C26E047CE1 /* RosbridgeTransport.swift */,
+			);
+			path = "ROS";
+			sourceTree = "<group>";
+		};
+		3F555E33C0722DDB80F50CF9 /* Testing */ = {
+			isa = PBXGroup;
+			children = (
+				D26C99A365B387CCBC5EE458 /* FixtureLibrary.swift */,
+				CB1D90B99BDFE52C8BFE46BD /* SimulatedRosbridgeTransport.swift */,
+			);
+			path = "Testing";
+			sourceTree = "<group>";
+		};
+		AE981678C685202572A20475 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				A3F4F227E19EFA192308373E /* Geometry */,
+				0FED4A6FD3C3D24985572F74 /* Imaging */,
+				9BB779BFFFF773002F806F16 /* Model */,
+				91FC742326D0631B06DD1805 /* ROS */,
+				3F555E33C0722DDB80F50CF9 /* Testing */,
+			);
+			path = "Core";
+			sourceTree = "<group>";
+		};
+		3774184BABE7685485AC9AC0 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				5D05C5E0A1B51C740C2953D7 /* AppSettings.swift */,
+				5FB0F8D26C62CDE576117A5E /* DashboardAPI.swift */,
+				B4D408DE556F17C3391E79B0 /* ImageStreamPipeline.swift */,
+				80CDBFC61ED480B217875EA3 /* RobotConnection.swift */,
+				287B173AC356546E27C0AF99 /* RobotStore.swift */,
+			);
+			path = "Services";
+			sourceTree = "<group>";
+		};
+		F8461DDE71885246472CEA05 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				53C4BD83C72DE1BA9B420ADD /* SensorImageView.swift */,
+				9F8AD71CC3187EE46BA55797 /* StatusIndicators.swift */,
+			);
+			path = "Components";
+			sourceTree = "<group>";
+		};
+		E9EC79B12FD6F52A89FA5110 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				F8461DDE71885246472CEA05 /* Components */,
+				25C2856086040BA2FAE2B217 /* AlignmentSheet.swift */,
+				AF80DB233A4829B53F599A6E /* ConnectionView.swift */,
+				CC7669622837CB5CA03419A3 /* DiagnosticsView.swift */,
+				718932AC9CA22366BE12FF7A /* LiveView.swift */,
+				AE2BD2BF6F13FFBCD76B63CC /* RootView.swift */,
+				D3572D7A91846409AA722A14 /* SettingsView.swift */,
+			);
+			path = "Views";
+			sourceTree = "<group>";
+		};
+		756671F5EA91B8BFB2693DDC /* InitiatorDrone */ = {
+			isa = PBXGroup;
+			children = (
+				0005C9513652F5E4DF54E280 /* AR */,
+				045E8134B3E23D79243DE055 /* App */,
+				AE981678C685202572A20475 /* Core */,
+				3774184BABE7685485AC9AC0 /* Services */,
+				E9EC79B12FD6F52A89FA5110 /* Views */,
+				B674CE8D8865A0686B5CA7C9 /* Resources */,
+			);
+			path = "InitiatorDrone";
+			sourceTree = "<group>";
+		};
+		C2E8FEF6018B6DD22FC93020 /* InitiatorDroneTests */ = {
+			isa = PBXGroup;
+			children = (
+				C2B106A26CEA691E2FFD0EB2 /* ConnectionTests.swift */,
+				2A0A978D81E1FB29250031E8 /* GeometryTests.swift */,
+				0F3F78994250078C39FDA7FB /* ImageStreamSoakTests.swift */,
+				1575E426BDB4EC9A3B10E732 /* OdometryTests.swift */,
+				1B7C5C89A8BEAE3DF1D356F7 /* ROSImageDecoderTests.swift */,
+				4E0E59F6D80D9B2BD4975241 /* RenderingTests.swift */,
+				C1E9939C8F17C0052DE80736 /* RosbridgeTests.swift */,
+			);
+			path = "InitiatorDroneTests";
+			sourceTree = "<group>";
+		};
+		810909BF35252F38820C4CCC /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				C2E8FEF6018B6DD22FC93020 /* InitiatorDroneTests */,
+			);
+			path = "Tests";
+			sourceTree = "<group>";
+		};
+		B674CE8D8865A0686B5CA7C9 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				C150B7C47C3B3A6241DFAD4B /* Info.plist */,
+				5B6543B440C61DC2A1BADCA0 /* Fixtures */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		0340EDC3C7C95BDC82661CB2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				3E9DABFA02D968B0B42CD002 /* InitiatorDrone.app */,
+				CA33DACD8643877F42C9460A /* InitiatorDroneTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8D3FC2904BDC986822C3B4AA = {
+			isa = PBXGroup;
+			children = (
+				756671F5EA91B8BFB2693DDC /* InitiatorDrone */,
+				810909BF35252F38820C4CCC /* Tests */,
+				0340EDC3C7C95BDC82661CB2 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		22E79AFDABC3F5ECB220375A /* InitiatorDrone */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 685B4C56120C9605010453A7;
+			buildPhases = (
+				497D69F478461CE53100E752 /* Sources */,
+				3887A76084B48DFF01A85848 /* Frameworks */,
+				A329982323F53ED9EE7407F0 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = InitiatorDrone;
+			productName = InitiatorDrone;
+			productReference = 3E9DABFA02D968B0B42CD002 /* InitiatorDrone.app */;
+			productType = "com.apple.product-type.application";
+		};
+		C983E49405954542FFAA0C6A /* InitiatorDroneTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 84199E26B9CFFF95083490F5;
+			buildPhases = (
+				38BA8B173F20CC95C368CC1C /* Sources */,
+				E56981045A24F5F29574ABBC /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7E4FFF768C5CDBCA46984637 /* PBXTargetDependency */,
+			);
+			name = InitiatorDroneTests;
+			productName = InitiatorDroneTests;
+			productReference = CA33DACD8643877F42C9460A /* InitiatorDroneTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A49D03E032E9C8226E2C1C29 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					22E79AFDABC3F5ECB220375A = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					C983E49405954542FFAA0C6A = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = 22E79AFDABC3F5ECB220375A;
+					};
+				};
+			};
+			buildConfigurationList = F93D9189200191DF84C72457;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 8D3FC2904BDC986822C3B4AA;
+			productRefGroup = 0340EDC3C7C95BDC82661CB2 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				22E79AFDABC3F5ECB220375A /* InitiatorDrone */,
+				C983E49405954542FFAA0C6A /* InitiatorDroneTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A329982323F53ED9EE7407F0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				706F3920A0C0E215587C0E35 /* Fixtures in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		497D69F478461CE53100E752 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CC39D263C590774338AEF73E /* ARKitBridge.swift in Sources */,
+				A6302C6D615A9742FDF06FF7 /* ARRobotSceneView.swift in Sources */,
+				598F0C424BBC4B9BD78B104F /* ARSessionController.swift in Sources */,
+				F3438D5199CBF795D90C3C69 /* AlignmentController.swift in Sources */,
+				481C28B0038B3EBD444026FF /* RobotSceneNodes.swift in Sources */,
+				1E4477920C4DBFB969879F68 /* AppModel.swift in Sources */,
+				49E2CB42F4E23FFF78F5A4CE /* InitiatorDroneApp.swift in Sources */,
+				3E77678B4CC2190F77DF0370 /* ClockOffsetEstimator.swift in Sources */,
+				C00054B7E26FF61711449C5E /* FrameConversion.swift in Sources */,
+				79A6BDBB260CF370AAA806FA /* OdometryBuffer.swift in Sources */,
+				FE3A2DA15F21277518F0D8A2 /* OdometrySampler.swift in Sources */,
+				51EE771920471CC0FE4C03C9 /* Pose.swift in Sources */,
+				F7045D00E8A036AC2320E97A /* Quaternion.swift in Sources */,
+				A4F8BF4EC2AF393514B841FC /* Vector3.swift in Sources */,
+				0137158B75802EFDB4F422DC /* ColorRamp.swift in Sources */,
+				80197720D023C618B3F42BB3 /* ROSImage.swift in Sources */,
+				D0FDD4B4F1C84D36A2F98850 /* ROSImageDecoder.swift in Sources */,
+				E18FD33708FCF8607091243E /* ScalarImageRenderer.swift in Sources */,
+				9D7C7CDAB661AB6ABFBE8FAA /* RobotEndpoint.swift in Sources */,
+				82C337F5CA2F98C18C42B58E /* RobotTrackingStatus.swift in Sources */,
+				95916FFB1EB3E52383C05D4C /* VIONodeStatus.swift in Sources */,
+				A9DFAD6FC9173E56122C3243 /* CBORDecoder.swift in Sources */,
+				29979DDA2A5264B811AD2883 /* LatestOnlySlot.swift in Sources */,
+				E5FDE5A9E99A554E9978176A /* ROSMessages.swift in Sources */,
+				19749B9132BDDF4B333E5B87 /* ROSValue.swift in Sources */,
+				7EDD15471E81D0D50261408F /* RateTracker.swift in Sources */,
+				BE11BC756EFDC74042EB4530 /* ReconnectPolicy.swift in Sources */,
+				9E952545A695941FD0A4A6F2 /* RosbridgeClient.swift in Sources */,
+				4504CEB1AA1D182ACA722187 /* RosbridgeProtocol.swift in Sources */,
+				64A069F28D1F35C6ABD0D1B6 /* RosbridgeTransport.swift in Sources */,
+				A51FE7D6DF51E264B76EC8C7 /* FixtureLibrary.swift in Sources */,
+				CC10921658C2910E6630A4D7 /* SimulatedRosbridgeTransport.swift in Sources */,
+				B5E58B5B080BC3A73CF2550D /* AppSettings.swift in Sources */,
+				B267645F8DCB94306D67B65D /* DashboardAPI.swift in Sources */,
+				01F4F1A0C8646860E3D9FCAE /* ImageStreamPipeline.swift in Sources */,
+				F7A688277DD5D2B57DE6026B /* RobotConnection.swift in Sources */,
+				F23E2B55A17E163E8AEFD287 /* RobotStore.swift in Sources */,
+				64C45C104CED4D4EF04AC527 /* AlignmentSheet.swift in Sources */,
+				BC521CB321ED5F15F00101E4 /* ConnectionView.swift in Sources */,
+				EE2B02C8F939D5B82F69F7CA /* DiagnosticsView.swift in Sources */,
+				93B92BD1498CF72A675752F2 /* LiveView.swift in Sources */,
+				B3FAFF2DD6CF4D847DFA670C /* RootView.swift in Sources */,
+				C09429A238F71E4D326A5F8A /* SettingsView.swift in Sources */,
+				1B5BD89156C6EB65EF41C5F3 /* SensorImageView.swift in Sources */,
+				8A0CD2A0B5AC5EAB23AD846B /* StatusIndicators.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		38BA8B173F20CC95C368CC1C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0656A253A6894A2698370ED9 /* ConnectionTests.swift in Sources */,
+				6318A29294A2783E7EF3F991 /* GeometryTests.swift in Sources */,
+				F14F4420524D584C64170C23 /* ImageStreamSoakTests.swift in Sources */,
+				D8D2D022272C3521716A6EC2 /* OdometryTests.swift in Sources */,
+				092318CEE0192E74411D9F2A /* ROSImageDecoderTests.swift in Sources */,
+				5CA4D5A7652176831F33FD56 /* RenderingTests.swift in Sources */,
+				CDEEC50866E7A6CC6AD1D6D1 /* RosbridgeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		7E4FFF768C5CDBCA46984637 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 22E79AFDABC3F5ECB220375A /* InitiatorDrone */;
+			targetProxy = B734D905E4C58A6688E9A749 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		53BCFD95B87F444CE5BCE442 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = "DEBUG=1 $(inherited)";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = -Onone;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		2099F6C493573CA032985BCB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		C26D9F4F36FD94BE10AA01BE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = N9HUTA2737;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = InitiatorDrone/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.initiatordrone.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		59FF82BEC7463EB4E81EF7FF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = N9HUTA2737;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = InitiatorDrone/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.initiatordrone.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		D5DA94D2CF3200981C70F65E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = N9HUTA2737;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.initiatordrone.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/InitiatorDrone.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/InitiatorDrone";
+			};
+			name = Debug;
+		};
+		04D4E776D77ED03027E6149D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = N9HUTA2737;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.initiatordrone.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/InitiatorDrone.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/InitiatorDrone";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		F93D9189200191DF84C72457 /* Build configuration list for PBXProject "InitiatorDrone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				53BCFD95B87F444CE5BCE442 /* Debug */,
+				2099F6C493573CA032985BCB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		685B4C56120C9605010453A7 /* Build configuration list for PBXNativeTarget "InitiatorDrone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C26D9F4F36FD94BE10AA01BE /* Debug */,
+				59FF82BEC7463EB4E81EF7FF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		84199E26B9CFFF95083490F5 /* Build configuration list for PBXNativeTarget "InitiatorDroneTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D5DA94D2CF3200981C70F65E /* Debug */,
+				04D4E776D77ED03027E6149D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A49D03E032E9C8226E2C1C29 /* Project object */;
+}

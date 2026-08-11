@@ -108,3 +108,18 @@ The built-in dashboard calibration defaults are `Overlay=50.0`, `X=0.0`, `Y=0.0`
 Set `ROS2_WORKSPACE` when the ROS workspace is not beside this directory. The dashboard defaults to ROS 2 Jazzy; set `ROS_DISTRO` if you are using another distro, and `PORT` to change the dashboard port.
 
 Use `DRONE_MASTER_PARAMS=/path/to/master_params.yaml` to load a different master params file. Use `CAMERA_CALIBRATIONS_PARAMS=/path/to/camera_calibrations.yaml` to override only the calibration file referenced by the master params.
+
+## iPhone / iPad app
+
+`ios/` holds a native SwiftUI + ARKit app that talks to the same two ports as
+this dashboard: `GET/POST http://<robot-ip>:4173/api/…` for Start, Stop and
+Calibrate, and `ws://<robot-ip>:9090` for the streams. It shows the cropped
+depth image, the VIO node status, and a marker drawn into the phone's camera
+view where the robot is in the room. It sends no flight-control commands.
+
+Unlike the browser dashboard it is depth-only — it never subscribes to
+`/thermal/cropped/image_raw`, so the thermal sensor's role is limited to driving
+the cropper that decides which part of the depth frame is worth sending.
+
+See `ios/README.md` for building, signing and installing it, and for the topic
+and endpoint contract it expects.
