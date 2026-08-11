@@ -7,6 +7,7 @@ const startToggle = document.querySelector('#start-toggle');
 const calibrateVioButton = document.querySelector('#calibrate-vio');
 const cpuMini = document.querySelector('#cpu-mini');
 const imuMini = document.querySelector('#imu-mini');
+const vioVideoMini = document.querySelector('#vio-video-mini');
 const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
 const zoomBufferCanvas = document.createElement('canvas');
@@ -42,6 +43,7 @@ let imageTopics = {
   cameraInfo: '/camera/depth/camera_info',
   thermal: '/thermal/image_raw',
   imu: '/imu/data_calibrated',
+  vioVideoStatus: '/vio/video_working',
 };
 let frontendMode = 'full';
 const SIMPLE_DISPLAY_SIZE = { width: 1024, height: 768 };
@@ -84,6 +86,8 @@ let latestThermal = null;
 let latestColor = null;
 let thermalStatus = 'thermal waiting';
 let imuStatus = 'IMU waiting';
+let vioVideoWorking = null;
+let lastVioVideoStatusAt = 0;
 let drawScheduled = false;
 let viewerZoomPercent = readStoredViewerZoom();
 let cameraFrameToken = 0;
@@ -121,7 +125,10 @@ function closeRosbridge() {
   latestThermal = null;
   thermalStatus = 'thermal waiting';
   imuStatus = 'IMU waiting';
+  vioVideoWorking = null;
+  lastVioVideoStatusAt = 0;
   renderImuStatus();
+  renderVioVideoStatus();
   subscribedTopics = new Set();
   connection.textContent = 'Camera stream disconnected.';
 }
@@ -139,6 +146,7 @@ function connectRosbridge() {
       : `Waiting for depth frames: ${imageTopics.color}`;
     subscribeImageTopic(imageTopics.color);
     subscribeImuTopic();
+    subscribeVioVideoStatus();
     if (frontendMode !== 'simple') subscribeCameraInfo();
   };
   rosSocket.onmessage = (event) => {
@@ -164,6 +172,7 @@ function connectRosbridge() {
     }
 
     if (message.topic === imageTopics.imu) updateImu(message.msg);
+    if (message.topic === imageTopics.vioVideoStatus) updateVioVideoStatus(message.msg);
   };
   rosSocket.onerror = () => {
     connection.textContent = 'Waiting for rosbridge on port 9090...';
@@ -188,6 +197,12 @@ function subscribeImuTopic() {
       throttle_rate: frontendMode === 'simple' ? 100 : 0,
       queue_length: 1,
     });
+  }
+}
+
+function subscribeVioVideoStatus() {
+  if (imageTopics.vioVideoStatus) {
+    subscribeRosTopic(imageTopics.vioVideoStatus, 'std_msgs/msg/Bool', { queue_length: 1 });
   }
 }
 
@@ -306,6 +321,26 @@ function formatImuValue(value) {
 
 function renderImuStatus() {
   if (imuMini) imuMini.textContent = imuStatus;
+}
+
+function updateVioVideoStatus(message) {
+  vioVideoWorking = message && message.data === true;
+  lastVioVideoStatusAt = Date.now();
+  renderVioVideoStatus();
+}
+
+function renderVioVideoStatus() {
+  if (!vioVideoMini) return;
+  const statusIsFresh = lastVioVideoStatusAt > 0 && Date.now() - lastVioVideoStatusAt < 3000;
+  vioVideoMini.classList.toggle('working', statusIsFresh && vioVideoWorking === true);
+  vioVideoMini.classList.toggle('not-ready', statusIsFresh && vioVideoWorking === false);
+  if (!statusIsFresh) {
+    vioVideoMini.textContent = 'VIO video waiting';
+  } else if (vioVideoWorking) {
+    vioVideoMini.textContent = 'VIO video working';
+  } else {
+    vioVideoMini.textContent = 'VIO video not ready';
+  }
 }
 
 function showWaitingForSimpleCrop() {
@@ -751,11 +786,13 @@ function applyStreamConfig(stream) {
     cameraInfo: stream.cameraInfoTopic || imageTopics.cameraInfo,
     thermal: stream.thermalTopic || imageTopics.thermal,
     imu: stream.imuTopic || imageTopics.imu,
+    vioVideoStatus: stream.vioVideoStatusTopic || imageTopics.vioVideoStatus,
   };
   const topicsChanged = nextTopics.color !== imageTopics.color
     || nextTopics.cameraInfo !== imageTopics.cameraInfo
     || nextTopics.thermal !== imageTopics.thermal
-    || nextTopics.imu !== imageTopics.imu;
+    || nextTopics.imu !== imageTopics.imu
+    || nextTopics.vioVideoStatus !== imageTopics.vioVideoStatus;
   if (topicsChanged) cameraInfoFov = null;
   imageTopics = nextTopics;
   thermalFov = finiteFov(stream.thermalFov, thermalFov);
@@ -1244,3 +1281,4 @@ if (logPanel && logResizeHandle) {
 
 refresh();
 setInterval(refresh, 2000);
+setInterval(renderVioVideoStatus, 1000);

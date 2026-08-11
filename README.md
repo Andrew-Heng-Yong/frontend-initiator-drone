@@ -84,7 +84,12 @@ For MI0802 hardware, the default device is `/dev/ttyACM0`; the stable target pat
 
 For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. At startup the driver logs the device identity and reads back the actual gyro/accelerometer ranges instead of assuming its register writes succeeded. It publishes unmodified `sensor_msgs/Imu` samples on `/imu/data_raw` and chip temperature on `/imu/temperature`. After VIO calibration, the frontend reads `/imu/data_calibrated`, whose gyro is bias-corrected and whose acceleration has gravity removed using the current estimated attitude, so a stationary sensor reads approximately zero at any orientation.
 
-There is no calibration startup gate: the depth/RGB camera, IMU, VIO, cropper, rosbridge, and thermal pipeline begin launching together. VIO startup alignment independently uses 100 IMU samples; the manual **Calibrate all** action remains at 20 samples.
+The Orbbec RGB stream is capped at 5 FPS to match VIO processing and reduce camera and transport load. The header's VIO
+video indicator listens to `/vio/video_working`; it reports **VIO video working** when VIO can
+decode current RGB frames and has valid camera intrinsics. This remains distinct from visual
+motion tracking, which can correctly be inactive while the camera is stationary.
+
+There is no calibration startup gate: the depth/RGB camera, IMU, VIO, cropper, rosbridge, and thermal pipeline begin launching together. VIO startup alignment independently uses 1000 IMU samples; the manual **Calibrate all** action remains at 20 samples.
 
 The header's **Calibrate all** button calls `/vio/calibrate`. Use it only while the drone is
 stationary. It resets the VIO odometry origin and visual tracker, then re-estimates gyro bias,

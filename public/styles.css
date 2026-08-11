@@ -44,6 +44,9 @@ button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; f
 .cpu-empty { color: #9fb0c9; }
 
 .imu-mini { color:#8da4c3; font:700 .7rem/1.35 ui-monospace, Consolas, monospace; background: rgba(2,10,18,.3); padding:.28rem .45rem; border-radius:.35rem; border:1px solid rgba(46,68,90,.3); white-space: normal; }
+.vio-video-mini { color:#8da4c3; font:800 .7rem/1.35 ui-monospace, Consolas, monospace; background:rgba(2,10,18,.3); padding:.28rem .45rem; border-radius:.35rem; border:1px solid rgba(46,68,90,.3); white-space:nowrap; }
+.vio-video-mini.working { color:#69e6ad; border-color:rgba(56,217,150,.45); }
+.vio-video-mini.not-ready { color:#f9ce62; border-color:rgba(249,206,98,.38); }
 .cpu-mini { display:flex; gap:.5rem; align-items:center; justify-content:center; min-width:10rem; margin-left: auto; }
 .cpu-mini .mini-core { color:#8da4c3; font-size:.7rem; background: rgba(2,10,18,.3); padding:.2rem .4rem; border-radius:.35rem; border:1px solid rgba(46,68,90,.3); }
 .cpu-mini .cpu-temp { color: #f9ce62; border-color: rgba(249, 206, 98, .32); }

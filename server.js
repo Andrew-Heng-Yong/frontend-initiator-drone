@@ -36,7 +36,7 @@ const ALIGNMENT_FILE = resolveLocalPath(process.env.THERMAL_ALIGNMENT_FILE || SY
 const CROPPER_SETTINGS_FILE = resolveLocalPath(process.env.THERMAL_CROPPER_SETTINGS_FILE || SYSTEM_PARAMS.cropper_settings_file || path.join(__dirname, '.thermal-cropper.json'));
 const FRONTEND_MODE = process.env.FRONTEND_MODE || STREAM_PARAMS.frontend_mode || 'full';
 const BASE_LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND || DRONE_PARAMS.launch_command
-  || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_vio:=true start_thermal_cropper:=true thermal_cropper_enabled:=false start_thermal_overlay:=false';
+  || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_vio:=true color_fps:=5 start_thermal_cropper:=true thermal_cropper_enabled:=false start_thermal_overlay:=false';
 const STREAM_CONFIG = {
   frontendMode: FRONTEND_MODE,
   colorTopic: process.env.DEPTH_IMAGE_TOPIC || process.env.COLOR_IMAGE_TOPIC || STREAM_PARAMS.depth_image_topic || STREAM_PARAMS.color_image_topic || '/camera/depth/cropped/image_raw',
@@ -46,6 +46,7 @@ const STREAM_CONFIG = {
   rawCameraInfoTopic: process.env.RAW_DEPTH_CAMERA_INFO_TOPIC || process.env.DEPTH_CAMERA_INFO_TOPIC || STREAM_PARAMS.raw_depth_camera_info_topic || '/camera/depth/camera_info',
   rawThermalTopic: process.env.RAW_THERMAL_IMAGE_TOPIC || process.env.THERMAL_IMAGE_TOPIC || STREAM_PARAMS.raw_thermal_image_topic || '/thermal/image_raw',
   imuTopic: process.env.IMU_TOPIC || STREAM_PARAMS.imu_topic || '/imu/data_calibrated',
+  vioVideoStatusTopic: process.env.VIO_VIDEO_STATUS_TOPIC || STREAM_PARAMS.vio_video_status_topic || '/vio/video_working',
   baseViewMode: process.env.BASE_VIEW_MODE || STREAM_PARAMS.base_view_mode || 'full-depth',
   thermalFov: {
     horizontal: Number(process.env.THERMAL_FOV_HORIZONTAL || STREAM_PARAMS.thermal_fov_horizontal || 90),
