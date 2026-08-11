@@ -136,8 +136,26 @@ the difference between renewing weekly and renewing annually.
 On the **Robot** tab, tap **Run on fixtures**. A simulated rosbridge server
 replays synthesised depth, odometry, IMU and status messages through the real
 message path — same subscribe commands, same JSON envelopes, same decoders.
-Everything except Start/Stop/Calibrate behaves as it does against a live robot,
-including the reconnect logic (Diagnostics ▸ ⋯ ▸ *Simulate Wi-Fi drop*).
+Everything behaves as it does against a live robot, including the reconnect
+logic (Diagnostics ▸ ⋯ ▸ *Simulate Wi-Fi drop*).
+
+**Start, Stop and Calibrate work here too.** They drive the simulator instead of
+the dashboard HTTP API, and it models the same states rather than merely
+flipping a label:
+
+- **Stop** silences every topic, the way killing the launch removes the nodes.
+  The VIO node pill goes to *Graph stopped* and the depth panel stops updating.
+- **Start** brings them back and runs a startup calibration first, as a real
+  launch does.
+- **Calibrate** publishes `calibrated = false`, withholds odometry while it
+  "collects stationary samples", then publishes `true` and resumes — the exact
+  sequence `vio_node` produces, so the *Calibrating → Running* transition is
+  worth watching.
+
+One deliberate difference: stopping the real launch also kills rosbridge, so the
+socket drops. The simulator keeps the link up, because otherwise the client would
+reconnect straight away and the stopped state would never stay on screen long
+enough to inspect.
 
 By default the fixture robot drives a slow figure-of-eight. **Settings ▸
 Fixtures mode ▸ Park the robot at the origin** stops it at the `odom` origin
@@ -436,7 +454,7 @@ seconds.
 Scripts/run-core-tests.sh
 ```
 
-188 tests, no Xcode required. The suite compiles `Core/`, `Services/` and
+209 tests, no Xcode required. The suite compiles `Core/`, `Services/` and
 `Tests/` for macOS with `swiftc` and runs them against a small XCTest shim; the
 same files run unmodified under `⌘U` in Xcode, which additionally covers the AR
 and SwiftUI layers by building them.
@@ -447,8 +465,9 @@ PASS ROSImageDecoderTests     25 passed,   0 failed
 PASS OdometryTests            28 passed,   0 failed
 PASS RosbridgeTests           43 passed,   0 failed
 PASS RenderingTests           28 passed,   0 failed
-PASS ConnectionTests          32 passed,   0 failed
+PASS ConnectionTests          34 passed,   0 failed
 PASS ImageStreamSoakTests      3 passed,   0 failed
+PASS DepthPointCloudTests     19 passed,   0 failed
 ```
 
 Coverage of the things most likely to be silently wrong:
@@ -471,6 +490,10 @@ Coverage of the things most likely to be silently wrong:
 - **AR video format choice** — that the tallest frame wins over any 16:9 crop of
   it, and that equal aspect ratios fall back to ARKit's ordering rather than to
   resolution.
+- **The fixture launch lifecycle** — that Stop makes the graph genuinely silent
+  rather than only relabelling it, that Start brings it back, and that Calibrate
+  withholds odometry and drops both VIO flags until it completes, which is the
+  sequence the node status is built to read.
 - **Reconnection** — the backoff curve and jitter bounds as pure functions, plus
   an end-to-end run where the fixture transport drops the link the way Wi-Fi
   does (no close handshake, just silence) and the client is required to notice,

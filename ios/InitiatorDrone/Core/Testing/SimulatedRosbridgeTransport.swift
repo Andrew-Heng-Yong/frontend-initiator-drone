@@ -25,8 +25,13 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
     /// Reports `/vio/visual_tracking` as false, to exercise the "calibrated but
     /// not tracking" presentation.
     public var simulatesTrackingLoss = false
-    /// Reports `/vio/calibrated` as false until `calibrate()` is called.
+    /// Latest `/vio/calibrated` value. Driven by `calibrate()` and by the
+    /// startup calibration a simulated launch performs.
     public var isCalibrated = true
+
+    /// How long a simulated stationary calibration takes, in seconds. Short
+    /// enough to watch, long enough to see the pill change.
+    public var calibrationDuration: Double = 2.0
 
     /// Parks the robot instead of driving it around a figure-of-eight.
     /// Safe to flip while connected.
@@ -47,6 +52,12 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
     private var lastSendTimes: [String: Double] = [:]
     private var tickCount = 0
 
+    /// Whether the simulated ROS launch is up. A stopped graph publishes
+    /// nothing at all, which is what killing the launch does.
+    private var graphRunning = true
+    /// Elapsed time at which the running calibration completes, or `nil`.
+    private var calibrationEndsAt: Double?
+
     private struct Subscription {
         var topic: String
         var throttleSeconds: Double
@@ -54,6 +65,10 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
     }
 
     public var isConnected: Bool { queue.sync { connected } }
+
+    /// Whether the simulated launch is running. `RobotConnection` reads this in
+    /// place of `GET /api/state`, which has no counterpart here.
+    public var isGraphRunning: Bool { queue.sync { graphRunning } }
 
     public override init() {
         super.init()
@@ -134,12 +149,62 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
         }
     }
 
-    /// Marks VIO as calibrated, mirroring what `POST /api/vio/calibrate` would
-    /// eventually cause the robot to publish.
+    // MARK: - Simulated dashboard actions
+
+    /// Stands in for `POST /api/start`.
+    ///
+    /// A real launch brings the nodes up and `vio_node` immediately runs its
+    /// stationary startup calibration, so this does the same.
+    public func startGraph() {
+        queue.async { [weak self] in
+            guard let self, !self.graphRunning else { return }
+            self.graphRunning = true
+            // Every stream restarts from now rather than pretending to have
+            // been publishing all along while stopped.
+            self.lastSendTimes.removeAll()
+            self.beginCalibrationLocked()
+            self.sendStatus(level: "info", message: "simulated launch started")
+        }
+    }
+
+    /// Stands in for `POST /api/stop`: every topic goes quiet.
+    ///
+    /// Killing the real launch also takes rosbridge with it, so the socket
+    /// drops. This keeps the link up on purpose — otherwise the client would
+    /// immediately reconnect to a fresh simulator and the stopped state would
+    /// never be visible long enough to look at.
+    public func stopGraph() {
+        queue.async { [weak self] in
+            guard let self, self.graphRunning else { return }
+            self.graphRunning = false
+            self.calibrationEndsAt = nil
+            // The next launch starts uncalibrated, as a fresh node does.
+            self.isCalibrated = false
+            self.sendStatus(level: "info", message: "simulated launch stopped")
+        }
+    }
+
+    /// Stands in for `POST /api/vio/calibrate`.
+    ///
+    /// Mirrors what `vio_node` actually does: publish `calibrated = false`,
+    /// stop publishing odometry while it collects stationary samples, then
+    /// publish `calibrated = true` and resume. Nothing to calibrate while the
+    /// graph is stopped.
     public func calibrate() {
         queue.async { [weak self] in
-            self?.isCalibrated = true
+            guard let self, self.graphRunning else { return }
+            self.beginCalibrationLocked()
         }
+    }
+
+    /// Must be called on `queue`.
+    private func beginCalibrationLocked() {
+        isCalibrated = false
+        calibrationEndsAt = Date().timeIntervalSince(startTime) + calibrationDuration
+        // Let the flags go out on the next tick rather than up to a second
+        // later, so the button visibly does something.
+        lastSendTimes.removeValue(forKey: RobotTopic.vioCalibrated.topicName)
+        lastSendTimes.removeValue(forKey: RobotTopic.visualTracking.topicName)
     }
 
     /// Parks or releases the robot while connected.
@@ -174,12 +239,18 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
         tickCount += 1
         let elapsed = Date().timeIntervalSince(startTime)
 
-        publishIfDue(.odometry, interval: 1.0 / odometryRate, elapsed: elapsed) {
-            self.odometryMessage(at: elapsed)
+        // A stopped launch has no nodes, so nothing publishes at all. This is
+        // what makes `VIONodeStatus` reach `.graphStopped` in fixtures mode.
+        guard graphRunning else { return }
+
+        if let endsAt = calibrationEndsAt, elapsed >= endsAt {
+            calibrationEndsAt = nil
+            isCalibrated = true
         }
-        publishIfDue(.imu, interval: 1.0 / imuRate, elapsed: elapsed) {
-            self.imuMessage(at: elapsed)
-        }
+        let isCalibrating = calibrationEndsAt != nil
+
+        // The camera is a different node and keeps streaming through a VIO
+        // calibration, exactly as on the robot.
         publishIfDue(.depthImage, interval: 1.0 / depthFrameRate, elapsed: elapsed) {
             self.depthImageMessage(at: elapsed)
         }
@@ -190,7 +261,18 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
             ["data": self.isCalibrated]
         }
         publishIfDue(.visualTracking, interval: 1.0, elapsed: elapsed) {
-            ["data": !self.simulatesTrackingLoss]
+            ["data": !isCalibrating && !self.simulatesTrackingLoss]
+        }
+
+        // No pose exists until initialisation finishes; the real node publishes
+        // none either.
+        guard !isCalibrating else { return }
+
+        publishIfDue(.odometry, interval: 1.0 / odometryRate, elapsed: elapsed) {
+            self.odometryMessage(at: elapsed)
+        }
+        publishIfDue(.imu, interval: 1.0 / imuRate, elapsed: elapsed) {
+            self.imuMessage(at: elapsed)
         }
     }
 

@@ -179,7 +179,9 @@ public final class RobotConnection: ObservableObject {
         self.client = client
         client.connect(to: endpoint)
 
-        if !simulated {
+        if simulated {
+            updateSimulatedDashboardState()
+        } else {
             startDashboardPolling()
             Task {
                 await dashboard.setEndpoint(endpoint)
@@ -213,6 +215,11 @@ public final class RobotConnection: ObservableObject {
         depthRenderRate.reset()
 
         connectionState = .idle
+        // Nothing is known about the graph once the link is gone, and a stale
+        // "running" would leave Stop and Calibrate enabled against a backend
+        // that is no longer there.
+        dashboardState = nil
+        dashboardError = nil
         depthFrame = nil
         latestOdometry = nil
         latestIMU = nil
@@ -231,33 +238,62 @@ public final class RobotConnection: ObservableObject {
     // MARK: - Dashboard actions
 
     public func startGraph() async {
-        await performDashboardAction("Start") { try await self.dashboard.start() }
+        await performDashboardAction(
+            "Start",
+            onSimulator: { $0.startGraph() },
+            onRobot: { try await self.dashboard.start() }
+        )
     }
 
     public func stopGraph() async {
-        await performDashboardAction("Stop") { try await self.dashboard.stop() }
+        await performDashboardAction(
+            "Stop",
+            onSimulator: { $0.stopGraph() },
+            onRobot: { try await self.dashboard.stop() }
+        )
     }
 
     /// Requests a VIO calibration. Refused while the graph is stopped, because
     /// there is nothing running to calibrate.
     public func calibrateVIO() async {
-        await performDashboardAction("Calibrate") { try await self.dashboard.calibrateVIO() }
+        await performDashboardAction(
+            "Calibrate",
+            onSimulator: { $0.calibrate() },
+            onRobot: { try await self.dashboard.calibrateVIO() }
+        )
     }
 
     public var canCalibrate: Bool {
-        !isSimulated && (dashboardState?.isRunning ?? false)
+        dashboardState?.isRunning ?? false
     }
 
+    /// The fixture player, when one is driving this connection.
+    private var simulator: SimulatedRosbridgeTransport? {
+        transport as? SimulatedRosbridgeTransport
+    }
+
+    /// Runs a dashboard action against whichever backend is connected.
+    ///
+    /// Fixtures mode used to refuse these outright, which left the operator
+    /// with three dead buttons and no way to exercise the launch lifecycle
+    /// without a robot. The simulator models the same states instead, so the
+    /// controls behave the same way and only the thing being controlled
+    /// differs.
     private func performDashboardAction(
         _ name: String,
-        _ action: @escaping () async throws -> Bool
+        onSimulator: (SimulatedRosbridgeTransport) -> Void,
+        onRobot: @escaping () async throws -> Bool
     ) async {
-        guard !isSimulated else {
-            append(log: RosbridgeLogEntry(level: .warning, text: "\(name) ignored: running on fixtures"))
+        if let simulator {
+            onSimulator(simulator)
+            append(log: RosbridgeLogEntry(level: .info, text: "\(name) requested (fixtures)"))
+            dashboardError = nil
+            updateSimulatedDashboardState()
+            refreshTrackingStatus()
             return
         }
         do {
-            _ = try await action()
+            _ = try await onRobot()
             append(log: RosbridgeLogEntry(level: .info, text: "\(name) requested"))
             dashboardError = nil
         } catch {
@@ -269,7 +305,11 @@ public final class RobotConnection: ObservableObject {
     }
 
     public func refreshDashboardState() async {
-        guard !isSimulated, endpoint != nil else { return }
+        guard endpoint != nil else { return }
+        guard simulator == nil else {
+            updateSimulatedDashboardState()
+            return
+        }
         do {
             dashboardState = try await dashboard.fetchState()
             dashboardError = nil
@@ -277,6 +317,14 @@ public final class RobotConnection: ObservableObject {
             dashboardState = nil
             dashboardError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+
+    /// Fixtures mode has no HTTP dashboard, so the simulator itself is the
+    /// authority on whether the graph is up.
+    private func updateSimulatedDashboardState() {
+        guard let simulator else { return }
+        dashboardState = DashboardState(isRunning: simulator.isGraphRunning)
+        dashboardError = nil
     }
 
     private func startDashboardPolling() {
@@ -436,9 +484,9 @@ public final class RobotConnection: ObservableObject {
 
         vioNodeStatus = VIONodeStatus.evaluate(
             isLinkConnected: connectionState.isConnected,
-            // Fixtures mode has no dashboard, so the topics are the only
-            // evidence; `nil` says "unknown" rather than "stopped".
-            isGraphRunning: isSimulated ? nil : dashboardState?.isRunning,
+            // The simulator answers this too, so Stop in fixtures mode reaches
+            // `.graphStopped` rather than looking like a crashed node.
+            isGraphRunning: dashboardState?.isRunning,
             isCalibrated: isCalibrated,
             vioMessageAge: lastVIOMessageTime.map { now - $0 },
             odometryAge: odometryAge,

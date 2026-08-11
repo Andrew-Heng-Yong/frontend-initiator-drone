@@ -377,6 +377,95 @@ final class ConnectionTests: XCTestCase {
         client.disconnect()
     }
 
+    /// Stop has to make the fixture graph genuinely silent, not merely flip a
+    /// label — that silence is what the status pills and `VIONodeStatus` read.
+    func testStopSilencesTheFixtureGraphAndStartBringsItBack() {
+        let transport = SimulatedRosbridgeTransport()
+        transport.calibrationDuration = 0.3
+        let client = RosbridgeClient(transport: transport)
+        let sink = EventSink()
+
+        let streaming = expectation(description: "streaming")
+        client.onEvent = { event in
+            sink.handle(event)
+            if sink.odometry.count >= 3 { streaming.fulfill() }
+        }
+        client.connect(to: RobotEndpoint(host: "fixtures.local"))
+        wait(for: [streaming], timeout: 10)
+        XCTAssertTrue(transport.isGraphRunning)
+
+        transport.stopGraph()
+        XCTAssertFalse(transport.isGraphRunning)
+
+        // Let anything already in flight land, then require true silence.
+        Thread.sleep(forTimeInterval: 0.3)
+        let settled = sink.odometry.count
+        let settledImages = sink.images[.depthImage] ?? 0
+        Thread.sleep(forTimeInterval: 0.5)
+        XCTAssertEqual(sink.odometry.count, settled, "a stopped graph must publish no odometry")
+        XCTAssertEqual(sink.images[.depthImage] ?? 0, settledImages, "a stopped graph must publish no depth")
+
+        let resumed = expectation(description: "resumed")
+        client.onEvent = { event in
+            sink.handle(event)
+            if sink.odometry.count > settled + 2 { resumed.fulfill() }
+        }
+        transport.startGraph()
+        wait(for: [resumed], timeout: 10)
+
+        client.disconnect()
+    }
+
+    /// Calibrate has to reproduce what `vio_node` does — drop `calibrated` to
+    /// false, stop publishing a pose while it collects samples, then come back
+    /// — because that is the sequence the VIO node status is built to read.
+    func testCalibrateOnFixturesWithholdsOdometryUntilItCompletes() {
+        let transport = SimulatedRosbridgeTransport()
+        transport.calibrationDuration = 0.6
+        let client = RosbridgeClient(transport: transport)
+        let sink = EventSink()
+
+        let streaming = expectation(description: "streaming")
+        client.onEvent = { event in
+            sink.handle(event)
+            if sink.odometry.count >= 3, sink.flags[.vioCalibrated] == true { streaming.fulfill() }
+        }
+        client.connect(to: RobotEndpoint(host: "fixtures.local"))
+        wait(for: [streaming], timeout: 10)
+
+        // Both flags must drop: a calibrating estimator is not tracking
+        // anything either. They go out in the same tick but arrive as separate
+        // callbacks, so waiting on only one would race the other.
+        let calibrating = expectation(description: "reports uncalibrated and untracking")
+        client.onEvent = { event in
+            sink.handle(event)
+            if sink.flags[.vioCalibrated] == false, sink.flags[.visualTracking] == false {
+                calibrating.fulfill()
+            }
+        }
+        transport.calibrate()
+        wait(for: [calibrating], timeout: 10)
+
+        let duringCalibration = sink.odometry.count
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertEqual(
+            sink.odometry.count,
+            duringCalibration,
+            "no pose may be published while calibrating"
+        )
+
+        let finished = expectation(description: "calibrated again")
+        client.onEvent = { event in
+            sink.handle(event)
+            if sink.flags[.vioCalibrated] == true, sink.odometry.count > duringCalibration {
+                finished.fulfill()
+            }
+        }
+        wait(for: [finished], timeout: 10)
+
+        client.disconnect()
+    }
+
     func testClientReconnectsAfterAWiFiDropAndResubscribes() {
         // The Wi-Fi-loss path: the socket goes quiet with no clean close, the
         // client must notice, back off, reconnect and re-subscribe.
@@ -559,6 +648,8 @@ final class ConnectionTests: XCTestCase {
             ("testZeroJitterIsExactlyTheBaseDelay", testZeroJitterIsExactlyTheBaseDelay),
             ("testPolicyClampsNonsensicalConfiguration", testPolicyClampsNonsensicalConfiguration),
             ("testClientStreamsEveryTopicFromTheFixtureTransport", testClientStreamsEveryTopicFromTheFixtureTransport),
+            ("testStopSilencesTheFixtureGraphAndStartBringsItBack", testStopSilencesTheFixtureGraphAndStartBringsItBack),
+            ("testCalibrateOnFixturesWithholdsOdometryUntilItCompletes", testCalibrateOnFixturesWithholdsOdometryUntilItCompletes),
             ("testClientReconnectsAfterAWiFiDropAndResubscribes", testClientReconnectsAfterAWiFiDropAndResubscribes),
             ("testDisconnectStopsTheStreamAndDoesNotReconnect", testDisconnectStopsTheStreamAndDoesNotReconnect),
             ("testHealthSnapshotsReportRatesForSubscribedTopics", testHealthSnapshotsReportRatesForSubscribedTopics),

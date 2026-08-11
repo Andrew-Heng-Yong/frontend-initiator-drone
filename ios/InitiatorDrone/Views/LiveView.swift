@@ -381,15 +381,14 @@ struct LiveView: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
+    /// Fixtures included: the simulator models the same launch lifecycle, so
+    /// these controls mean the same thing there.
     private var canControlGraph: Bool {
-        !connection.isSimulated && connection.endpoint != nil
+        connection.endpoint != nil
     }
 
     /// Explains a disabled control instead of leaving the operator guessing.
     private var disabledExplanation: String? {
-        if connection.isSimulated {
-            return "Running on fixtures. Start, Stop and Calibrate are disabled."
-        }
         if connection.endpoint == nil {
             return "Add a robot on the Robot tab to enable the controls."
         }
@@ -397,7 +396,9 @@ struct LiveView: View {
             return "Dashboard: \(error)"
         }
         if connection.dashboardState?.isRunning == false {
-            return "ROS graph is stopped. Calibration is unavailable until you start it."
+            return connection.isSimulated
+                ? "Simulated launch is stopped. Press Start to bring the fixture streams back."
+                : "ROS graph is stopped. Calibration is unavailable until you start it."
         }
         // The node not being up explains a missing marker better than anything
         // downstream of it can, so it is reported ahead of the pose status.
