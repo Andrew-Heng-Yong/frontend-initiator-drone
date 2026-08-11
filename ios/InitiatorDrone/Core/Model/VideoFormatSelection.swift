@@ -10,14 +10,11 @@ public struct VideoFormatCandidate: Equatable, Sendable {
     public var width: Int
     public var height: Int
     public var framesPerSecond: Int
-    /// `captureDeviceType == .builtInUltraWideCamera`.
-    public var isUltraWide: Bool
 
-    public init(width: Int, height: Int, framesPerSecond: Int, isUltraWide: Bool) {
+    public init(width: Int, height: Int, framesPerSecond: Int) {
         self.width = width
         self.height = height
         self.framesPerSecond = framesPerSecond
-        self.isUltraWide = isUltraWide
     }
 
     /// Frame height over width. Higher means more of the scene vertically.
@@ -31,30 +28,21 @@ public enum VideoFormatSelection {
 
     /// Index of the widest-field-of-view format, or `nil` if there are none.
     ///
-    /// Two rules, in order:
+    /// **The tallest frame wins.** Every format ARKit offers world tracking
+    /// comes from the same lens and the same sensor: the 4:3 entries are the
+    /// full readout, and each 16:9 entry is that image with the top and bottom
+    /// cropped away. Horizontal coverage is identical either way, so the taller
+    /// aspect ratio is strictly more of the scene at no cost.
     ///
-    /// 1. **An ultra-wide format wins outright.** Roughly double the field of
-    ///    view beats anything a crop of the wide lens can offer. In practice no
-    ///    iPhone offers one to `ARWorldTrackingConfiguration` — ARKit uses the
-    ///    ultra-wide internally for tracking but does not publish it as a video
-    ///    format — so this branch is a no-op on current hardware and exists so
-    ///    the app takes it on any device that ever does.
-    ///
-    /// 2. **Otherwise the tallest frame.** Every format from one lens is read
-    ///    from the same sensor: 4:3 is the full readout, and the 16:9 formats
-    ///    are that same image with the top and bottom cropped away. Horizontal
-    ///    coverage is identical, so the taller aspect ratio is strictly more of
-    ///    the scene, at no cost.
+    /// This is the whole of the field of view available to the app. ARKit does
+    /// not offer the ultra-wide lens to world tracking on any current iPhone —
+    /// it drives that camera itself for tracking but never publishes it as a
+    /// selectable format — so there is no wider option to reach for.
     ///
     /// Ties go to whichever ARKit listed first, which is its own recommendation
     /// and therefore the safer resolution and frame rate.
     public static func widestFieldOfView(among candidates: [VideoFormatCandidate]) -> Int? {
-        guard !candidates.isEmpty else { return nil }
-
-        let ultraWide = candidates.indices.filter { candidates[$0].isUltraWide }
-        let pool = ultraWide.isEmpty ? Array(candidates.indices) : ultraWide
-
-        return pool.min { left, right in
+        candidates.indices.min { left, right in
             let difference = candidates[left].aspectRatio - candidates[right].aspectRatio
             // Formats quantise to a handful of exact ratios, so anything inside
             // this tolerance is the same shape and should fall through to

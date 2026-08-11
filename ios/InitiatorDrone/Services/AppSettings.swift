@@ -19,10 +19,6 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var showsCameraFrustum: Bool
     /// Draw a trail behind the robot marker.
     public var showsRobotTrail: Bool
-    /// Run the AR session on the widest field of view the device offers rather
-    /// than on ARKit's default format. Wider framing keeps the robot marker on
-    /// screen from much closer, which is the normal way this app is held.
-    public var prefersWidestFieldOfView: Bool
 
     public init(
         depthColorMap: ScalarColorMapSettings = .depthDefault,
@@ -31,8 +27,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         odometryStalenessThreshold: Double = 0.5,
         odometryExtrapolationLimit: Double = 0.0,
         showsCameraFrustum: Bool = true,
-        showsRobotTrail: Bool = true,
-        prefersWidestFieldOfView: Bool = true
+        showsRobotTrail: Bool = true
     ) {
         self.depthColorMap = depthColorMap
         self.compression = compression
@@ -41,7 +36,6 @@ public struct AppSettings: Equatable, Codable, Sendable {
         self.odometryExtrapolationLimit = odometryExtrapolationLimit
         self.showsCameraFrustum = showsCameraFrustum
         self.showsRobotTrail = showsRobotTrail
-        self.prefersWidestFieldOfView = prefersWidestFieldOfView
     }
 
     public func depthInterpretation(for encoding: ROSImageEncoding) -> ScalarInterpretation {
@@ -52,10 +46,20 @@ public struct AppSettings: Equatable, Codable, Sendable {
 /// Observable wrapper that reads and writes `AppSettings` to `UserDefaults`.
 @MainActor
 public final class SettingsStore: ObservableObject {
-    /// Bumped from `v1` when the thermal, blend and picture-in-picture settings
-    /// were removed. A `v1` blob cannot decode into the current shape, and
-    /// silently falling back to defaults on every launch would look like the
-    /// settings screen was broken; a new key resets once and then persists.
+    /// Schema version for the stored blob. Bumping it abandons the old value
+    /// rather than failing to decode it on every launch, which would look like
+    /// the settings screen was broken.
+    ///
+    /// Only *added* properties force a bump: the synthesised decoder demands
+    /// every one of them, so an older blob without it throws. Removals are free,
+    /// because `JSONDecoder` never asks for keys this struct no longer has.
+    ///
+    /// `v2` dropped the thermal, blend and picture-in-picture settings and added
+    /// an ultra-wide camera preference; `v3` renamed that preference, which is
+    /// an add. The preference has since been removed altogether, leaving the
+    /// current shape a strict subset of `v1` — so the suffix no longer marks a
+    /// real incompatibility, and it stays only because changing it would reset
+    /// everyone's settings again for nothing.
     private static let storageKey = "com.initiatordrone.settings.v3"
 
     @Published public var settings: AppSettings {

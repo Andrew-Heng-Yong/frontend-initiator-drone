@@ -36,19 +36,11 @@ final class AppModel: ObservableObject {
         let initialSettings = settings.settings
         connection = RobotConnection(settings: initialSettings)
 
-        #if canImport(ARKit)
-        arSession.setPrefersWidestFieldOfView(initialSettings.prefersWidestFieldOfView)
-        #endif
-
         // Settings changes flow one way: store -> connection -> pipelines.
         settings.$settings
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newSettings in
-                guard let self else { return }
-                self.connection.apply(settings: newSettings)
-                #if canImport(ARKit)
-                self.applyLensPreference(newSettings.prefersWidestFieldOfView)
-                #endif
+                self?.connection.apply(settings: newSettings)
             }
             .store(in: &cancellables)
 
@@ -105,16 +97,6 @@ final class AppModel: ObservableObject {
     func startARIfNeeded() {
         guard !arSession.isRunning else { return }
         arSession.start()
-    }
-
-    /// Changing video format restarts the AR session, which moves the world
-    /// origin. An alignment expressed in the old origin would leave the marker
-    /// floating somewhere wrong, so it is cleared exactly as
-    /// `resetARTracking()` does.
-    private func applyLensPreference(_ prefersWidestFieldOfView: Bool) {
-        guard arSession.setPrefersWidestFieldOfView(prefersWidestFieldOfView) else { return }
-        alignment.clearAlignment()
-        lastActionMessage = "Camera format changed. AR tracking reset — align the robot again."
     }
 
     /// Resetting ARKit moves the world origin, which invalidates any alignment

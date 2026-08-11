@@ -292,7 +292,6 @@ struct DiagnosticsView: View {
     private var phoneSection: some View {
         Section("Phone (ARKit)") {
             LabeledContent("Tracking", value: arSession.trackingStateLabel)
-            LabeledContent("Lens", value: arSession.lensLabel)
             if !arSession.videoFormatLabel.isEmpty {
                 LabeledContent("Video format", value: arSession.videoFormatLabel)
                     .font(.caption)
@@ -321,8 +320,7 @@ struct DiagnosticsView: View {
     }
 
     /// Ground truth for what this device will and will not do, rather than a
-    /// claim in a README. If an ultra-wide format ever appears here, the widest
-    /// field-of-view setting will pick it automatically.
+    /// claim in a README.
     private var videoFormatSection: some View {
         Section {
             ForEach(Array(arSession.supportedFormatSummaries.enumerated()), id: \.offset) { entry in
@@ -346,9 +344,9 @@ struct DiagnosticsView: View {
             Text("ARKit video formats")
         } footer: {
             Text("""
-            Every world-tracking format this device offers, in ARKit's own order. Formats from one \
-            lens share a sensor, so a 4:3 entry is the full readout and each 16:9 entry is the \
-            same image cropped top and bottom.
+            Every world-tracking format this device offers, in ARKit's own order. They all come \
+            from the same lens and sensor, so a 4:3 entry is the full readout and each 16:9 entry \
+            is that image cropped top and bottom. The app always runs the tallest one.
             """)
         }
     }

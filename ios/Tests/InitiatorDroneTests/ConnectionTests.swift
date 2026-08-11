@@ -242,24 +242,13 @@ final class ConnectionTests: XCTestCase {
 
     // MARK: - AR video format choice
 
-    /// The iPhone 14 Pro Max case: no ultra-wide is offered, and the 4:3 format
-    /// is the full sensor readout while every 16:9 one is a vertical crop.
-    func testWithoutUltraWideTheTallestFrameWins() {
+    /// The 4:3 format is the full sensor readout; every 16:9 one is a vertical
+    /// crop of it, so the tallest frame is strictly more of the scene.
+    func testTheTallestFrameWins() {
         let formats = [
-            VideoFormatCandidate(width: 1920, height: 1080, framesPerSecond: 60, isUltraWide: false),
-            VideoFormatCandidate(width: 1920, height: 1440, framesPerSecond: 60, isUltraWide: false),
-            VideoFormatCandidate(width: 1280, height: 720, framesPerSecond: 60, isUltraWide: false),
-        ]
-        XCTAssertEqual(VideoFormatSelection.widestFieldOfView(among: formats), 1)
-    }
-
-    /// Reaching a wider lens beats any crop of a narrower one, even at a lower
-    /// resolution — this branch is dormant on current iPhones and exists so the
-    /// app takes it on hardware that ever offers the format.
-    func testAnUltraWideFormatWinsOutright() {
-        let formats = [
-            VideoFormatCandidate(width: 3840, height: 2880, framesPerSecond: 30, isUltraWide: false),
-            VideoFormatCandidate(width: 1280, height: 720, framesPerSecond: 60, isUltraWide: true),
+            VideoFormatCandidate(width: 1920, height: 1080, framesPerSecond: 60),
+            VideoFormatCandidate(width: 1920, height: 1440, framesPerSecond: 60),
+            VideoFormatCandidate(width: 1280, height: 720, framesPerSecond: 60),
         ]
         XCTAssertEqual(VideoFormatSelection.widestFieldOfView(among: formats), 1)
     }
@@ -268,8 +257,8 @@ final class ConnectionTests: XCTestCase {
     /// ordering rather than to resolution or floating-point noise.
     func testEqualAspectRatiosKeepARKitsOrdering() {
         let formats = [
-            VideoFormatCandidate(width: 1920, height: 1440, framesPerSecond: 60, isUltraWide: false),
-            VideoFormatCandidate(width: 3840, height: 2880, framesPerSecond: 30, isUltraWide: false),
+            VideoFormatCandidate(width: 1920, height: 1440, framesPerSecond: 60),
+            VideoFormatCandidate(width: 3840, height: 2880, framesPerSecond: 30),
         ]
         XCTAssertEqual(VideoFormatSelection.widestFieldOfView(among: formats), 0)
     }
@@ -561,8 +550,7 @@ final class ConnectionTests: XCTestCase {
             ("testCalibratingOutranksTheOdometryGapItCauses", testCalibratingOutranksTheOdometryGapItCauses),
             ("testANodeThatStopsPublishingReadsAsSilentWithItsAge", testANodeThatStopsPublishingReadsAsSilentWithItsAge),
             ("testUnknownGraphStateFallsThroughToTheTopics", testUnknownGraphStateFallsThroughToTheTopics),
-            ("testWithoutUltraWideTheTallestFrameWins", testWithoutUltraWideTheTallestFrameWins),
-            ("testAnUltraWideFormatWinsOutright", testAnUltraWideFormatWinsOutright),
+            ("testTheTallestFrameWins", testTheTallestFrameWins),
             ("testEqualAspectRatiosKeepARKitsOrdering", testEqualAspectRatiosKeepARKitsOrdering),
             ("testNoFormatsYieldsNoChoice", testNoFormatsYieldsNoChoice),
             ("testBackoffGrowsAndThenLevelsOff", testBackoffGrowsAndThenLevelsOff),

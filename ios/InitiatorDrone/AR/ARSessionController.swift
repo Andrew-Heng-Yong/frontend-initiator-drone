@@ -18,22 +18,10 @@ public final class ARSessionController: NSObject, ObservableObject {
     @Published public private(set) var trackingStateDetail: String = ""
     @Published public private(set) var isTrackingUsable: Bool = false
 
-    /// Which physical lens the session is running on, for the settings and
-    /// diagnostics screens.
-    @Published public private(set) var lensLabel: String = "Not started"
     /// Resolution and frame rate of the chosen video format, or empty.
     @Published public private(set) var videoFormatLabel: String = ""
-    /// Whether the ultra-wide lens is actually in use. False on devices that do
-    /// not offer an ultra-wide ARKit video format, whatever the preference says.
-    @Published public private(set) var isUsingUltraWide: Bool = false
     /// Index into `supportedFormatSummaries` of the format actually running.
     @Published public private(set) var activeFormatIndex: Int?
-
-    /// Whether this device offers an ultra-wide format to world tracking. False
-    /// on every current iPhone: ARKit drives the ultra-wide internally but does
-    /// not publish it as a selectable video format.
-    public let supportsUltraWide: Bool = ARSessionController.candidates()
-        .contains(where: \.isUltraWide)
 
     /// Every world-tracking format this device offers, in ARKit's own order,
     /// described for the diagnostics screen. Claims about what the hardware
@@ -41,9 +29,6 @@ public final class ARSessionController: NSObject, ObservableObject {
     public let supportedFormatSummaries: [String] = ARWorldTrackingConfiguration
         .supportedVideoFormats
         .map(ARSessionController.summarise)
-
-    /// Operator preference. The session honours it as far as the device allows.
-    private var prefersWidestFieldOfView = true
 
     /// Phone pose in ARKit world coordinates, republished a few times a second
     /// for the numeric readouts. The scene renderer reads `currentPose`
@@ -100,28 +85,6 @@ public final class ARSessionController: NSObject, ObservableObject {
         session.run(makeConfiguration(), options: [.resetTracking, .removeExistingAnchors])
     }
 
-    /// Applies the operator's field-of-view preference.
-    ///
-    /// The video format is fixed for the life of a `run(_:)`, so changing it
-    /// means restarting tracking — which moves the world origin and therefore
-    /// invalidates any alignment. The caller is responsible for clearing it,
-    /// the same as for `resetTracking()`.
-    ///
-    /// - Returns: whether the session was restarted.
-    @discardableResult
-    public func setPrefersWidestFieldOfView(_ prefers: Bool) -> Bool {
-        guard prefers != prefersWidestFieldOfView else { return false }
-        prefersWidestFieldOfView = prefers
-        guard isRunning else {
-            // Nothing to restart, but the labels should still reflect what the
-            // next session will do.
-            describeLens(nil)
-            return false
-        }
-        session.run(makeConfiguration(), options: [.resetTracking, .removeExistingAnchors])
-        return true
-    }
-
     // MARK: - Configuration
 
     private func makeConfiguration() -> ARWorldTrackingConfiguration {
@@ -138,10 +101,12 @@ public final class ARSessionController: NSObject, ObservableObject {
         // on a session that is expected to run for half an hour.
         configuration.isAutoFocusEnabled = true
 
-        if prefersWidestFieldOfView, let format = Self.widestFormat() {
+        // Always the widest format available. Nothing would be gained by
+        // offering a cropped one, so this is not a setting.
+        if let format = Self.widestFormat() {
             configuration.videoFormat = format
         }
-        describeLens(configuration.videoFormat)
+        describeFormat(configuration.videoFormat)
         return configuration
     }
 
@@ -149,70 +114,37 @@ public final class ARSessionController: NSObject, ObservableObject {
     /// the rule; the ranking lives there so it can be tested without a device.
     private static func widestFormat() -> ARConfiguration.VideoFormat? {
         let formats = ARWorldTrackingConfiguration.supportedVideoFormats
-        guard let index = VideoFormatSelection.widestFieldOfView(among: candidates()) else {
+        let candidates = formats.map { format in
+            VideoFormatCandidate(
+                width: Int(format.imageResolution.width),
+                height: Int(format.imageResolution.height),
+                framesPerSecond: format.framesPerSecond
+            )
+        }
+        guard let index = VideoFormatSelection.widestFieldOfView(among: candidates) else {
             return nil
         }
         return formats[index]
     }
 
-    private static func candidates() -> [VideoFormatCandidate] {
-        ARWorldTrackingConfiguration.supportedVideoFormats.map { format in
-            VideoFormatCandidate(
-                width: Int(format.imageResolution.width),
-                height: Int(format.imageResolution.height),
-                framesPerSecond: format.framesPerSecond,
-                isUltraWide: format.captureDeviceType == .builtInUltraWideCamera
-            )
-        }
-    }
-
     private static func summarise(_ format: ARConfiguration.VideoFormat) -> String {
-        let lens: String
-        switch format.captureDeviceType {
-        case .builtInUltraWideCamera: lens = "ultra-wide"
-        case .builtInTelephotoCamera: lens = "telephoto"
-        case .builtInWideAngleCamera: lens = "wide"
-        default: lens = format.captureDeviceType.rawValue
-        }
-        return String(
-            format: "%.0fx%.0f @ %ld fps · %@",
-            format.imageResolution.width,
-            format.imageResolution.height,
-            format.framesPerSecond,
-            lens
-        )
-    }
-
-    private func describeLens(_ format: ARConfiguration.VideoFormat?) {
-        guard let format else {
-            lensLabel = "Not started"
-            videoFormatLabel = ""
-            isUsingUltraWide = false
-            activeFormatIndex = nil
-            return
-        }
-
-        activeFormatIndex = ARWorldTrackingConfiguration.supportedVideoFormats
-            .firstIndex(of: format)
-
-        let ultraWide = format.captureDeviceType == .builtInUltraWideCamera
-        isUsingUltraWide = ultraWide
-        if ultraWide {
-            lensLabel = "Ultra-wide"
-        } else if !supportsUltraWide {
-            // The distinction matters: the phone has an ultra-wide camera, but
-            // ARKit does not offer it to world tracking, so no setting in this
-            // app can reach it.
-            lensLabel = "Wide (ARKit offers no ultra-wide)"
-        } else {
-            lensLabel = "Wide"
-        }
-        videoFormatLabel = String(
+        String(
             format: "%.0fx%.0f @ %ld fps",
             format.imageResolution.width,
             format.imageResolution.height,
             format.framesPerSecond
         )
+    }
+
+    private func describeFormat(_ format: ARConfiguration.VideoFormat?) {
+        guard let format else {
+            videoFormatLabel = ""
+            activeFormatIndex = nil
+            return
+        }
+        activeFormatIndex = ARWorldTrackingConfiguration.supportedVideoFormats
+            .firstIndex(of: format)
+        videoFormatLabel = Self.summarise(format)
     }
 
     /// Raycasts from a point in view coordinates onto a horizontal surface.

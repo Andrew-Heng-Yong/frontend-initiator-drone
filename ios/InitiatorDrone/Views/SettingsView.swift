@@ -1,11 +1,8 @@
 import SwiftUI
 
-/// Depth colour map, stream throttling, pose handling and the AR camera.
+/// Depth colour map, stream throttling and pose handling.
 struct SettingsView: View {
     @EnvironmentObject private var settings: SettingsStore
-    #if canImport(ARKit)
-    @EnvironmentObject private var arSession: ARSessionController
-    #endif
 
     var body: some View {
         NavigationStack {
@@ -13,7 +10,6 @@ struct SettingsView: View {
                 depthSection
                 streamSection
                 poseSection
-                cameraSection
                 sceneSection
                 aboutSection
             }
@@ -136,45 +132,6 @@ struct SettingsView: View {
             Past the newest sample the marker holds still by default; allowing extrapolation \
             integrates the reported twist forward instead, which looks smoother but invents motion \
             that was never measured.
-            """)
-        }
-    }
-
-    // MARK: - Camera
-
-    private var cameraSection: some View {
-        Section {
-            Toggle("Widest field of view", isOn: binding(\.prefersWidestFieldOfView))
-
-            #if canImport(ARKit)
-            LabeledContent("Active lens", value: arSession.lensLabel)
-            if !arSession.videoFormatLabel.isEmpty {
-                LabeledContent("Video format", value: arSession.videoFormatLabel)
-                    .font(.caption)
-            }
-            // Said here rather than only in the footer, so a toggle with no
-            // visible effect is explained before it is tried.
-            if !arSession.supportsUltraWide {
-                Label(
-                    "ARKit offers this device no ultra-wide format, so the widest available is a "
-                        + "4:3 frame from the wide lens.",
-                    systemImage: "info.circle"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            #endif
-        } header: {
-            Text("AR camera")
-        } footer: {
-            Text("""
-            Picks the video format that shows the most of the room: an ultra-wide one where the \
-            device offers it, otherwise the tallest frame from the wide lens — 4:3 is the full \
-            sensor readout, and every 16:9 format is that same image with the top and bottom \
-            cropped off. No iPhone currently offers ultra-wide to world tracking; ARKit drives \
-            that lens itself for tracking but does not publish it as a format an app can select. \
-            Diagnostics lists every format this device does offer. Changing this restarts AR \
-            tracking, which clears the robot alignment.
             """)
         }
     }
