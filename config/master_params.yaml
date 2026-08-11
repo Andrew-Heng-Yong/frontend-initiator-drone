@@ -91,12 +91,12 @@ thermal_dashboard:
     thermal_cropper:
       enabled: true
       passthrough_when_no_region: true
-      crop_unit_thermal_pixels: 2
-      min_region_size: 15
-      inflation_radius_thermal_pixels: 2
+      crop_unit_thermal_pixels: 3
+      min_region_size: 3
+      inflation_radius_thermal_pixels: 1
       highlight_min_temp: 28.0
       highlight_max_temp: 40.0
-      highlight_min_delta_from_frame_low: 3.0
+      highlight_min_delta_from_frame_low: 5.5
       highlight_max_delta_from_frame_high: 1000.0
 
     # Increment this whenever optical geometry changes so saved hand-tuned values
