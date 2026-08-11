@@ -59,6 +59,10 @@ public final class RobotConnection: ObservableObject {
     /// main actor. See `OdometrySampler` for why.
     public let sampler = OdometrySampler()
 
+    /// Newest depth point cloud, handed straight from the image worker to the
+    /// render thread without passing through the main actor.
+    public let pointCloudStore = PointCloudStore()
+
     private var depthRenderRate = RateTracker(windowDuration: 2.0)
 
     /// Phone-clock time of the newest message on any topic `vio_node` publishes.
@@ -95,8 +99,15 @@ public final class RobotConnection: ObservableObject {
         settings = newSettings
 
         depthPipeline?.colorMapSettings = newSettings.depthColorMap
+        depthPipeline?.pointCloudSettings = newSettings.pointCloud
         sampler.setStalenessThreshold(newSettings.odometryStalenessThreshold)
         sampler.setExtrapolationLimit(newSettings.odometryExtrapolationLimit)
+
+        // Turning the cloud off should clear it, not freeze the last one in
+        // mid-air.
+        if !newSettings.pointCloud.isEnabled {
+            pointCloudStore.reset()
+        }
 
         if needsClientUpdate {
             client?.updateConfiguration(makeClientConfiguration())
@@ -129,6 +140,12 @@ public final class RobotConnection: ObservableObject {
         }
         depth.onError = { [weak self] text in
             self?.append(log: RosbridgeLogEntry(level: .error, text: text))
+        }
+        depth.pointCloudSettings = currentSettings.pointCloud
+        // Called on the pipeline's worker queue; the store is the thread-safe
+        // hand-off, so there is no hop to main on this path.
+        depth.onPointCloud = { [weak self] cloud in
+            self?.pointCloudStore.store(cloud)
         }
 
         depthPipeline = depth
@@ -191,6 +208,7 @@ public final class RobotConnection: ObservableObject {
         dashboardTimer = nil
 
         depthPipeline?.reset()
+        pointCloudStore.reset()
         sampler.reset()
         depthRenderRate.reset()
 
@@ -310,6 +328,7 @@ public final class RobotConnection: ObservableObject {
                 // from before it belongs to a different continuity of time.
                 sampler.reset()
                 depthPipeline?.reset()
+        pointCloudStore.reset()
                 lastVIOMessageTime = nil
             }
             refreshTrackingStatus()
@@ -323,6 +342,9 @@ public final class RobotConnection: ObservableObject {
 
         case .cameraInfo(let info):
             depthCameraInfo = info
+            // The deprojection needs intrinsics; without them the pipeline
+            // emits an empty cloud rather than guessing a focal length.
+            depthPipeline?.cameraInfo = info
 
         case .odometry(let odometry):
             latestOdometry = odometry

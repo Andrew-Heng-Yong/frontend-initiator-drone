@@ -7,60 +7,63 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		7167972C7C9984C54E465C1A /* ARKitBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E51B1F3267B6C7DFC598B19 /* ARKitBridge.swift */; };
-		D67D0B6479EC86FAEBD1E84D /* ARRobotSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 908FF1D0704325FE00E7B7DA /* ARRobotSceneView.swift */; };
-		069B358974CDE8F668864A3C /* ARSessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3BF1BBB19B86E0F6B8A2CAE /* ARSessionController.swift */; };
-		EFC30BF8F03C0A4D08CCC6F7 /* AlignmentController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB7DA95DA9663FF2AA0226CB /* AlignmentController.swift */; };
-		B3E5294C595AA686F35D25C9 /* RobotSceneNodes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1625FBC85F54D95E95F1906 /* RobotSceneNodes.swift */; };
-		605609CF399D5ED70F7BF46D /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4001C34CC6276A6628CCF14 /* AppModel.swift */; };
-		FC30B85B17CA68D626E0B566 /* InitiatorDroneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFF844C693F9940A0405C3B9 /* InitiatorDroneApp.swift */; };
-		0BC7C0B2077237D55D7C4AB9 /* ClockOffsetEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80BC4F7276FC4C542466C3A /* ClockOffsetEstimator.swift */; };
-		44FBFD8E6EC68FB8CB2D29EE /* FrameConversion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D500D96E8F11D6013910EC7 /* FrameConversion.swift */; };
-		AA0E3F9FEE8AEFB814F85DA0 /* OdometryBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DBAE1A2533294A56A09DB86 /* OdometryBuffer.swift */; };
-		21B72F1AE5F61D03E1626BBA /* OdometrySampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9A5566E84D706D4D80AD92E /* OdometrySampler.swift */; };
-		4EE97BF2830DCB5F6C1A2B0E /* Pose.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E14CEBC453994169C968FB /* Pose.swift */; };
-		ACF0A91F308956E2FDC97F63 /* Quaternion.swift in Sources */ = {isa = PBXBuildFile; fileRef = F36F4F8CE688112161037174 /* Quaternion.swift */; };
-		2FBDA470C971A3AD382D2044 /* Vector3.swift in Sources */ = {isa = PBXBuildFile; fileRef = 472E64F7F4D596801DBF4426 /* Vector3.swift */; };
-		6EA1D40D5120B7D49EA495AB /* ColorRamp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9328D017B51F267DAA6488AE /* ColorRamp.swift */; };
-		19C5672EB63529EEA2AD7F38 /* ROSImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BCAF5158579697330EA0203 /* ROSImage.swift */; };
-		45582D34BE96858924934315 /* ROSImageDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1521F35B48F5361E632A5F1 /* ROSImageDecoder.swift */; };
-		0FDDDBB195C71EFFF1BE40A8 /* ScalarImageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30A4C0C92B057E8E317C36B /* ScalarImageRenderer.swift */; };
-		D92C1528AD1313F33CDB7B7F /* RobotEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B6828045A0FFBDEA4DFEE48 /* RobotEndpoint.swift */; };
-		1E2710F60C2CEAA1F821405D /* RobotTrackingStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66C96DF04A0A59DCB2C69AB9 /* RobotTrackingStatus.swift */; };
-		4704D46B7DFFB413526443EA /* VIONodeStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8C0DA10E77BE6CE345D9A5 /* VIONodeStatus.swift */; };
-		D144D80AE7117633CFEB3011 /* VideoFormatSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67968D3B97AF2D7A1382038E /* VideoFormatSelection.swift */; };
-		60468175B3F1E570CCD00415 /* CBORDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA605B62A066F52D1E130A1 /* CBORDecoder.swift */; };
-		FFC6145F1AACA5ED7BE5A63F /* LatestOnlySlot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D3B2B19A73A768D4785B2B /* LatestOnlySlot.swift */; };
-		383C4A0FE956D3CCB2C01880 /* ROSMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 119B7854C04DEA1CA7C88DFF /* ROSMessages.swift */; };
-		01088832A41F8AE6A1760A75 /* ROSValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF35BB2EAF603E0C80E99C19 /* ROSValue.swift */; };
-		30AA873C02068D3207741225 /* RateTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C3337BFA88753C6BC837431 /* RateTracker.swift */; };
-		2700880B4C81FC6002778A89 /* ReconnectPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E690B3647864131CC429500 /* ReconnectPolicy.swift */; };
-		9819C84E245580D200A6C1E1 /* RosbridgeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6AD33640B8B1296F5C32B48 /* RosbridgeClient.swift */; };
-		6E86FE294AD53B956D37703D /* RosbridgeProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 647636F53F8D0041BDE5C8AF /* RosbridgeProtocol.swift */; };
-		32D18A07F0E90D4682DB148A /* RosbridgeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CF935BE56DAB5C2AF7B3150 /* RosbridgeTransport.swift */; };
-		E4386DE80A9AC9686504708C /* FixtureLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3A4194C09B5D0C9485B9068 /* FixtureLibrary.swift */; };
-		9E7D7FE8C47814F503A4D818 /* SimulatedRosbridgeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC3A4AC84148C5DED80D125 /* SimulatedRosbridgeTransport.swift */; };
-		501A35BCA7DF76BAB59BE43E /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47A0921343D25B6FA04889F /* AppSettings.swift */; };
-		FA0D687596F80899D74BF279 /* DashboardAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = F732C26088E247D0B8EB2D69 /* DashboardAPI.swift */; };
-		E4D551E38AA1FDE9ABEC8169 /* ImageStreamPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 696A73B72A4E987ACA3DCE57 /* ImageStreamPipeline.swift */; };
-		D11AD512DA491635765D64DC /* RobotConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A79510855B958005F5C012E /* RobotConnection.swift */; };
-		984DA6D15426DAA90610C0D8 /* RobotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A0E23884C63DC2024D64122 /* RobotStore.swift */; };
-		510CF07940C23AF2F14FD3FF /* AlignmentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE4AC066F0BF4D8D7ACDC632 /* AlignmentSheet.swift */; };
-		E02E0EC1C4EA7BD3E6EA9DAF /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB66A85768D0E5F63D59A656 /* ConnectionView.swift */; };
-		39371D8E22764CB9DD347D32 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBAEC5A4DDD6EF8F8CA18939 /* DiagnosticsView.swift */; };
-		EB0AA26F906FD9F2CFFBFF81 /* LiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3559254F5CCEEDCF3B35A71F /* LiveView.swift */; };
-		2514ACD69995FB0C205AA6E2 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBD1CAEBF7CB571387FF0B1D /* RootView.swift */; };
-		3CFFC1DB494C25D2B8A266D8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 859EA59781E13733B8942068 /* SettingsView.swift */; };
-		79427D7F17D767F33DFF6C7E /* SensorImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24989F7077D4A45E02DD93C2 /* SensorImageView.swift */; };
-		20764B1E0A92A429924324B4 /* StatusIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CDA33B0DCB0637266F8195E /* StatusIndicators.swift */; };
-		0E0597E49E00C00157D6FCD4 /* ConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B01FD45D645CEE8802C23B34 /* ConnectionTests.swift */; };
-		AF75B29D0AC770B8225CD800 /* GeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 287B367B48CA3030340332ED /* GeometryTests.swift */; };
-		FD7609E086ABAB0FD4FDC699 /* ImageStreamSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0F3E7E26856356BB36DD81 /* ImageStreamSoakTests.swift */; };
-		88EC11D65BAE91CA1DB6239B /* OdometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB996139A05EF81E1706E32B /* OdometryTests.swift */; };
-		379C85867BD0098F729B2E9F /* ROSImageDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3E27C64ACFA584E536F9594 /* ROSImageDecoderTests.swift */; };
-		D26CC552D9A86AFD4581A311 /* RenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 035348338327ECC1A6580114 /* RenderingTests.swift */; };
-		0F15F1F2D76B7EB35BA1A077 /* RosbridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 925510B82AB724FB59F1E71B /* RosbridgeTests.swift */; };
-		635FC6FFFA51E5B9F7EEEACB /* Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = 5B6543B440C61DC2A1BADCA0 /* Fixtures */; };
+		77DD11A65D8FBEC80EC8A14F /* ARKitBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E51B1F3267B6C7DFC598B19 /* ARKitBridge.swift */; };
+		593A7C999CB1E3D2DF7E79BB /* ARRobotSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 908FF1D0704325FE00E7B7DA /* ARRobotSceneView.swift */; };
+		76A1D0E9E8EC54727EEE72EA /* ARSessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3BF1BBB19B86E0F6B8A2CAE /* ARSessionController.swift */; };
+		A1AB6A2D7BC8BC5DE60DF3EF /* AlignmentController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB7DA95DA9663FF2AA0226CB /* AlignmentController.swift */; };
+		6CDA3301FB439AFCC0BDB46C /* RobotSceneNodes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1625FBC85F54D95E95F1906 /* RobotSceneNodes.swift */; };
+		84424993B59F7B367248BA00 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4001C34CC6276A6628CCF14 /* AppModel.swift */; };
+		6FAA92D478534A9A94D9103E /* InitiatorDroneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFF844C693F9940A0405C3B9 /* InitiatorDroneApp.swift */; };
+		FCC978A2D14F5F0ED573ED19 /* ClockOffsetEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80BC4F7276FC4C542466C3A /* ClockOffsetEstimator.swift */; };
+		037D2A845566BE8B9771AA50 /* FrameConversion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D500D96E8F11D6013910EC7 /* FrameConversion.swift */; };
+		7B4EFAACE5E7AEFD8FE70939 /* OdometryBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DBAE1A2533294A56A09DB86 /* OdometryBuffer.swift */; };
+		57C4497F4CA5F767B845C3A0 /* OdometrySampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9A5566E84D706D4D80AD92E /* OdometrySampler.swift */; };
+		6BA722C02FA0884FC9B94922 /* Pose.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E14CEBC453994169C968FB /* Pose.swift */; };
+		85D3EF58329D738860512A93 /* Quaternion.swift in Sources */ = {isa = PBXBuildFile; fileRef = F36F4F8CE688112161037174 /* Quaternion.swift */; };
+		99E50E111C84BC5B1A8ADB1A /* Vector3.swift in Sources */ = {isa = PBXBuildFile; fileRef = 472E64F7F4D596801DBF4426 /* Vector3.swift */; };
+		297EECA292846F6F48FA0848 /* ColorRamp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9328D017B51F267DAA6488AE /* ColorRamp.swift */; };
+		8093AA247D18C1C4BCB36AC7 /* DepthPointCloud.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEB985DAC5F9AB2041D6AC33 /* DepthPointCloud.swift */; };
+		A4332BB3191741E3F1A9D4C0 /* PointCloudStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04B21F5374445D412980B224 /* PointCloudStore.swift */; };
+		BD47CD051B3F0FA1442618CF /* ROSImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90BBC51A2D170BCD4852A2B1 /* ROSImage.swift */; };
+		E5BDB6A5182B7D1F401B6D00 /* ROSImageDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 768F6893C764C4E87A74C731 /* ROSImageDecoder.swift */; };
+		90EA97D78B3B5054FF515D6B /* ScalarImageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F62D8AF56F07BD6767F7F0 /* ScalarImageRenderer.swift */; };
+		DF74EE2375433053A9896EDD /* RobotEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1BE6A1D4CC5EC07D9C86EFD /* RobotEndpoint.swift */; };
+		BED4E3039B7556859D0D7642 /* RobotTrackingStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C6F8A267A1186A926D9C243 /* RobotTrackingStatus.swift */; };
+		09D9D0AC5E10E44045FED76C /* VIONodeStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06F7C1FC2E9290BADED414EE /* VIONodeStatus.swift */; };
+		EE1DD41688A7583F16E9FBC1 /* VideoFormatSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AE02956F1B43377E9927F05 /* VideoFormatSelection.swift */; };
+		A7D2582C184B9FFAC5044100 /* CBORDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6F59ABCB9F8100A8925B987 /* CBORDecoder.swift */; };
+		878FEBECCF05648ACE99EF2F /* LatestOnlySlot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FEEDEE65154AD4435DF71F8 /* LatestOnlySlot.swift */; };
+		DB97AE0E8CF2617005E6257A /* ROSMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D886C27CE506721E667CD7C /* ROSMessages.swift */; };
+		801726BE79C2C06BDA82FDD1 /* ROSValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 462B0348F4D413298EA5D835 /* ROSValue.swift */; };
+		A859CDD297FCDEF35D411C1A /* RateTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F40DFAAF154DA44E41C9ED7 /* RateTracker.swift */; };
+		B4BF05C283B5F85A65D1A80B /* ReconnectPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538487EDB92851D920D621D2 /* ReconnectPolicy.swift */; };
+		BD776B2EC8A86C688DBF2C2C /* RosbridgeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47BA24E4EB5CC775A8DE6947 /* RosbridgeClient.swift */; };
+		F4CBEC867B11871B694B2AB0 /* RosbridgeProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = C537247D80B09A1DA9DAFF1C /* RosbridgeProtocol.swift */; };
+		A32E8F3037395666A6EB6D7F /* RosbridgeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C1A0839050DD47EFF85702F /* RosbridgeTransport.swift */; };
+		8EBF097D79F41E6F6A0126E6 /* FixtureLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7EB195C0DB9FD577BF78312 /* FixtureLibrary.swift */; };
+		5FA10F05B6DC8F2DDC6A2065 /* SimulatedRosbridgeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EFD3C34DA55C387E27DF6E7 /* SimulatedRosbridgeTransport.swift */; };
+		A1884EE95F4AAD0ECB8B7A1B /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0558F84BBEA7D83DB07EE59 /* AppSettings.swift */; };
+		5353B7459D427DB111FC4910 /* DashboardAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7270117979FC206EC73CCC0 /* DashboardAPI.swift */; };
+		5B9B9E6CD0FA17D2B934BA6B /* ImageStreamPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3ADB79F9FC1E27C0662E5D6 /* ImageStreamPipeline.swift */; };
+		B4F111780F44CB187D5C9DD6 /* RobotConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF8E0DFA36C5B470E6BCD8EB /* RobotConnection.swift */; };
+		032EA16EE51EA21D590D00DE /* RobotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D33DBE6301C3634A08139F /* RobotStore.swift */; };
+		34B62F0B8BB11D25C726B1F2 /* AlignmentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55CA88B5A75BAAC16AE9E22F /* AlignmentSheet.swift */; };
+		32211B3105652F0562600628 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4314BA8EC0F737127A928A2 /* ConnectionView.swift */; };
+		25E37CA91CBB8DEF1D7B16AB /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED38819F56DF9CC40D781EAB /* DiagnosticsView.swift */; };
+		8728FCCC5A1F867510E4EDB1 /* LiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0EFAC773A7C992FEA7950A4 /* LiveView.swift */; };
+		0F4D8759C57CCD8235851CA9 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D363ABE227771768DF394D3 /* RootView.swift */; };
+		9353CC17A35C300A30CDDC15 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D44FA667A6DA1AAC30A3F4F /* SettingsView.swift */; };
+		6EEB47DF82A7E0F5DF6CB11E /* SensorImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16C38CE2C2C9DE9543EC5408 /* SensorImageView.swift */; };
+		BE39D6DED63FCEBCA6E0943D /* StatusIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B9D9F003E6D2C8A5C80BD33 /* StatusIndicators.swift */; };
+		C101431C71FDC2E172CC913E /* ConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDA95F162142E88FA4A50FC8 /* ConnectionTests.swift */; };
+		075E19057C07C01F00AE0EA8 /* DepthPointCloudTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79542DAA7F49BDA04124A27F /* DepthPointCloudTests.swift */; };
+		E81CE81CC0318453898556FB /* GeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 938A716762580467A4E86D55 /* GeometryTests.swift */; };
+		895501351F0D13F5F47B0C97 /* ImageStreamSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B719C95C567A42B30777EC22 /* ImageStreamSoakTests.swift */; };
+		FF7E69B1DD8AB1AAF6F7E581 /* OdometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E50BC204A6868CA4DE7F0708 /* OdometryTests.swift */; };
+		3D7264810C7977642E4DD12B /* ROSImageDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F6DE798242DD852B10565AA /* ROSImageDecoderTests.swift */; };
+		D29B4A65E6E8CFD9DA0C38F5 /* RenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3556214949D772F0A200F6DE /* RenderingTests.swift */; };
+		779C30672946CA201A12EB80 /* RosbridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A46FB3F0C9A244D8F99316B2 /* RosbridgeTests.swift */; };
+		D78CC1B04CAB97B8912BF085 /* Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = 5B6543B440C61DC2A1BADCA0 /* Fixtures */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -89,44 +92,47 @@
 		F36F4F8CE688112161037174 /* Quaternion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Quaternion.swift"; sourceTree = "<group>"; };
 		472E64F7F4D596801DBF4426 /* Vector3.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Vector3.swift"; sourceTree = "<group>"; };
 		9328D017B51F267DAA6488AE /* ColorRamp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ColorRamp.swift"; sourceTree = "<group>"; };
-		6BCAF5158579697330EA0203 /* ROSImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSImage.swift"; sourceTree = "<group>"; };
-		B1521F35B48F5361E632A5F1 /* ROSImageDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSImageDecoder.swift"; sourceTree = "<group>"; };
-		B30A4C0C92B057E8E317C36B /* ScalarImageRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScalarImageRenderer.swift"; sourceTree = "<group>"; };
-		6B6828045A0FFBDEA4DFEE48 /* RobotEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RobotEndpoint.swift"; sourceTree = "<group>"; };
-		66C96DF04A0A59DCB2C69AB9 /* RobotTrackingStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RobotTrackingStatus.swift"; sourceTree = "<group>"; };
-		4A8C0DA10E77BE6CE345D9A5 /* VIONodeStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VIONodeStatus.swift"; sourceTree = "<group>"; };
-		67968D3B97AF2D7A1382038E /* VideoFormatSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoFormatSelection.swift"; sourceTree = "<group>"; };
-		CCA605B62A066F52D1E130A1 /* CBORDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CBORDecoder.swift"; sourceTree = "<group>"; };
-		40D3B2B19A73A768D4785B2B /* LatestOnlySlot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LatestOnlySlot.swift"; sourceTree = "<group>"; };
-		119B7854C04DEA1CA7C88DFF /* ROSMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSMessages.swift"; sourceTree = "<group>"; };
-		FF35BB2EAF603E0C80E99C19 /* ROSValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSValue.swift"; sourceTree = "<group>"; };
-		6C3337BFA88753C6BC837431 /* RateTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RateTracker.swift"; sourceTree = "<group>"; };
-		8E690B3647864131CC429500 /* ReconnectPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReconnectPolicy.swift"; sourceTree = "<group>"; };
-		D6AD33640B8B1296F5C32B48 /* RosbridgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RosbridgeClient.swift"; sourceTree = "<group>"; };
-		647636F53F8D0041BDE5C8AF /* RosbridgeProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RosbridgeProtocol.swift"; sourceTree = "<group>"; };
-		6CF935BE56DAB5C2AF7B3150 /* RosbridgeTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RosbridgeTransport.swift"; sourceTree = "<group>"; };
-		E3A4194C09B5D0C9485B9068 /* FixtureLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FixtureLibrary.swift"; sourceTree = "<group>"; };
-		FCC3A4AC84148C5DED80D125 /* SimulatedRosbridgeTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SimulatedRosbridgeTransport.swift"; sourceTree = "<group>"; };
-		D47A0921343D25B6FA04889F /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSettings.swift"; sourceTree = "<group>"; };
-		F732C26088E247D0B8EB2D69 /* DashboardAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DashboardAPI.swift"; sourceTree = "<group>"; };
-		696A73B72A4E987ACA3DCE57 /* ImageStreamPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImageStreamPipeline.swift"; sourceTree = "<group>"; };
-		9A79510855B958005F5C012E /* RobotConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RobotConnection.swift"; sourceTree = "<group>"; };
-		5A0E23884C63DC2024D64122 /* RobotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RobotStore.swift"; sourceTree = "<group>"; };
-		AE4AC066F0BF4D8D7ACDC632 /* AlignmentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AlignmentSheet.swift"; sourceTree = "<group>"; };
-		AB66A85768D0E5F63D59A656 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionView.swift"; sourceTree = "<group>"; };
-		EBAEC5A4DDD6EF8F8CA18939 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DiagnosticsView.swift"; sourceTree = "<group>"; };
-		3559254F5CCEEDCF3B35A71F /* LiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveView.swift"; sourceTree = "<group>"; };
-		BBD1CAEBF7CB571387FF0B1D /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RootView.swift"; sourceTree = "<group>"; };
-		859EA59781E13733B8942068 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsView.swift"; sourceTree = "<group>"; };
-		24989F7077D4A45E02DD93C2 /* SensorImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SensorImageView.swift"; sourceTree = "<group>"; };
-		3CDA33B0DCB0637266F8195E /* StatusIndicators.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatusIndicators.swift"; sourceTree = "<group>"; };
-		B01FD45D645CEE8802C23B34 /* ConnectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionTests.swift"; sourceTree = "<group>"; };
-		287B367B48CA3030340332ED /* GeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GeometryTests.swift"; sourceTree = "<group>"; };
-		EE0F3E7E26856356BB36DD81 /* ImageStreamSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImageStreamSoakTests.swift"; sourceTree = "<group>"; };
-		AB996139A05EF81E1706E32B /* OdometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OdometryTests.swift"; sourceTree = "<group>"; };
-		A3E27C64ACFA584E536F9594 /* ROSImageDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSImageDecoderTests.swift"; sourceTree = "<group>"; };
-		035348338327ECC1A6580114 /* RenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RenderingTests.swift"; sourceTree = "<group>"; };
-		925510B82AB724FB59F1E71B /* RosbridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RosbridgeTests.swift"; sourceTree = "<group>"; };
+		FEB985DAC5F9AB2041D6AC33 /* DepthPointCloud.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DepthPointCloud.swift"; sourceTree = "<group>"; };
+		04B21F5374445D412980B224 /* PointCloudStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PointCloudStore.swift"; sourceTree = "<group>"; };
+		90BBC51A2D170BCD4852A2B1 /* ROSImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSImage.swift"; sourceTree = "<group>"; };
+		768F6893C764C4E87A74C731 /* ROSImageDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSImageDecoder.swift"; sourceTree = "<group>"; };
+		79F62D8AF56F07BD6767F7F0 /* ScalarImageRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScalarImageRenderer.swift"; sourceTree = "<group>"; };
+		B1BE6A1D4CC5EC07D9C86EFD /* RobotEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RobotEndpoint.swift"; sourceTree = "<group>"; };
+		9C6F8A267A1186A926D9C243 /* RobotTrackingStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RobotTrackingStatus.swift"; sourceTree = "<group>"; };
+		06F7C1FC2E9290BADED414EE /* VIONodeStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VIONodeStatus.swift"; sourceTree = "<group>"; };
+		8AE02956F1B43377E9927F05 /* VideoFormatSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoFormatSelection.swift"; sourceTree = "<group>"; };
+		E6F59ABCB9F8100A8925B987 /* CBORDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CBORDecoder.swift"; sourceTree = "<group>"; };
+		6FEEDEE65154AD4435DF71F8 /* LatestOnlySlot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LatestOnlySlot.swift"; sourceTree = "<group>"; };
+		6D886C27CE506721E667CD7C /* ROSMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSMessages.swift"; sourceTree = "<group>"; };
+		462B0348F4D413298EA5D835 /* ROSValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSValue.swift"; sourceTree = "<group>"; };
+		9F40DFAAF154DA44E41C9ED7 /* RateTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RateTracker.swift"; sourceTree = "<group>"; };
+		538487EDB92851D920D621D2 /* ReconnectPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReconnectPolicy.swift"; sourceTree = "<group>"; };
+		47BA24E4EB5CC775A8DE6947 /* RosbridgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RosbridgeClient.swift"; sourceTree = "<group>"; };
+		C537247D80B09A1DA9DAFF1C /* RosbridgeProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RosbridgeProtocol.swift"; sourceTree = "<group>"; };
+		0C1A0839050DD47EFF85702F /* RosbridgeTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RosbridgeTransport.swift"; sourceTree = "<group>"; };
+		F7EB195C0DB9FD577BF78312 /* FixtureLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FixtureLibrary.swift"; sourceTree = "<group>"; };
+		9EFD3C34DA55C387E27DF6E7 /* SimulatedRosbridgeTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SimulatedRosbridgeTransport.swift"; sourceTree = "<group>"; };
+		E0558F84BBEA7D83DB07EE59 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSettings.swift"; sourceTree = "<group>"; };
+		B7270117979FC206EC73CCC0 /* DashboardAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DashboardAPI.swift"; sourceTree = "<group>"; };
+		D3ADB79F9FC1E27C0662E5D6 /* ImageStreamPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImageStreamPipeline.swift"; sourceTree = "<group>"; };
+		FF8E0DFA36C5B470E6BCD8EB /* RobotConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RobotConnection.swift"; sourceTree = "<group>"; };
+		F2D33DBE6301C3634A08139F /* RobotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RobotStore.swift"; sourceTree = "<group>"; };
+		55CA88B5A75BAAC16AE9E22F /* AlignmentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AlignmentSheet.swift"; sourceTree = "<group>"; };
+		C4314BA8EC0F737127A928A2 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionView.swift"; sourceTree = "<group>"; };
+		ED38819F56DF9CC40D781EAB /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DiagnosticsView.swift"; sourceTree = "<group>"; };
+		E0EFAC773A7C992FEA7950A4 /* LiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveView.swift"; sourceTree = "<group>"; };
+		0D363ABE227771768DF394D3 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RootView.swift"; sourceTree = "<group>"; };
+		6D44FA667A6DA1AAC30A3F4F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsView.swift"; sourceTree = "<group>"; };
+		16C38CE2C2C9DE9543EC5408 /* SensorImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SensorImageView.swift"; sourceTree = "<group>"; };
+		4B9D9F003E6D2C8A5C80BD33 /* StatusIndicators.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatusIndicators.swift"; sourceTree = "<group>"; };
+		DDA95F162142E88FA4A50FC8 /* ConnectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionTests.swift"; sourceTree = "<group>"; };
+		79542DAA7F49BDA04124A27F /* DepthPointCloudTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DepthPointCloudTests.swift"; sourceTree = "<group>"; };
+		938A716762580467A4E86D55 /* GeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GeometryTests.swift"; sourceTree = "<group>"; };
+		B719C95C567A42B30777EC22 /* ImageStreamSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImageStreamSoakTests.swift"; sourceTree = "<group>"; };
+		E50BC204A6868CA4DE7F0708 /* OdometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OdometryTests.swift"; sourceTree = "<group>"; };
+		7F6DE798242DD852B10565AA /* ROSImageDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ROSImageDecoderTests.swift"; sourceTree = "<group>"; };
+		3556214949D772F0A200F6DE /* RenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RenderingTests.swift"; sourceTree = "<group>"; };
+		A46FB3F0C9A244D8F99316B2 /* RosbridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RosbridgeTests.swift"; sourceTree = "<group>"; };
 		C150B7C47C3B3A6241DFAD4B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5B6543B440C61DC2A1BADCA0 /* Fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Fixtures; sourceTree = "<group>"; };
 		3E9DABFA02D968B0B42CD002 /* InitiatorDrone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "InitiatorDrone.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -151,7 +157,7 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		0B352507941F6F70965FB60A /* AR */ = {
+		BDF761BF998233C1D220BB73 /* AR */ = {
 			isa = PBXGroup;
 			children = (
 				4E51B1F3267B6C7DFC598B19 /* ARKitBridge.swift */,
@@ -163,7 +169,7 @@
 			path = "AR";
 			sourceTree = "<group>";
 		};
-		78AE070E8C464B773858BDDA /* App */ = {
+		12A9F894A47E2AC55D619E9F /* App */ = {
 			isa = PBXGroup;
 			children = (
 				C4001C34CC6276A6628CCF14 /* AppModel.swift */,
@@ -172,7 +178,7 @@
 			path = "App";
 			sourceTree = "<group>";
 		};
-		C29FFCE4D8421502262E3C99 /* Geometry */ = {
+		ECA552845617747F8CDBAA3E /* Geometry */ = {
 			isa = PBXGroup;
 			children = (
 				C80BC4F7276FC4C542466C3A /* ClockOffsetEstimator.swift */,
@@ -186,136 +192,139 @@
 			path = "Geometry";
 			sourceTree = "<group>";
 		};
-		92347365E7CAE64A1707D59C /* Imaging */ = {
+		A8405C3469DB48A10904FBF4 /* Imaging */ = {
 			isa = PBXGroup;
 			children = (
 				9328D017B51F267DAA6488AE /* ColorRamp.swift */,
-				6BCAF5158579697330EA0203 /* ROSImage.swift */,
-				B1521F35B48F5361E632A5F1 /* ROSImageDecoder.swift */,
-				B30A4C0C92B057E8E317C36B /* ScalarImageRenderer.swift */,
+				FEB985DAC5F9AB2041D6AC33 /* DepthPointCloud.swift */,
+				04B21F5374445D412980B224 /* PointCloudStore.swift */,
+				90BBC51A2D170BCD4852A2B1 /* ROSImage.swift */,
+				768F6893C764C4E87A74C731 /* ROSImageDecoder.swift */,
+				79F62D8AF56F07BD6767F7F0 /* ScalarImageRenderer.swift */,
 			);
 			path = "Imaging";
 			sourceTree = "<group>";
 		};
-		81E5BC78BB16FF652FA4AAC1 /* Model */ = {
+		7AE7BD8503AD6549BA36E39D /* Model */ = {
 			isa = PBXGroup;
 			children = (
-				6B6828045A0FFBDEA4DFEE48 /* RobotEndpoint.swift */,
-				66C96DF04A0A59DCB2C69AB9 /* RobotTrackingStatus.swift */,
-				4A8C0DA10E77BE6CE345D9A5 /* VIONodeStatus.swift */,
-				67968D3B97AF2D7A1382038E /* VideoFormatSelection.swift */,
+				B1BE6A1D4CC5EC07D9C86EFD /* RobotEndpoint.swift */,
+				9C6F8A267A1186A926D9C243 /* RobotTrackingStatus.swift */,
+				06F7C1FC2E9290BADED414EE /* VIONodeStatus.swift */,
+				8AE02956F1B43377E9927F05 /* VideoFormatSelection.swift */,
 			);
 			path = "Model";
 			sourceTree = "<group>";
 		};
-		AD05828490FB370385252AC4 /* ROS */ = {
+		E7C84988768460DB2E4088D1 /* ROS */ = {
 			isa = PBXGroup;
 			children = (
-				CCA605B62A066F52D1E130A1 /* CBORDecoder.swift */,
-				40D3B2B19A73A768D4785B2B /* LatestOnlySlot.swift */,
-				119B7854C04DEA1CA7C88DFF /* ROSMessages.swift */,
-				FF35BB2EAF603E0C80E99C19 /* ROSValue.swift */,
-				6C3337BFA88753C6BC837431 /* RateTracker.swift */,
-				8E690B3647864131CC429500 /* ReconnectPolicy.swift */,
-				D6AD33640B8B1296F5C32B48 /* RosbridgeClient.swift */,
-				647636F53F8D0041BDE5C8AF /* RosbridgeProtocol.swift */,
-				6CF935BE56DAB5C2AF7B3150 /* RosbridgeTransport.swift */,
+				E6F59ABCB9F8100A8925B987 /* CBORDecoder.swift */,
+				6FEEDEE65154AD4435DF71F8 /* LatestOnlySlot.swift */,
+				6D886C27CE506721E667CD7C /* ROSMessages.swift */,
+				462B0348F4D413298EA5D835 /* ROSValue.swift */,
+				9F40DFAAF154DA44E41C9ED7 /* RateTracker.swift */,
+				538487EDB92851D920D621D2 /* ReconnectPolicy.swift */,
+				47BA24E4EB5CC775A8DE6947 /* RosbridgeClient.swift */,
+				C537247D80B09A1DA9DAFF1C /* RosbridgeProtocol.swift */,
+				0C1A0839050DD47EFF85702F /* RosbridgeTransport.swift */,
 			);
 			path = "ROS";
 			sourceTree = "<group>";
 		};
-		3079880DED2CC5EB5AC7D67B /* Testing */ = {
+		7DCEDD7A414C0A254A2B173A /* Testing */ = {
 			isa = PBXGroup;
 			children = (
-				E3A4194C09B5D0C9485B9068 /* FixtureLibrary.swift */,
-				FCC3A4AC84148C5DED80D125 /* SimulatedRosbridgeTransport.swift */,
+				F7EB195C0DB9FD577BF78312 /* FixtureLibrary.swift */,
+				9EFD3C34DA55C387E27DF6E7 /* SimulatedRosbridgeTransport.swift */,
 			);
 			path = "Testing";
 			sourceTree = "<group>";
 		};
-		86360679A1664A4B4D76DBD7 /* Core */ = {
+		D7E319E4C42AB70CDD0B5A52 /* Core */ = {
 			isa = PBXGroup;
 			children = (
-				C29FFCE4D8421502262E3C99 /* Geometry */,
-				92347365E7CAE64A1707D59C /* Imaging */,
-				81E5BC78BB16FF652FA4AAC1 /* Model */,
-				AD05828490FB370385252AC4 /* ROS */,
-				3079880DED2CC5EB5AC7D67B /* Testing */,
+				ECA552845617747F8CDBAA3E /* Geometry */,
+				A8405C3469DB48A10904FBF4 /* Imaging */,
+				7AE7BD8503AD6549BA36E39D /* Model */,
+				E7C84988768460DB2E4088D1 /* ROS */,
+				7DCEDD7A414C0A254A2B173A /* Testing */,
 			);
 			path = "Core";
 			sourceTree = "<group>";
 		};
-		3B79B11E90387B48E933AAA3 /* Services */ = {
+		F20D4F573E3F4F7177AB70F3 /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				D47A0921343D25B6FA04889F /* AppSettings.swift */,
-				F732C26088E247D0B8EB2D69 /* DashboardAPI.swift */,
-				696A73B72A4E987ACA3DCE57 /* ImageStreamPipeline.swift */,
-				9A79510855B958005F5C012E /* RobotConnection.swift */,
-				5A0E23884C63DC2024D64122 /* RobotStore.swift */,
+				E0558F84BBEA7D83DB07EE59 /* AppSettings.swift */,
+				B7270117979FC206EC73CCC0 /* DashboardAPI.swift */,
+				D3ADB79F9FC1E27C0662E5D6 /* ImageStreamPipeline.swift */,
+				FF8E0DFA36C5B470E6BCD8EB /* RobotConnection.swift */,
+				F2D33DBE6301C3634A08139F /* RobotStore.swift */,
 			);
 			path = "Services";
 			sourceTree = "<group>";
 		};
-		E619785074BD10210FE0288B /* Components */ = {
+		B621080AA68B2A70924A553B /* Components */ = {
 			isa = PBXGroup;
 			children = (
-				24989F7077D4A45E02DD93C2 /* SensorImageView.swift */,
-				3CDA33B0DCB0637266F8195E /* StatusIndicators.swift */,
+				16C38CE2C2C9DE9543EC5408 /* SensorImageView.swift */,
+				4B9D9F003E6D2C8A5C80BD33 /* StatusIndicators.swift */,
 			);
 			path = "Components";
 			sourceTree = "<group>";
 		};
-		0A284B608D0A2759031A98EE /* Views */ = {
+		80AEFB2251870395D05BB42F /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				E619785074BD10210FE0288B /* Components */,
-				AE4AC066F0BF4D8D7ACDC632 /* AlignmentSheet.swift */,
-				AB66A85768D0E5F63D59A656 /* ConnectionView.swift */,
-				EBAEC5A4DDD6EF8F8CA18939 /* DiagnosticsView.swift */,
-				3559254F5CCEEDCF3B35A71F /* LiveView.swift */,
-				BBD1CAEBF7CB571387FF0B1D /* RootView.swift */,
-				859EA59781E13733B8942068 /* SettingsView.swift */,
+				B621080AA68B2A70924A553B /* Components */,
+				55CA88B5A75BAAC16AE9E22F /* AlignmentSheet.swift */,
+				C4314BA8EC0F737127A928A2 /* ConnectionView.swift */,
+				ED38819F56DF9CC40D781EAB /* DiagnosticsView.swift */,
+				E0EFAC773A7C992FEA7950A4 /* LiveView.swift */,
+				0D363ABE227771768DF394D3 /* RootView.swift */,
+				6D44FA667A6DA1AAC30A3F4F /* SettingsView.swift */,
 			);
 			path = "Views";
 			sourceTree = "<group>";
 		};
-		D8401E6BCB90720D50D420A3 /* InitiatorDrone */ = {
+		541FA14289F78A9A6A0D9836 /* InitiatorDrone */ = {
 			isa = PBXGroup;
 			children = (
-				0B352507941F6F70965FB60A /* AR */,
-				78AE070E8C464B773858BDDA /* App */,
-				86360679A1664A4B4D76DBD7 /* Core */,
-				3B79B11E90387B48E933AAA3 /* Services */,
-				0A284B608D0A2759031A98EE /* Views */,
-				68E58C958FA4E1041BDCBE73 /* Resources */,
+				BDF761BF998233C1D220BB73 /* AR */,
+				12A9F894A47E2AC55D619E9F /* App */,
+				D7E319E4C42AB70CDD0B5A52 /* Core */,
+				F20D4F573E3F4F7177AB70F3 /* Services */,
+				80AEFB2251870395D05BB42F /* Views */,
+				525076F9AD8E607B6BE5AF7F /* Resources */,
 			);
 			path = "InitiatorDrone";
 			sourceTree = "<group>";
 		};
-		D8366AD7F767702B0FAE3212 /* InitiatorDroneTests */ = {
+		EDA4FBC114B01CD3B70D0F10 /* InitiatorDroneTests */ = {
 			isa = PBXGroup;
 			children = (
-				B01FD45D645CEE8802C23B34 /* ConnectionTests.swift */,
-				287B367B48CA3030340332ED /* GeometryTests.swift */,
-				EE0F3E7E26856356BB36DD81 /* ImageStreamSoakTests.swift */,
-				AB996139A05EF81E1706E32B /* OdometryTests.swift */,
-				A3E27C64ACFA584E536F9594 /* ROSImageDecoderTests.swift */,
-				035348338327ECC1A6580114 /* RenderingTests.swift */,
-				925510B82AB724FB59F1E71B /* RosbridgeTests.swift */,
+				DDA95F162142E88FA4A50FC8 /* ConnectionTests.swift */,
+				79542DAA7F49BDA04124A27F /* DepthPointCloudTests.swift */,
+				938A716762580467A4E86D55 /* GeometryTests.swift */,
+				B719C95C567A42B30777EC22 /* ImageStreamSoakTests.swift */,
+				E50BC204A6868CA4DE7F0708 /* OdometryTests.swift */,
+				7F6DE798242DD852B10565AA /* ROSImageDecoderTests.swift */,
+				3556214949D772F0A200F6DE /* RenderingTests.swift */,
+				A46FB3F0C9A244D8F99316B2 /* RosbridgeTests.swift */,
 			);
 			path = "InitiatorDroneTests";
 			sourceTree = "<group>";
 		};
-		4726A90B1D4DA1F19FF9010F /* Tests */ = {
+		B7F1E9687BF5A5E69DB55AFD /* Tests */ = {
 			isa = PBXGroup;
 			children = (
-				D8366AD7F767702B0FAE3212 /* InitiatorDroneTests */,
+				EDA4FBC114B01CD3B70D0F10 /* InitiatorDroneTests */,
 			);
 			path = "Tests";
 			sourceTree = "<group>";
 		};
-		68E58C958FA4E1041BDCBE73 /* Resources */ = {
+		525076F9AD8E607B6BE5AF7F /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 				C150B7C47C3B3A6241DFAD4B /* Info.plist */,
@@ -336,8 +345,8 @@
 		8D3FC2904BDC986822C3B4AA = {
 			isa = PBXGroup;
 			children = (
-				D8401E6BCB90720D50D420A3 /* InitiatorDrone */,
-				4726A90B1D4DA1F19FF9010F /* Tests */,
+				541FA14289F78A9A6A0D9836 /* InitiatorDrone */,
+				B7F1E9687BF5A5E69DB55AFD /* Tests */,
 				0340EDC3C7C95BDC82661CB2 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -422,7 +431,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				635FC6FFFA51E5B9F7EEEACB /* Fixtures in Resources */,
+				D78CC1B04CAB97B8912BF085 /* Fixtures in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -433,52 +442,54 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7167972C7C9984C54E465C1A /* ARKitBridge.swift in Sources */,
-				D67D0B6479EC86FAEBD1E84D /* ARRobotSceneView.swift in Sources */,
-				069B358974CDE8F668864A3C /* ARSessionController.swift in Sources */,
-				EFC30BF8F03C0A4D08CCC6F7 /* AlignmentController.swift in Sources */,
-				B3E5294C595AA686F35D25C9 /* RobotSceneNodes.swift in Sources */,
-				605609CF399D5ED70F7BF46D /* AppModel.swift in Sources */,
-				FC30B85B17CA68D626E0B566 /* InitiatorDroneApp.swift in Sources */,
-				0BC7C0B2077237D55D7C4AB9 /* ClockOffsetEstimator.swift in Sources */,
-				44FBFD8E6EC68FB8CB2D29EE /* FrameConversion.swift in Sources */,
-				AA0E3F9FEE8AEFB814F85DA0 /* OdometryBuffer.swift in Sources */,
-				21B72F1AE5F61D03E1626BBA /* OdometrySampler.swift in Sources */,
-				4EE97BF2830DCB5F6C1A2B0E /* Pose.swift in Sources */,
-				ACF0A91F308956E2FDC97F63 /* Quaternion.swift in Sources */,
-				2FBDA470C971A3AD382D2044 /* Vector3.swift in Sources */,
-				6EA1D40D5120B7D49EA495AB /* ColorRamp.swift in Sources */,
-				19C5672EB63529EEA2AD7F38 /* ROSImage.swift in Sources */,
-				45582D34BE96858924934315 /* ROSImageDecoder.swift in Sources */,
-				0FDDDBB195C71EFFF1BE40A8 /* ScalarImageRenderer.swift in Sources */,
-				D92C1528AD1313F33CDB7B7F /* RobotEndpoint.swift in Sources */,
-				1E2710F60C2CEAA1F821405D /* RobotTrackingStatus.swift in Sources */,
-				4704D46B7DFFB413526443EA /* VIONodeStatus.swift in Sources */,
-				D144D80AE7117633CFEB3011 /* VideoFormatSelection.swift in Sources */,
-				60468175B3F1E570CCD00415 /* CBORDecoder.swift in Sources */,
-				FFC6145F1AACA5ED7BE5A63F /* LatestOnlySlot.swift in Sources */,
-				383C4A0FE956D3CCB2C01880 /* ROSMessages.swift in Sources */,
-				01088832A41F8AE6A1760A75 /* ROSValue.swift in Sources */,
-				30AA873C02068D3207741225 /* RateTracker.swift in Sources */,
-				2700880B4C81FC6002778A89 /* ReconnectPolicy.swift in Sources */,
-				9819C84E245580D200A6C1E1 /* RosbridgeClient.swift in Sources */,
-				6E86FE294AD53B956D37703D /* RosbridgeProtocol.swift in Sources */,
-				32D18A07F0E90D4682DB148A /* RosbridgeTransport.swift in Sources */,
-				E4386DE80A9AC9686504708C /* FixtureLibrary.swift in Sources */,
-				9E7D7FE8C47814F503A4D818 /* SimulatedRosbridgeTransport.swift in Sources */,
-				501A35BCA7DF76BAB59BE43E /* AppSettings.swift in Sources */,
-				FA0D687596F80899D74BF279 /* DashboardAPI.swift in Sources */,
-				E4D551E38AA1FDE9ABEC8169 /* ImageStreamPipeline.swift in Sources */,
-				D11AD512DA491635765D64DC /* RobotConnection.swift in Sources */,
-				984DA6D15426DAA90610C0D8 /* RobotStore.swift in Sources */,
-				510CF07940C23AF2F14FD3FF /* AlignmentSheet.swift in Sources */,
-				E02E0EC1C4EA7BD3E6EA9DAF /* ConnectionView.swift in Sources */,
-				39371D8E22764CB9DD347D32 /* DiagnosticsView.swift in Sources */,
-				EB0AA26F906FD9F2CFFBFF81 /* LiveView.swift in Sources */,
-				2514ACD69995FB0C205AA6E2 /* RootView.swift in Sources */,
-				3CFFC1DB494C25D2B8A266D8 /* SettingsView.swift in Sources */,
-				79427D7F17D767F33DFF6C7E /* SensorImageView.swift in Sources */,
-				20764B1E0A92A429924324B4 /* StatusIndicators.swift in Sources */,
+				77DD11A65D8FBEC80EC8A14F /* ARKitBridge.swift in Sources */,
+				593A7C999CB1E3D2DF7E79BB /* ARRobotSceneView.swift in Sources */,
+				76A1D0E9E8EC54727EEE72EA /* ARSessionController.swift in Sources */,
+				A1AB6A2D7BC8BC5DE60DF3EF /* AlignmentController.swift in Sources */,
+				6CDA3301FB439AFCC0BDB46C /* RobotSceneNodes.swift in Sources */,
+				84424993B59F7B367248BA00 /* AppModel.swift in Sources */,
+				6FAA92D478534A9A94D9103E /* InitiatorDroneApp.swift in Sources */,
+				FCC978A2D14F5F0ED573ED19 /* ClockOffsetEstimator.swift in Sources */,
+				037D2A845566BE8B9771AA50 /* FrameConversion.swift in Sources */,
+				7B4EFAACE5E7AEFD8FE70939 /* OdometryBuffer.swift in Sources */,
+				57C4497F4CA5F767B845C3A0 /* OdometrySampler.swift in Sources */,
+				6BA722C02FA0884FC9B94922 /* Pose.swift in Sources */,
+				85D3EF58329D738860512A93 /* Quaternion.swift in Sources */,
+				99E50E111C84BC5B1A8ADB1A /* Vector3.swift in Sources */,
+				297EECA292846F6F48FA0848 /* ColorRamp.swift in Sources */,
+				8093AA247D18C1C4BCB36AC7 /* DepthPointCloud.swift in Sources */,
+				A4332BB3191741E3F1A9D4C0 /* PointCloudStore.swift in Sources */,
+				BD47CD051B3F0FA1442618CF /* ROSImage.swift in Sources */,
+				E5BDB6A5182B7D1F401B6D00 /* ROSImageDecoder.swift in Sources */,
+				90EA97D78B3B5054FF515D6B /* ScalarImageRenderer.swift in Sources */,
+				DF74EE2375433053A9896EDD /* RobotEndpoint.swift in Sources */,
+				BED4E3039B7556859D0D7642 /* RobotTrackingStatus.swift in Sources */,
+				09D9D0AC5E10E44045FED76C /* VIONodeStatus.swift in Sources */,
+				EE1DD41688A7583F16E9FBC1 /* VideoFormatSelection.swift in Sources */,
+				A7D2582C184B9FFAC5044100 /* CBORDecoder.swift in Sources */,
+				878FEBECCF05648ACE99EF2F /* LatestOnlySlot.swift in Sources */,
+				DB97AE0E8CF2617005E6257A /* ROSMessages.swift in Sources */,
+				801726BE79C2C06BDA82FDD1 /* ROSValue.swift in Sources */,
+				A859CDD297FCDEF35D411C1A /* RateTracker.swift in Sources */,
+				B4BF05C283B5F85A65D1A80B /* ReconnectPolicy.swift in Sources */,
+				BD776B2EC8A86C688DBF2C2C /* RosbridgeClient.swift in Sources */,
+				F4CBEC867B11871B694B2AB0 /* RosbridgeProtocol.swift in Sources */,
+				A32E8F3037395666A6EB6D7F /* RosbridgeTransport.swift in Sources */,
+				8EBF097D79F41E6F6A0126E6 /* FixtureLibrary.swift in Sources */,
+				5FA10F05B6DC8F2DDC6A2065 /* SimulatedRosbridgeTransport.swift in Sources */,
+				A1884EE95F4AAD0ECB8B7A1B /* AppSettings.swift in Sources */,
+				5353B7459D427DB111FC4910 /* DashboardAPI.swift in Sources */,
+				5B9B9E6CD0FA17D2B934BA6B /* ImageStreamPipeline.swift in Sources */,
+				B4F111780F44CB187D5C9DD6 /* RobotConnection.swift in Sources */,
+				032EA16EE51EA21D590D00DE /* RobotStore.swift in Sources */,
+				34B62F0B8BB11D25C726B1F2 /* AlignmentSheet.swift in Sources */,
+				32211B3105652F0562600628 /* ConnectionView.swift in Sources */,
+				25E37CA91CBB8DEF1D7B16AB /* DiagnosticsView.swift in Sources */,
+				8728FCCC5A1F867510E4EDB1 /* LiveView.swift in Sources */,
+				0F4D8759C57CCD8235851CA9 /* RootView.swift in Sources */,
+				9353CC17A35C300A30CDDC15 /* SettingsView.swift in Sources */,
+				6EEB47DF82A7E0F5DF6CB11E /* SensorImageView.swift in Sources */,
+				BE39D6DED63FCEBCA6E0943D /* StatusIndicators.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -486,13 +497,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0E0597E49E00C00157D6FCD4 /* ConnectionTests.swift in Sources */,
-				AF75B29D0AC770B8225CD800 /* GeometryTests.swift in Sources */,
-				FD7609E086ABAB0FD4FDC699 /* ImageStreamSoakTests.swift in Sources */,
-				88EC11D65BAE91CA1DB6239B /* OdometryTests.swift in Sources */,
-				379C85867BD0098F729B2E9F /* ROSImageDecoderTests.swift in Sources */,
-				D26CC552D9A86AFD4581A311 /* RenderingTests.swift in Sources */,
-				0F15F1F2D76B7EB35BA1A077 /* RosbridgeTests.swift in Sources */,
+				C101431C71FDC2E172CC913E /* ConnectionTests.swift in Sources */,
+				075E19057C07C01F00AE0EA8 /* DepthPointCloudTests.swift in Sources */,
+				E81CE81CC0318453898556FB /* GeometryTests.swift in Sources */,
+				895501351F0D13F5F47B0C97 /* ImageStreamSoakTests.swift in Sources */,
+				FF7E69B1DD8AB1AAF6F7E581 /* OdometryTests.swift in Sources */,
+				3D7264810C7977642E4DD12B /* ROSImageDecoderTests.swift in Sources */,
+				D29B4A65E6E8CFD9DA0C38F5 /* RenderingTests.swift in Sources */,
+				779C30672946CA201A12EB80 /* RosbridgeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

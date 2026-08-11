@@ -11,6 +11,8 @@ struct SettingsView: View {
                 streamSection
                 poseSection
                 sceneSection
+                pointCloudSection
+                fixturesSection
                 aboutSection
             }
             .navigationTitle("Settings")
@@ -143,6 +145,75 @@ struct SettingsView: View {
             Text("The frustum uses the depth CameraInfo field of view, drawn from base_link. It shows coverage, not a calibrated camera mounting.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var pointCloudSection: some View {
+        Section {
+            Toggle("Show point cloud", isOn: binding(\.pointCloud.isEnabled))
+
+            if settings.settings.pointCloud.isEnabled {
+                Stepper(
+                    "Sample every \(settings.settings.pointCloud.pixelStride) px",
+                    value: binding(\.pointCloud.pixelStride),
+                    in: 1...8
+                )
+                Stepper(
+                    "Max \(settings.settings.pointCloud.maximumPoints / 1000)k points",
+                    value: Binding(
+                        get: { settings.settings.pointCloud.maximumPoints / 1000 },
+                        set: { settings.settings.pointCloud.maximumPoints = $0 * 1000 }
+                    ),
+                    in: 1...100
+                )
+                rangeRow(
+                    title: "Nearest",
+                    value: binding(\.pointCloud.minimumDepth),
+                    range: 0.05...3.0,
+                    step: 0.05,
+                    unit: "m",
+                    format: "%.2f"
+                )
+                rangeRow(
+                    title: "Furthest",
+                    value: binding(\.pointCloud.maximumDepth),
+                    range: 0.5...20.0,
+                    step: 0.5,
+                    unit: "m",
+                    format: "%.1f"
+                )
+                rangeRow(
+                    title: "Point size",
+                    value: binding(\.pointCloud.pointSize),
+                    range: 1.0...20.0,
+                    step: 1.0,
+                    unit: "px",
+                    format: "%.0f"
+                )
+            }
+        } header: {
+            Text("Point cloud")
+        } footer: {
+            Text("""
+            The depth frame is deprojected with the CameraInfo intrinsics and drawn at the robot's \
+            pose, so it needs both a depth stream and an alignment before anything appears. It \
+            assumes the camera sits at base_link facing forward — the true mounting comes from the \
+            URDF, which no subscribed topic carries.
+            """)
+        }
+    }
+
+    private var fixturesSection: some View {
+        Section {
+            Toggle("Park the robot at the origin", isOn: binding(\.fixtureRobotIsStatic))
+        } header: {
+            Text("Fixtures mode")
+        } footer: {
+            Text("""
+            Odometry keeps publishing at the same rate either way; only the pose stops changing. \
+            Park it when you are checking whether the marker and point cloud land in the right \
+            place, because a moving robot makes an alignment error look like motion.
+            """)
         }
     }
 

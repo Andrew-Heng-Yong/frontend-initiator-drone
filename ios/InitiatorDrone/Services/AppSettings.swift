@@ -19,6 +19,11 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var showsCameraFrustum: Bool
     /// Draw a trail behind the robot marker.
     public var showsRobotTrail: Bool
+    /// Deproject the depth frame into a 3D point cloud in the AR scene.
+    public var pointCloud: PointCloudSettings
+    /// In fixtures mode, park the robot at the `odom` origin instead of
+    /// driving it around.
+    public var fixtureRobotIsStatic: Bool
 
     public init(
         depthColorMap: ScalarColorMapSettings = .depthDefault,
@@ -27,7 +32,9 @@ public struct AppSettings: Equatable, Codable, Sendable {
         odometryStalenessThreshold: Double = 0.5,
         odometryExtrapolationLimit: Double = 0.0,
         showsCameraFrustum: Bool = true,
-        showsRobotTrail: Bool = true
+        showsRobotTrail: Bool = true,
+        pointCloud: PointCloudSettings = .default,
+        fixtureRobotIsStatic: Bool = false
     ) {
         self.depthColorMap = depthColorMap
         self.compression = compression
@@ -36,6 +43,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
         self.odometryExtrapolationLimit = odometryExtrapolationLimit
         self.showsCameraFrustum = showsCameraFrustum
         self.showsRobotTrail = showsRobotTrail
+        self.pointCloud = pointCloud
+        self.fixtureRobotIsStatic = fixtureRobotIsStatic
     }
 
     public func depthInterpretation(for encoding: ROSImageEncoding) -> ScalarInterpretation {
@@ -56,11 +65,10 @@ public final class SettingsStore: ObservableObject {
     ///
     /// `v2` dropped the thermal, blend and picture-in-picture settings and added
     /// an ultra-wide camera preference; `v3` renamed that preference, which is
-    /// an add. The preference has since been removed altogether, leaving the
-    /// current shape a strict subset of `v1` — so the suffix no longer marks a
-    /// real incompatibility, and it stays only because changing it would reset
-    /// everyone's settings again for nothing.
-    private static let storageKey = "com.initiatordrone.settings.v3"
+    /// an add. The preference has since been removed altogether. `v4` adds the
+    /// point-cloud settings and the fixtures static-robot flag — both genuine
+    /// adds, so a `v3` blob would throw on decode and has to be abandoned.
+    private static let storageKey = "com.initiatordrone.settings.v4"
 
     @Published public var settings: AppSettings {
         didSet { persist() }

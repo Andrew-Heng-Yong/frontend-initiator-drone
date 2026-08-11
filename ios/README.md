@@ -139,6 +139,13 @@ message path — same subscribe commands, same JSON envelopes, same decoders.
 Everything except Start/Stop/Calibrate behaves as it does against a live robot,
 including the reconnect logic (Diagnostics ▸ ⋯ ▸ *Simulate Wi-Fi drop*).
 
+By default the fixture robot drives a slow figure-of-eight. **Settings ▸
+Fixtures mode ▸ Park the robot at the origin** stops it at the `odom` origin
+instead, while odometry keeps publishing at the same rate with the same
+timestamps — only the pose stops changing. Park it when you are checking
+*where* the marker and point cloud land, because a moving robot makes an
+alignment error indistinguishable from motion.
+
 ## Connecting to a robot
 
 | What | Where |
@@ -286,6 +293,45 @@ it stays true on a device whose default is a 16:9 crop.
 **Diagnostics ▸ ARKit video formats** lists every format the device offers and
 marks the one running. That is the place to check what a given phone can actually
 do, rather than trusting this paragraph.
+
+## The point cloud
+
+The depth frame is deprojected on the phone and drawn in the AR scene, so the
+room the robot has scanned appears anchored in the real room around you. No
+`PointCloud2` topic is involved — the app already has the depth image and the
+`CameraInfo` intrinsics, which is everything the pinhole model needs:
+
+```text
+Z = depth(u, v)
+X = (u - cx) * Z / fx
+Y = (v - cy) * Z / fy
+```
+
+Those points are in the **camera optical frame** (`+X` right, `+Y` down, `+Z`
+forward), which is a third convention on top of `base_link` and ARKit. Composing
+optical → `base_link` → ARKit collapses to flipping Y and Z, and
+`DepthPointCloudTests` pins down each hop separately so that shortcut cannot
+quietly rot.
+
+The cloud is attached as a child of the robot marker node, so it inherits the
+`odom`-to-ARKit pose and the alignment for free and needs no transform of its
+own. Two consequences worth knowing:
+
+- **It only appears once you have aligned the robot.** No alignment means no
+  pose, which means no honest place to put the points.
+- It assumes the depth camera sits at `base_link` facing forward. The real
+  extrinsic lives in the URDF, which no subscribed topic carries, so a
+  physically offset or tilted camera puts the cloud off by that offset.
+
+Building it costs nothing extra per frame: it happens on the depth pipeline's
+existing worker, from the decode that was already being done, so it inherits the
+same latest-only drop policy — a phone that cannot keep up skips whole frames
+rather than queueing clouds. Rebuilding the SceneKit geometry is gated on a
+generation counter, so a 60 Hz render loop against a 5 Hz depth stream does an
+integer comparison rather than rebuilding tens of thousands of vertices.
+
+Density, range and point size are in **Settings ▸ Point cloud**. The colours
+come from the same depth colour map as the 2D panel, so the two always agree.
 
 ## How the robot ends up in the right place
 
@@ -450,11 +496,10 @@ frames stop arriving after changing it.
 
 ## Not built yet
 
-- Point-cloud generation and `PointCloud2` — out of scope for this version. The
-  camera frustum drawn from `CameraInfo` is the placeholder for it.
+- Subscribing to a `PointCloud2` topic. The cloud is deprojected on the phone
+  from the depth image instead (see below), which needs no extra bandwidth and
+  no extra node on the robot.
 - AprilTag or automatic alignment.
-- Depth reprojected into the AR scene. The alignment pipeline it depends on
-  wants validating against real hardware first.
 - An authoritative node list. Adding `rosapi_node` to `drone_launch.py` would
   let `VIONodeStatus` confirm what it currently infers.
 - A camera view wider than ARKit's wide lens. It would need `AVCaptureSession`

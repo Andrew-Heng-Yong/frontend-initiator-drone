@@ -28,6 +28,17 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
     /// Reports `/vio/calibrated` as false until `calibrate()` is called.
     public var isCalibrated = true
 
+    /// Parks the robot instead of driving it around a figure-of-eight.
+    /// Safe to flip while connected.
+    public var isStatic = false
+
+    /// Where the parked robot sits, in the `odom` frame. The default is the
+    /// origin itself, so the marker should land exactly on the alignment ring.
+    public var staticPosition = Vector3.zero
+
+    /// Heading of the parked robot about `odom` +Z, in radians.
+    public var staticHeading: Double = 0
+
     private let queue = DispatchQueue(label: "com.initiatordrone.rosbridge.simulator")
     private var timer: DispatchSourceTimer?
     private var connected = false
@@ -131,6 +142,17 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
         }
     }
 
+    /// Parks or releases the robot while connected.
+    ///
+    /// The plain `isStatic` property is only safe to set before `connect`;
+    /// afterwards it is read on the playback queue, so live changes go through
+    /// here.
+    public func setStatic(_ isStatic: Bool) {
+        queue.async { [weak self] in
+            self?.isStatic = isStatic
+        }
+    }
+
     // MARK: - Playback
 
     private func startTimerLocked() {
@@ -215,7 +237,21 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
     /// A slow figure-of-eight around the origin at walking pace, with the robot
     /// facing along its own path — enough motion to make interpolation,
     /// alignment and the AR marker visibly correct or visibly wrong.
+    ///
+    /// With `isStatic` the robot sits at the `odom` origin instead. Odometry
+    /// still publishes at the same rate with the same timestamps, so the link,
+    /// the buffer and the staleness logic are all still exercised — only the
+    /// pose stops changing. That is the mode to use when you are checking
+    /// whether the marker lands in the right place, because a moving target
+    /// makes an alignment error impossible to distinguish from motion.
     func simulatedPose(at elapsed: Double) -> Pose {
+        if isStatic {
+            return Pose(
+                position: staticPosition,
+                orientation: Quaternion.aroundZ(staticHeading)
+            )
+        }
+
         let omega = 0.25
         let x = 1.5 * sin(omega * elapsed)
         let y = 0.9 * sin(2 * omega * elapsed)

@@ -40,7 +40,12 @@ final class AppModel: ObservableObject {
         settings.$settings
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newSettings in
-                self?.connection.apply(settings: newSettings)
+                guard let self else { return }
+                self.connection.apply(settings: newSettings)
+                // The fixtures robot can be parked and released while
+                // connected, so the flag is pushed rather than only read at
+                // connect time.
+                self.simulatedTransport?.setStatic(newSettings.fixtureRobotIsStatic)
             }
             .store(in: &cancellables)
 
@@ -76,6 +81,9 @@ final class AppModel: ObservableObject {
         startARIfNeeded()
         #endif
         let simulator = SimulatedRosbridgeTransport()
+        // Set before connecting, so the very first odometry message already
+        // reflects the choice.
+        simulator.isStatic = settings.settings.fixtureRobotIsStatic
         connection.connectToSimulator(simulator)
         simulatedTransport = simulator
         selectedTab = .live

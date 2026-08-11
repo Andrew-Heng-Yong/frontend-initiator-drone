@@ -15,10 +15,13 @@ import simd
 public struct ARRobotSceneView: UIViewRepresentable {
 
     public var sampler: OdometrySampler
+    public var pointCloudStore: PointCloudStore
     public var trackingStatus: RobotTrackingStatus
     public var cameraInfo: CameraInfoMessage?
     public var showsFrustum: Bool
     public var showsTrail: Bool
+    public var showsPointCloud: Bool
+    public var pointSize: Double
     public var placementPhase: AlignmentController.Phase
     public var previewPosition: Vector3?
     public var pendingYaw: Double
@@ -31,10 +34,13 @@ public struct ARRobotSceneView: UIViewRepresentable {
 
     public init(
         sampler: OdometrySampler,
+        pointCloudStore: PointCloudStore,
         trackingStatus: RobotTrackingStatus,
         cameraInfo: CameraInfoMessage?,
         showsFrustum: Bool,
         showsTrail: Bool,
+        showsPointCloud: Bool,
+        pointSize: Double,
         placementPhase: AlignmentController.Phase,
         previewPosition: Vector3?,
         pendingYaw: Double,
@@ -44,10 +50,13 @@ public struct ARRobotSceneView: UIViewRepresentable {
         onPreviewUpdate: ((Vector3?) -> Void)? = nil
     ) {
         self.sampler = sampler
+        self.pointCloudStore = pointCloudStore
         self.trackingStatus = trackingStatus
         self.cameraInfo = cameraInfo
         self.showsFrustum = showsFrustum
         self.showsTrail = showsTrail
+        self.showsPointCloud = showsPointCloud
+        self.pointSize = pointSize
         self.placementPhase = placementPhase
         self.previewPosition = previewPosition
         self.pendingYaw = pendingYaw
@@ -60,7 +69,7 @@ public struct ARRobotSceneView: UIViewRepresentable {
     private let session: ARSession
 
     public func makeCoordinator() -> Coordinator {
-        Coordinator(sampler: sampler)
+        Coordinator(sampler: sampler, pointCloudStore: pointCloudStore)
     }
 
     public func makeUIView(context: Context) -> ARSCNView {
@@ -93,6 +102,8 @@ public struct ARRobotSceneView: UIViewRepresentable {
             cameraInfo: cameraInfo,
             showsFrustum: showsFrustum,
             showsTrail: showsTrail,
+            showsPointCloud: showsPointCloud,
+            pointSize: pointSize,
             placementPhase: placementPhase,
             previewPosition: previewPosition,
             pendingYaw: pendingYaw,
@@ -112,6 +123,7 @@ public struct ARRobotSceneView: UIViewRepresentable {
     /// conformance costs nothing beyond the declaration.
     public final class Coordinator: NSObject, ARSCNViewDelegate {
         private let sampler: OdometrySampler
+        private let pointCloudStore: PointCloudStore
         private weak var view: ARSCNView?
 
         private let robotNode = RobotSceneNodes.makeRobotNode()
@@ -119,6 +131,8 @@ public struct ARRobotSceneView: UIViewRepresentable {
         private let previewNode = RobotSceneNodes.makePlacementPreviewNode()
         private let trailNode = SCNNode()
         private var frustumNode: SCNNode?
+        private let pointCloudNode = SCNNode()
+        private var pointCloudGeneration: UInt64 = 0
 
         /// Written on the main thread by `updateUIView`, read on the render
         /// thread. Small, but a lock is cheaper than a hard-to-reproduce
@@ -137,16 +151,20 @@ public struct ARRobotSceneView: UIViewRepresentable {
             var cameraInfo: CameraInfoMessage?
             var showsFrustum = true
             var showsTrail = true
+            var showsPointCloud = true
+            var pointSize: Double = 6
             var placementPhase: AlignmentController.Phase = .idle
             var previewPosition: Vector3?
             var pendingYaw: Double = 0
             var isAligned = false
         }
 
-        init(sampler: OdometrySampler) {
+        init(sampler: OdometrySampler, pointCloudStore: PointCloudStore) {
             self.sampler = sampler
+            self.pointCloudStore = pointCloudStore
             super.init()
             trailNode.name = "trail"
+            pointCloudNode.name = "pointCloud"
         }
 
         func attach(to view: ARSCNView) {
@@ -156,6 +174,10 @@ public struct ARRobotSceneView: UIViewRepresentable {
             root.addChildNode(originNode)
             root.addChildNode(trailNode)
             root.addChildNode(previewNode)
+
+            // Parented to the robot marker, so the cloud inherits the
+            // odom-to-ARKit pose and alignment without a second transform.
+            robotNode.addChildNode(pointCloudNode)
 
             robotNode.isHidden = true
             originNode.isHidden = true
@@ -175,6 +197,8 @@ public struct ARRobotSceneView: UIViewRepresentable {
             cameraInfo: CameraInfoMessage?,
             showsFrustum: Bool,
             showsTrail: Bool,
+            showsPointCloud: Bool,
+            pointSize: Double,
             placementPhase: AlignmentController.Phase,
             previewPosition: Vector3?,
             pendingYaw: Double,
@@ -185,6 +209,8 @@ public struct ARRobotSceneView: UIViewRepresentable {
             config.cameraInfo = cameraInfo
             config.showsFrustum = showsFrustum
             config.showsTrail = showsTrail
+            config.showsPointCloud = showsPointCloud
+            config.pointSize = pointSize
             config.placementPhase = placementPhase
             config.previewPosition = previewPosition
             config.pendingYaw = pendingYaw
@@ -259,6 +285,7 @@ public struct ARRobotSceneView: UIViewRepresentable {
             updateOrigin(current)
             updateRobot(current, time: time)
             updateTrail(current, time: time)
+            updatePointCloud(current)
         }
 
         private func updatePlacementPreview(_ current: Config) {
@@ -366,6 +393,35 @@ public struct ARRobotSceneView: UIViewRepresentable {
                 lastFrustumSignature = signature
             }
             frustumNode?.isHidden = false
+        }
+
+        /// Rebuilds the point cloud geometry, but only when the depth worker
+        /// has actually produced a new one.
+        ///
+        /// This runs at the display refresh rate against a depth stream of a
+        /// few hertz, so the generation check is doing most of the work: it
+        /// turns ~57 of every 60 calls into a single integer comparison rather
+        /// than rebuilding tens of thousands of vertices.
+        private func updatePointCloud(_ current: Config) {
+            guard current.showsPointCloud else {
+                pointCloudNode.isHidden = true
+                return
+            }
+            pointCloudNode.isHidden = false
+
+            guard let update = pointCloudStore.take(ifNewerThan: pointCloudGeneration) else {
+                return
+            }
+            pointCloudGeneration = update.generation
+
+            guard update.cloud.count > 0 else {
+                pointCloudNode.geometry = nil
+                return
+            }
+            pointCloudNode.geometry = RobotSceneNodes.makePointCloudGeometry(
+                from: update.cloud,
+                pointSize: CGFloat(current.pointSize)
+            )
         }
 
         private func updateTrail(_ current: Config, time: TimeInterval) {

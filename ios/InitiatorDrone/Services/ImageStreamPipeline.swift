@@ -41,6 +41,27 @@ public final class ImageStreamPipeline: @unchecked Sendable {
     /// Called on the main queue when a frame could not be decoded.
     public var onError: ((String) -> Void)?
 
+    /// Called on the pipeline's own worker queue with each rebuilt point
+    /// cloud, or `nil` when there is nothing to draw.
+    ///
+    /// Deliberately not hopped to main: the cloud is consumed by the SceneKit
+    /// render thread, and bouncing tens of thousands of points through the main
+    /// actor on the way there would be pure overhead.
+    public var onPointCloud: ((PointCloudBuffer) -> Void)?
+
+    /// Intrinsics for this topic, needed to deproject depth into 3D. Set from
+    /// the main thread when `CameraInfo` arrives.
+    public var cameraInfo: CameraInfoMessage? {
+        get { lock.synchronized { cameraInfoStorage } }
+        set { lock.synchronized { cameraInfoStorage = newValue } }
+    }
+
+    /// Point cloud density and range. Safe to set from the main thread.
+    public var pointCloudSettings: PointCloudSettings {
+        get { lock.synchronized { pointCloudStorage } }
+        set { lock.synchronized { pointCloudStorage = newValue } }
+    }
+
     /// Colour-map settings. Safe to set from the main thread at any time.
     public var colorMapSettings: ScalarColorMapSettings {
         get { lock.synchronized { renderer.settings } }
@@ -55,6 +76,8 @@ public final class ImageStreamPipeline: @unchecked Sendable {
     private let lock = NSLock()
     private let renderer: ScalarImageRenderer
     private var lastErrorText: String?
+    private var cameraInfoStorage: CameraInfoMessage?
+    private var pointCloudStorage: PointCloudSettings = .default
 
     public init(
         topic: RobotTopic,
@@ -128,6 +151,12 @@ public final class ImageStreamPipeline: @unchecked Sendable {
             let centre = scalar.value(x: scalar.width / 2, y: scalar.height / 2)
             centreValue = centre.isFinite ? Double(centre) : nil
 
+            // Build the cloud from the same decode, on the same worker. Doing
+            // it here rather than downstream means it inherits the latest-only
+            // drop policy for free: a phone that cannot keep up skips whole
+            // frames instead of queueing clouds.
+            buildPointCloud(from: scalar, stamp: message.stamp, rangeLow: rangeLow, rangeHigh: rangeHigh)
+
         case .color(let color):
             colorImage = color
             rangeLow = 0
@@ -158,6 +187,53 @@ public final class ImageStreamPipeline: @unchecked Sendable {
         DispatchQueue.main.async { [weak self] in
             self?.onFrame?(frame)
         }
+    }
+
+    /// Deprojects a decoded depth frame and hands the cloud to `onPointCloud`.
+    private func buildPointCloud(
+        from scalar: ScalarImage,
+        stamp: Double,
+        rangeLow: Double,
+        rangeHigh: Double
+    ) {
+        guard let onPointCloud else { return }
+
+        lock.lock()
+        let settings = pointCloudStorage
+        let info = cameraInfoStorage
+        let rampStyle = renderer.settings.style
+        let reversed = renderer.settings.reversed
+        lock.unlock()
+
+        guard settings.isEnabled, scalar.unit == .metres else {
+            onPointCloud(.empty)
+            return
+        }
+        guard let info else {
+            // No intrinsics means no way to deproject. Report empty rather than
+            // inventing a focal length and drawing a plausible-looking lie.
+            onPointCloud(.empty)
+            return
+        }
+
+        let ramp = rampStyle.ramp
+        let span = rangeHigh - rangeLow
+        let inverseSpan = abs(span) > 1e-9 ? 1.0 / span : 0.0
+
+        let cloud = DepthPointCloud.build(
+            from: scalar,
+            cameraInfo: info,
+            settings: settings,
+            stamp: stamp
+        ) { depth in
+            // Same mapping the 2D view uses, so the cloud and the panel agree.
+            var normalized = inverseSpan == 0 ? 0.5 : (depth - rangeLow) * inverseSpan
+            normalized = min(max(normalized, 0.0), 1.0)
+            if reversed { normalized = 1.0 - normalized }
+            return ramp.color(normalized: normalized)
+        }
+
+        onPointCloud(cloud)
     }
 
     private func report(error text: String) {

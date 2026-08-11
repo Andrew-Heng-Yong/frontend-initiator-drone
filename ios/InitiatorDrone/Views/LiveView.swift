@@ -66,10 +66,13 @@ struct LiveView: View {
         if arSession.isSupported {
             ARRobotSceneView(
                 sampler: connection.sampler,
+                pointCloudStore: connection.pointCloudStore,
                 trackingStatus: connection.trackingStatus,
                 cameraInfo: settings.settings.showsCameraFrustum ? connection.depthCameraInfo : nil,
                 showsFrustum: settings.settings.showsCameraFrustum,
                 showsTrail: settings.settings.showsRobotTrail,
+                showsPointCloud: settings.settings.pointCloud.isEnabled,
+                pointSize: settings.settings.pointCloud.pointSize,
                 placementPhase: alignment.phase,
                 previewPosition: alignment.previewPosition,
                 pendingYaw: alignment.pendingYaw,

@@ -169,6 +169,74 @@ public enum RobotSceneNodes {
         return node
     }
 
+    // MARK: - Point cloud
+
+    /// Builds point geometry from a deprojected depth frame.
+    ///
+    /// SceneKit draws a `.point` primitive straight from the vertex source when
+    /// the element carries no index data, which is what makes this cheap — the
+    /// two `Data` blobs come out of `PointCloudBuffer` already in the exact
+    /// layout the sources want, with no per-point object allocated anywhere.
+    ///
+    /// The result is meant to be attached under the robot marker node, so the
+    /// cloud inherits the robot's `odom`-to-ARKit pose.
+    public static func makePointCloudGeometry(
+        from cloud: PointCloudBuffer,
+        pointSize: CGFloat
+    ) -> SCNGeometry? {
+        guard cloud.count > 0,
+              cloud.positions.count == cloud.count * 3,
+              cloud.colors.count == cloud.count * 3 else { return nil }
+
+        let positionData = cloud.positions.withUnsafeBufferPointer { Data(buffer: $0) }
+        let colorData = cloud.colors.withUnsafeBufferPointer { Data(buffer: $0) }
+
+        let vertexSource = SCNGeometrySource(
+            data: positionData,
+            semantic: .vertex,
+            vectorCount: cloud.count,
+            usesFloatComponents: true,
+            componentsPerVector: 3,
+            bytesPerComponent: MemoryLayout<Float>.size,
+            dataOffset: 0,
+            dataStride: MemoryLayout<Float>.size * 3
+        )
+
+        let colorSource = SCNGeometrySource(
+            data: colorData,
+            semantic: .color,
+            vectorCount: cloud.count,
+            usesFloatComponents: false,
+            componentsPerVector: 3,
+            bytesPerComponent: MemoryLayout<UInt8>.size,
+            dataOffset: 0,
+            dataStride: MemoryLayout<UInt8>.size * 3
+        )
+
+        // Nil index data means "draw the vertices in order", which is exactly
+        // what a point cloud wants and avoids building an index buffer.
+        let element = SCNGeometryElement(
+            data: nil,
+            primitiveType: .point,
+            primitiveCount: cloud.count,
+            bytesPerIndex: MemoryLayout<Int32>.size
+        )
+        element.pointSize = pointSize
+        element.minimumPointScreenSpaceRadius = 1.0
+        element.maximumPointScreenSpaceRadius = max(1.0, pointSize)
+
+        let geometry = SCNGeometry(sources: [vertexSource, colorSource], elements: [element])
+        let material = SCNMaterial()
+        // Constant lighting with a white diffuse lets the per-vertex colours
+        // through untouched; anything else would relight the depth colour map.
+        material.lightingModel = .constant
+        material.diffuse.contents = UIColor.white
+        material.isDoubleSided = true
+        material.writesToDepthBuffer = true
+        geometry.materials = [material]
+        return geometry
+    }
+
     // MARK: - Trail
 
     /// A polyline through the robot's recent positions.
