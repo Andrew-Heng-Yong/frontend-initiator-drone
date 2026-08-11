@@ -201,13 +201,13 @@ and orientation.
 **Robot** — address entry, connection test, saved robots, fixtures mode.
 
 **Diagnostics** — per-topic rate and last-message age, VIO node status, the full
-VIO pose and twist, IMU values with a gravity sanity check, phone AR pose and
-active camera lens, stream statistics including dropped frames, and the raw
-rosbridge log.
+VIO pose and twist, IMU values with a gravity sanity check, phone AR pose, every
+ARKit video format the device offers, stream statistics including dropped frames,
+and the raw rosbridge log.
 
 **Settings** — depth colour map (fixed or auto range, six ramps), wire format,
-image throttle, odometry staleness and extrapolation, the AR camera lens, and AR
-scene options.
+image throttle, odometry staleness and extrapolation, the AR camera field of
+view, and AR scene options.
 
 ## Depth only
 
@@ -258,24 +258,35 @@ the node explaining an odometry gap it is itself causing, so it outranks the gap
 (If `rosapi_node` is ever added to the launch, an authoritative node list would
 be a strict improvement and would slot in behind the same `VIONodeStatus` type.)
 
-## Camera lens
+## Camera field of view
 
-The AR session runs on the phone's **ultra-wide** lens where the device offers
-one. Roughly double the field of view means the robot marker stays on screen
-from much closer and while the phone is being moved around, which is how this
-app is actually held.
+**Settings ▸ AR camera ▸ Widest field of view** picks the video format that shows
+the most of the room, so the robot marker stays on screen from closer and while
+the phone is being moved around.
 
-`ARSessionController` filters `ARWorldTrackingConfiguration.supportedVideoFormats`
-to formats whose `captureDeviceType` is `.builtInUltraWideCamera` and takes the
-first. ARKit publishes that list in its own preference order, so filtering rather
-than re-ranking overrides the lens and leaves Apple's choice of resolution and
-frame rate alone. On a device with no ultra-wide format the list is empty and the
-app keeps the default format, which is why the preference is safe to leave on.
+**ARKit does not offer the ultra-wide lens to world tracking.** Not on the
+iPhone 14 Pro Max, not on any current iPhone. ARKit drives that camera itself as
+part of tracking, but `ARWorldTrackingConfiguration.supportedVideoFormats`
+publishes only `.builtInWideAngleCamera` entries, and there is no supported way
+for an app to select the ultra-wide feed and keep world tracking. So the ceiling
+on field of view is a property of ARKit, not of the setting or the hardware.
 
-**Settings ▸ AR camera** has the toggle, and reports the lens and video format
-actually in use — the honest answer, not the requested one. Changing it restarts
-tracking, which moves the world origin, so the robot alignment is cleared and the
-app says so.
+Within that ceiling there is still a real choice, and it is what the setting
+makes. Every format from one lens is read from the same sensor: the 4:3 entries
+are the full readout, and each 16:9 entry is that same image with the top and
+bottom cropped away. Horizontal coverage is identical, so the taller aspect ratio
+is strictly more of the scene at no cost. `VideoFormatSelection` prefers an
+ultra-wide format if one is ever offered, then the tallest frame, then whatever
+ARKit listed first — its own recommendation, and the safer resolution and frame
+rate. The ranking is a pure function over resolution and lens type so it is
+tested without a device.
+
+**Diagnostics ▸ ARKit video formats** lists every format the device offers with
+its lens, and marks the one running. That is the place to check what a given
+phone can actually do, rather than trusting this paragraph.
+
+Changing the setting restarts tracking, which moves the world origin, so the
+robot alignment is cleared and the app says so.
 
 ## How the robot ends up in the right place
 
@@ -380,7 +391,7 @@ seconds.
 Scripts/run-core-tests.sh
 ```
 
-185 tests, no Xcode required. The suite compiles `Core/`, `Services/` and
+189 tests, no Xcode required. The suite compiles `Core/`, `Services/` and
 `Tests/` for macOS with `swiftc` and runs them against a small XCTest shim; the
 same files run unmodified under `⌘U` in Xcode, which additionally covers the AR
 and SwiftUI layers by building them.
@@ -391,7 +402,7 @@ PASS ROSImageDecoderTests     25 passed,   0 failed
 PASS OdometryTests            28 passed,   0 failed
 PASS RosbridgeTests           43 passed,   0 failed
 PASS RenderingTests           28 passed,   0 failed
-PASS ConnectionTests          29 passed,   0 failed
+PASS ConnectionTests          33 passed,   0 failed
 PASS ImageStreamSoakTests      3 passed,   0 failed
 ```
 
@@ -412,6 +423,10 @@ Coverage of the things most likely to be silently wrong:
   a latched-flag-only design would get wrong), that a stopped launch is reported
   as such rather than as a crashed node, that `calibrating` outranks the odometry
   gap it causes, and that an unknown launch state is not read as a stopped one.
+- **AR video format choice** — that the tallest frame wins when no ultra-wide is
+  offered (the iPhone 14 Pro Max case), that an ultra-wide format would win
+  outright if one ever appeared, and that equal aspect ratios fall back to
+  ARKit's ordering rather than to resolution.
 - **Reconnection** — the backoff curve and jitter bounds as pure functions, plus
   an end-to-end run where the fixture transport drops the link the way Wi-Fi
   does (no close handshake, just silence) and the client is required to notice,
@@ -444,3 +459,7 @@ frames stop arriving after changing it.
   wants validating against real hardware first.
 - An authoritative node list. Adding `rosapi_node` to `drone_launch.py` would
   let `VIONodeStatus` confirm what it currently infers.
+- A genuinely wider camera view. It would need `AVCaptureSession` on the
+  ultra-wide lens with pose estimation of our own, since ARKit will not give
+  world tracking and that lens at the same time. That is a large piece of work
+  to replace something Apple already does well.

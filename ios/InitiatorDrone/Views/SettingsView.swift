@@ -144,7 +144,7 @@ struct SettingsView: View {
 
     private var cameraSection: some View {
         Section {
-            Toggle("Use wide-angle lens", isOn: binding(\.prefersUltraWideCamera))
+            Toggle("Widest field of view", isOn: binding(\.prefersWidestFieldOfView))
 
             #if canImport(ARKit)
             LabeledContent("Active lens", value: arSession.lensLabel)
@@ -152,11 +152,12 @@ struct SettingsView: View {
                 LabeledContent("Video format", value: arSession.videoFormatLabel)
                     .font(.caption)
             }
-            // Said here rather than only in the footer, so the toggle having no
+            // Said here rather than only in the footer, so a toggle with no
             // visible effect is explained before it is tried.
             if !arSession.supportsUltraWide {
                 Label(
-                    "This device offers no ultra-wide format to ARKit.",
+                    "ARKit offers this device no ultra-wide format, so the widest available is a "
+                        + "4:3 frame from the wide lens.",
                     systemImage: "info.circle"
                 )
                 .font(.caption)
@@ -167,11 +168,13 @@ struct SettingsView: View {
             Text("AR camera")
         } footer: {
             Text("""
-            The ultra-wide lens roughly doubles the field of view, so the robot marker stays on \
-            screen from much closer and while the phone is being moved around. It is used only on \
-            devices whose ARKit configuration offers an ultra-wide video format; everywhere else \
-            the app falls back to the standard lens and this toggle has no effect. Changing it \
-            restarts AR tracking, which clears the robot alignment.
+            Picks the video format that shows the most of the room: an ultra-wide one where the \
+            device offers it, otherwise the tallest frame from the wide lens — 4:3 is the full \
+            sensor readout, and every 16:9 format is that same image with the top and bottom \
+            cropped off. No iPhone currently offers ultra-wide to world tracking; ARKit drives \
+            that lens itself for tracking but does not publish it as a format an app can select. \
+            Diagnostics lists every format this device does offer. Changing this restarts AR \
+            tracking, which clears the robot alignment.
             """)
         }
     }

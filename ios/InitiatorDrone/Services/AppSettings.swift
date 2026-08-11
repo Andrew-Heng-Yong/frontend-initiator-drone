@@ -19,10 +19,10 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var showsCameraFrustum: Bool
     /// Draw a trail behind the robot marker.
     public var showsRobotTrail: Bool
-    /// Run the AR session on the phone's ultra-wide lens when the device offers
-    /// one. Wider framing keeps the robot marker on screen from much closer,
-    /// which is the normal way this app is held.
-    public var prefersUltraWideCamera: Bool
+    /// Run the AR session on the widest field of view the device offers rather
+    /// than on ARKit's default format. Wider framing keeps the robot marker on
+    /// screen from much closer, which is the normal way this app is held.
+    public var prefersWidestFieldOfView: Bool
 
     public init(
         depthColorMap: ScalarColorMapSettings = .depthDefault,
@@ -32,7 +32,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         odometryExtrapolationLimit: Double = 0.0,
         showsCameraFrustum: Bool = true,
         showsRobotTrail: Bool = true,
-        prefersUltraWideCamera: Bool = true
+        prefersWidestFieldOfView: Bool = true
     ) {
         self.depthColorMap = depthColorMap
         self.compression = compression
@@ -41,7 +41,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         self.odometryExtrapolationLimit = odometryExtrapolationLimit
         self.showsCameraFrustum = showsCameraFrustum
         self.showsRobotTrail = showsRobotTrail
-        self.prefersUltraWideCamera = prefersUltraWideCamera
+        self.prefersWidestFieldOfView = prefersWidestFieldOfView
     }
 
     public func depthInterpretation(for encoding: ROSImageEncoding) -> ScalarInterpretation {
@@ -56,7 +56,7 @@ public final class SettingsStore: ObservableObject {
     /// were removed. A `v1` blob cannot decode into the current shape, and
     /// silently falling back to defaults on every launch would look like the
     /// settings screen was broken; a new key resets once and then persists.
-    private static let storageKey = "com.initiatordrone.settings.v2"
+    private static let storageKey = "com.initiatordrone.settings.v3"
 
     @Published public var settings: AppSettings {
         didSet { persist() }

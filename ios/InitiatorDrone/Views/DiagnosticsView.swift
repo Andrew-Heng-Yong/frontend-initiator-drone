@@ -31,6 +31,7 @@ struct DiagnosticsView: View {
                 imuSection
                 #if canImport(ARKit)
                 phoneSection
+                videoFormatSection
                 #endif
                 streamSection
                 logSection
@@ -316,6 +317,39 @@ struct DiagnosticsView: View {
             }
             LabeledContent("Alignment", value: alignment.isAligned ? alignment.summary : "not set")
                 .font(.caption)
+        }
+    }
+
+    /// Ground truth for what this device will and will not do, rather than a
+    /// claim in a README. If an ultra-wide format ever appears here, the widest
+    /// field-of-view setting will pick it automatically.
+    private var videoFormatSection: some View {
+        Section {
+            ForEach(Array(arSession.supportedFormatSummaries.enumerated()), id: \.offset) { entry in
+                HStack(spacing: 8) {
+                    Text(entry.element)
+                        .font(.system(size: 11, design: .monospaced))
+                    if entry.offset == arSession.activeFormatIndex {
+                        Spacer()
+                        Text("in use")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.green)
+                    }
+                }
+            }
+            if arSession.supportedFormatSummaries.isEmpty {
+                Text("ARKit world tracking is not available on this device.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("ARKit video formats")
+        } footer: {
+            Text("""
+            Every world-tracking format this device offers, in ARKit's own order. Formats from one \
+            lens share a sensor, so a 4:3 entry is the full readout and each 16:9 entry is the \
+            same image cropped top and bottom.
+            """)
         }
     }
     #endif

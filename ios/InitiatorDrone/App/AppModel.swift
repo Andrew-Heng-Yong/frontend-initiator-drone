@@ -37,7 +37,7 @@ final class AppModel: ObservableObject {
         connection = RobotConnection(settings: initialSettings)
 
         #if canImport(ARKit)
-        arSession.setPrefersUltraWide(initialSettings.prefersUltraWideCamera)
+        arSession.setPrefersWidestFieldOfView(initialSettings.prefersWidestFieldOfView)
         #endif
 
         // Settings changes flow one way: store -> connection -> pipelines.
@@ -47,7 +47,7 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 self.connection.apply(settings: newSettings)
                 #if canImport(ARKit)
-                self.applyLensPreference(newSettings.prefersUltraWideCamera)
+                self.applyLensPreference(newSettings.prefersWidestFieldOfView)
                 #endif
             }
             .store(in: &cancellables)
@@ -107,13 +107,14 @@ final class AppModel: ObservableObject {
         arSession.start()
     }
 
-    /// Switching lens restarts the AR session, which moves the world origin.
-    /// An alignment expressed in the old origin would leave the marker floating
-    /// somewhere wrong, so it is cleared exactly as `resetARTracking()` does.
-    private func applyLensPreference(_ prefersUltraWide: Bool) {
-        guard arSession.setPrefersUltraWide(prefersUltraWide) else { return }
+    /// Changing video format restarts the AR session, which moves the world
+    /// origin. An alignment expressed in the old origin would leave the marker
+    /// floating somewhere wrong, so it is cleared exactly as
+    /// `resetARTracking()` does.
+    private func applyLensPreference(_ prefersWidestFieldOfView: Bool) {
+        guard arSession.setPrefersWidestFieldOfView(prefersWidestFieldOfView) else { return }
         alignment.clearAlignment()
-        lastActionMessage = "Camera lens changed. AR tracking reset — align the robot again."
+        lastActionMessage = "Camera format changed. AR tracking reset — align the robot again."
     }
 
     /// Resetting ARKit moves the world origin, which invalidates any alignment
