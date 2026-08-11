@@ -24,7 +24,7 @@ drone_control:
     start_depth_camera: true
     start_imu: true
     start_vio: true
-    vio_static_override: false
+    vio_static_override: true
     start_thermal_overlay: false
     start_thermal_cropper: true
     require_depth_camera: true
