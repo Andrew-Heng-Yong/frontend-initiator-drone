@@ -91,8 +91,10 @@ motion tracking, which can correctly be inactive while the camera is stationary.
 
 The header's **Static VIO** checkbox is a persisted, next-start override for stationary bench
 testing. When active, VIO skips alignment and visual fusion and publishes fixed zero pose/motion
-values with an identity orientation. Changing the checkbox while ROS is running marks it for a
-restart; it never switches the live estimator. Disable it before the robot can move.
+values with an identity orientation. The fixed pose is advertised as calibrated so visualization
+clients can render it, while visual tracking remains false because no visual fusion is running.
+Changing the checkbox while ROS is running marks it for a restart; it never switches the live
+estimator. Disable it before the robot can move.
 
 There is no calibration startup gate: the depth/RGB camera, IMU, VIO, cropper, rosbridge, and thermal pipeline begin launching together. VIO startup alignment independently uses 1000 IMU samples; the manual **Calibrate all** action remains at 20 samples.
 
