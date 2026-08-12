@@ -20,6 +20,8 @@ struct LiveView: View {
 
     @State private var showsSensorPanel = true
     @State private var showsAlignmentSheet = false
+    /// Hides every instrument overlay, leaving the camera and the robot marker.
+    @State private var isFullScreen = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -29,19 +31,32 @@ struct LiveView: View {
                 cameraLayer
                     .ignoresSafeArea()
 
-                if isLandscape {
-                    landscapeOverlay
-                } else {
-                    portraitOverlay
+                if !isFullScreen {
+                    if isLandscape {
+                        landscapeOverlay
+                    } else {
+                        portraitOverlay
+                    }
                 }
 
                 #if canImport(ARKit)
+                // Scene content rather than chrome, so it survives full screen —
+                // and placement is still confirmed by tapping the camera view.
                 if case .pickingPosition = alignment.phase {
                     crosshair
                 }
                 #endif
+
+                if isFullScreen {
+                    exitFullScreenButton
+                }
             }
         }
+        // The tab bar, the status bar and the home indicator are all chrome too.
+        // Leaving them up would make "full screen" mean "slightly fewer panels".
+        .toolbar(isFullScreen ? .hidden : .visible, for: .tabBar)
+        .statusBarHidden(isFullScreen)
+        .persistentSystemOverlays(isFullScreen ? .hidden : .automatic)
         .sheet(isPresented: $showsAlignmentSheet) {
             #if canImport(ARKit)
             AlignmentSheet()
@@ -56,6 +71,40 @@ struct LiveView: View {
             model.startARIfNeeded()
             #endif
         }
+    }
+
+    private func setFullScreen(_ value: Bool) {
+        withAnimation(.easeInOut(duration: 0.25)) { isFullScreen = value }
+    }
+
+    /// The only way back.
+    ///
+    /// Deliberately a button rather than a tap-anywhere gesture: a full-screen
+    /// tap catcher would sit on top of `ARRobotSceneView` and swallow the taps
+    /// that place the alignment origin. A small persistent control costs a
+    /// corner of the view and never fights the AR session for a gesture.
+    private var exitFullScreenButton: some View {
+        VStack {
+            HStack {
+                Spacer()
+                Button {
+                    setFullScreen(false)
+                } label: {
+                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+                        .font(.system(size: 15, weight: .semibold))
+                        .padding(11)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(
+                            Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1)
+                        )
+                }
+                .accessibilityLabel("Exit full screen")
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .transition(.opacity)
     }
 
     // MARK: - Camera layer
@@ -367,6 +416,17 @@ struct LiveView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+
+                // Icon only, and not sharing the flexible width: the two
+                // labelled buttons beside it are already tight on a phone.
+                Button {
+                    setFullScreen(true)
+                } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .frame(height: 20)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Full screen")
             }
             .font(.footnote)
 

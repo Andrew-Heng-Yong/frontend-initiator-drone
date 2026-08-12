@@ -223,6 +223,19 @@ link, the VIO node, robot tracking, phone AR tracking, and alignment. The metric
 strip shows depth fps, odometry rate, VIO node state, and the robot's position
 and orientation.
 
+Two levels of hiding, because they answer different questions. **Hide depth**
+folds away the depth panel while the pills, metrics and controls stay up — for
+when the stream is in the way but you are still driving the robot. The
+**full-screen** button (⤢, next to it) clears everything: pills, metrics, depth
+panel, control bar, and the tab bar, status bar and home indicator with them.
+What is left is the camera and the robot marker, which is what you want when
+checking whether the marker lands on the real robot, or pointing the phone at
+something for someone else to look at.
+
+A small ⤡ button in the top corner is the way back. It is a button rather than
+tap-to-restore on purpose: a full-screen tap catcher would sit over the AR view
+and swallow the taps that place the alignment origin.
+
 **Robot** — address entry, connection test, saved robots, fixtures mode.
 
 **Diagnostics** — per-topic rate and last-message age, VIO node status, the full
