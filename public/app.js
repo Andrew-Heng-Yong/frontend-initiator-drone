@@ -4,12 +4,9 @@ const statusDot = document.querySelector('#status-dot');
 const statusText = document.querySelector('#status-text');
 const connection = document.querySelector('#connection');
 const startToggle = document.querySelector('#start-toggle');
-const calibrateVioButton = document.querySelector('#calibrate-vio');
+const calibrateOdomButton = document.querySelector('#calibrate-odom');
 const cpuMini = document.querySelector('#cpu-mini');
 const imuMini = document.querySelector('#imu-mini');
-const vioVideoMini = document.querySelector('#vio-video-mini');
-const vioStaticOverrideInput = document.querySelector('#vio-static-override');
-const vioStaticOverrideLabel = document.querySelector('#vio-static-override-label');
 const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
 const zoomBufferCanvas = document.createElement('canvas');
@@ -45,7 +42,6 @@ let imageTopics = {
   cameraInfo: '/camera/depth/camera_info',
   thermal: '/thermal/image_raw',
   imu: '/imu/data_calibrated',
-  vioVideoStatus: '/vio/video_working',
 };
 let frontendMode = 'full';
 const SIMPLE_DISPLAY_SIZE = { width: 1024, height: 768 };
@@ -88,11 +84,6 @@ let latestThermal = null;
 let latestColor = null;
 let thermalStatus = 'thermal waiting';
 let imuStatus = 'IMU waiting';
-let vioVideoWorking = null;
-let lastVioVideoStatusAt = 0;
-let vioStaticOverride = false;
-let vioStaticOverrideActive = false;
-let vioStaticOverrideRestartRequired = false;
 let drawScheduled = false;
 let viewerZoomPercent = readStoredViewerZoom();
 let cameraFrameToken = 0;
@@ -107,8 +98,8 @@ function setRunning(running) {
   stopButton.disabled = !running;
   if (!running) closeRosbridge();
   if (startToggle) startToggle.textContent = running ? 'Stop node' : 'Start node';
-  if (calibrateVioButton) {
-    calibrateVioButton.disabled = !running || calibrationRequestActive || vioStaticOverrideActive;
+  if (calibrateOdomButton) {
+    calibrateOdomButton.disabled = !running || calibrationRequestActive;
   }
 }
 
@@ -132,10 +123,7 @@ function closeRosbridge() {
   latestThermal = null;
   thermalStatus = 'thermal waiting';
   imuStatus = 'IMU waiting';
-  vioVideoWorking = null;
-  lastVioVideoStatusAt = 0;
   renderImuStatus();
-  renderVioVideoStatus();
   subscribedTopics = new Set();
   connection.textContent = 'Camera stream disconnected.';
 }
@@ -153,7 +141,6 @@ function connectRosbridge() {
       : `Waiting for depth frames: ${imageTopics.color}`;
     subscribeImageTopic(imageTopics.color);
     subscribeImuTopic();
-    subscribeVioVideoStatus();
     if (frontendMode !== 'simple') subscribeCameraInfo();
   };
   rosSocket.onmessage = (event) => {
@@ -179,7 +166,6 @@ function connectRosbridge() {
     }
 
     if (message.topic === imageTopics.imu) updateImu(message.msg);
-    if (message.topic === imageTopics.vioVideoStatus) updateVioVideoStatus(message.msg);
   };
   rosSocket.onerror = () => {
     connection.textContent = 'Waiting for rosbridge on port 9090...';
@@ -204,12 +190,6 @@ function subscribeImuTopic() {
       throttle_rate: frontendMode === 'simple' ? 100 : 0,
       queue_length: 1,
     });
-  }
-}
-
-function subscribeVioVideoStatus() {
-  if (imageTopics.vioVideoStatus) {
-    subscribeRosTopic(imageTopics.vioVideoStatus, 'std_msgs/msg/Bool', { queue_length: 1 });
   }
 }
 
@@ -328,57 +308,6 @@ function formatImuValue(value) {
 
 function renderImuStatus() {
   if (imuMini) imuMini.textContent = imuStatus;
-}
-
-function updateVioVideoStatus(message) {
-  vioVideoWorking = message && message.data === true;
-  lastVioVideoStatusAt = Date.now();
-  renderVioVideoStatus();
-}
-
-function renderVioVideoStatus() {
-  if (!vioVideoMini) return;
-  vioVideoMini.classList.toggle('override', vioStaticOverrideActive);
-  if (vioStaticOverrideActive) {
-    vioVideoMini.classList.remove('working', 'not-ready');
-    vioVideoMini.textContent = 'VIO static override';
-    return;
-  }
-  const statusIsFresh = lastVioVideoStatusAt > 0 && Date.now() - lastVioVideoStatusAt < 3000;
-  vioVideoMini.classList.toggle('working', statusIsFresh && vioVideoWorking === true);
-  vioVideoMini.classList.toggle('not-ready', statusIsFresh && vioVideoWorking === false);
-  if (!statusIsFresh) {
-    vioVideoMini.textContent = 'VIO video waiting';
-  } else if (vioVideoWorking) {
-    vioVideoMini.textContent = 'VIO video working';
-  } else {
-    vioVideoMini.textContent = 'VIO video not ready';
-  }
-}
-
-function applyVioState(vio) {
-  const state = vio || {};
-  vioStaticOverride = state.staticOverride === true;
-  vioStaticOverrideActive = state.activeStaticOverride === true;
-  vioStaticOverrideRestartRequired = state.restartRequired === true;
-  if (vioStaticOverrideInput && document.activeElement !== vioStaticOverrideInput) {
-    vioStaticOverrideInput.checked = vioStaticOverride;
-  }
-  const control = vioStaticOverrideInput && vioStaticOverrideInput.closest('.vio-override');
-  if (control) {
-    control.classList.toggle('active', vioStaticOverrideActive);
-    control.classList.toggle('pending', vioStaticOverrideRestartRequired);
-  }
-  if (vioStaticOverrideLabel) {
-    vioStaticOverrideLabel.textContent = vioStaticOverrideRestartRequired
-      ? 'Static VIO (restart)'
-      : 'Static VIO';
-  }
-  if (calibrateVioButton) {
-    const running = statusDot.classList.contains('running');
-    calibrateVioButton.disabled = !running || calibrationRequestActive || vioStaticOverrideActive;
-  }
-  renderVioVideoStatus();
 }
 
 function showWaitingForSimpleCrop() {
@@ -824,13 +753,11 @@ function applyStreamConfig(stream) {
     cameraInfo: stream.cameraInfoTopic || imageTopics.cameraInfo,
     thermal: stream.thermalTopic || imageTopics.thermal,
     imu: stream.imuTopic || imageTopics.imu,
-    vioVideoStatus: stream.vioVideoStatusTopic || imageTopics.vioVideoStatus,
   };
   const topicsChanged = nextTopics.color !== imageTopics.color
     || nextTopics.cameraInfo !== imageTopics.cameraInfo
     || nextTopics.thermal !== imageTopics.thermal
-    || nextTopics.imu !== imageTopics.imu
-    || nextTopics.vioVideoStatus !== imageTopics.vioVideoStatus;
+    || nextTopics.imu !== imageTopics.imu;
   if (topicsChanged) cameraInfoFov = null;
   imageTopics = nextTopics;
   thermalFov = finiteFov(stream.thermalFov, thermalFov);
@@ -1138,7 +1065,6 @@ async function refresh() {
     const response = await fetch('/api/state');
     const state = await response.json();
     applyStreamConfig(state.stream);
-    applyVioState(state.vio);
     setRunning(state.running);
     renderCpu(state.cpu, state.cpuTemp);
     if (typeof state.overlayAlpha === 'number' && document.activeElement !== overlayAlphaInput) {
@@ -1214,26 +1140,6 @@ if (saveParamsButton) {
   saveParamsButton.addEventListener('click', () => saveFullModeParams());
 }
 
-if (vioStaticOverrideInput) {
-  vioStaticOverrideInput.addEventListener('change', async () => {
-    const previous = vioStaticOverride;
-    const enabled = vioStaticOverrideInput.checked;
-    vioStaticOverrideInput.disabled = true;
-    try {
-      const response = await request('/api/vio-static-override', { enabled });
-      applyVioState(response.vio);
-      connection.textContent = enabled
-        ? 'Static VIO override saved. Restart ROS to skip alignment and output zero motion.'
-        : 'Static VIO override disabled. Restart ROS to restore normal alignment and tracking.';
-    } catch (error) {
-      vioStaticOverrideInput.checked = previous;
-      connection.textContent = error.message;
-    } finally {
-      vioStaticOverrideInput.disabled = false;
-    }
-  });
-}
-
 if (startToggle) {
   startToggle.addEventListener('click', async () => {
     try {
@@ -1247,23 +1153,22 @@ if (startToggle) {
   });
 }
 
-if (calibrateVioButton) {
-  calibrateVioButton.addEventListener('click', async () => {
+if (calibrateOdomButton) {
+  calibrateOdomButton.addEventListener('click', async () => {
     calibrationRequestActive = true;
-    calibrateVioButton.disabled = true;
-    calibrateVioButton.textContent = 'Starting...';
+    calibrateOdomButton.disabled = true;
+    calibrateOdomButton.textContent = 'Starting...';
     try {
-      const response = await request('/api/vio/calibrate');
-      calibrateVioButton.textContent = 'Keep still...';
-      connection.textContent = response.message || 'Full VIO calibration started. Keep the drone stationary.';
+      const response = await request('/api/odom/calibrate');
+      calibrateOdomButton.textContent = 'Keep still...';
+      connection.textContent = response.message || 'Gyro calibration started. Keep the drone stationary.';
       await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (error) {
       connection.textContent = error.message;
     } finally {
       calibrationRequestActive = false;
-      calibrateVioButton.textContent = 'Calibrate all';
-      calibrateVioButton.disabled =
-        !statusDot.classList.contains('running') || vioStaticOverrideActive;
+      calibrateOdomButton.textContent = 'Calibrate gyro';
+      calibrateOdomButton.disabled = !statusDot.classList.contains('running');
       await refresh();
     }
   });
@@ -1341,4 +1246,3 @@ if (logPanel && logResizeHandle) {
 
 refresh();
 setInterval(refresh, 2000);
-setInterval(renderVioVideoStatus, 1000);

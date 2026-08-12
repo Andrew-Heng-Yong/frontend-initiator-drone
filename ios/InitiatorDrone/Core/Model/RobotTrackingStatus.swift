@@ -1,35 +1,47 @@
 import Foundation
 
-/// Whether the robot's pose can currently be believed.
+/// Whether the robot's pose can currently be believed, and how much of it.
 ///
-/// The distinction this type exists to enforce: `/vio/odometry` continuing to
-/// publish proves only that the VIO node is alive. A visual-inertial estimator
-/// that has lost its features keeps dead-reckoning off the IMU and keeps
-/// publishing a pose that drifts away from reality, smoothly and convincingly.
-/// So a pose is only trustworthy when the estimator says it is calibrated
-/// *and* says visual tracking is active *and* the messages are fresh.
+/// The distinction this type exists to enforce: `/odom` continuing to publish
+/// proves only that `odom_node` is alive. An estimator keeps publishing a pose
+/// whether or not it has anything to base it on — smoothly, convincingly, and
+/// in the case of gyro integration, drifting the whole time.
+///
+/// Since the move from `vio_node` to `odom_node` there is a second and blunter
+/// reason not to believe a pose in full: **position is not estimated at all**.
+/// The node integrates gyro only, holds translation at zero, and flags it with
+/// a 1e6 m² variance. So the interesting question stopped being "is vision
+/// working" and became "how much of this pose is measured".
 public enum RobotTrackingStatus: Equatable, Sendable {
     /// No status flags received yet.
     case unknown
-    /// `/vio/calibrated` is false. The pose has no meaningful origin.
+    /// `/odom/calibrated` is false. The gyro bias is still being estimated and
+    /// the orientation has no meaningful reference.
     case notCalibrated
-    /// Calibrated, but `/vio/visual_tracking` is false: the estimator is
-    /// coasting on inertial data and drifting.
-    case visualTrackingLost
+    /// Calibrated and fresh, but the publisher marks position as unobserved:
+    /// the orientation is real, the position is a placeholder at the origin.
+    /// This is the normal state with `odom_node`.
+    case orientationOnly
     /// Flags look good but odometry has stopped arriving.
     case stale(age: Double)
-    /// Calibrated, visually tracking, and fresh.
+    /// Calibrated, fresh, and the publisher claims to know where the robot is.
+    /// Unreachable until a translation source (flow sensor, GPS) is added.
     case tracking
 
-    /// Whether the robot marker should be drawn as a live pose.
+    /// Whether the full pose — position included — should be believed.
     public var isTrustworthy: Bool { self == .tracking }
 
+    /// Whether the orientation can be believed, whatever the position is doing.
+    public var isOrientationTrustworthy: Bool {
+        self == .tracking || self == .orientationOnly
+    }
+
     /// Whether a pose exists at all, even if it should be drawn as suspect.
-    /// A lost-tracking pose is still worth showing, greyed out, because it
-    /// tells the operator where the robot was when tracking failed.
+    /// A stale or position-less pose is still worth showing, greyed out: it
+    /// tells the operator which way the robot was facing.
     public var hasUsablePose: Bool {
         switch self {
-        case .tracking, .visualTrackingLost, .stale: return true
+        case .tracking, .orientationOnly, .stale: return true
         case .unknown, .notCalibrated: return false
         }
     }
@@ -38,7 +50,7 @@ public enum RobotTrackingStatus: Equatable, Sendable {
         switch self {
         case .unknown: return "No data"
         case .notCalibrated: return "Not calibrated"
-        case .visualTrackingLost: return "Tracking lost"
+        case .orientationOnly: return "Heading only"
         case .stale: return "Stale"
         case .tracking: return "Tracking"
         }
@@ -47,33 +59,34 @@ public enum RobotTrackingStatus: Equatable, Sendable {
     public var detailLabel: String {
         switch self {
         case .unknown:
-            return "Waiting for VIO status."
+            return "Waiting for odometry status."
         case .notCalibrated:
-            return "VIO has not been calibrated. Hold the robot still and calibrate."
-        case .visualTrackingLost:
-            return "VIO is calibrated but visual tracking is inactive; the pose is dead-reckoned and drifting."
+            return "The gyro is not calibrated. Hold the robot still and calibrate."
+        case .orientationOnly:
+            return "Heading is live, position is not measured. odom_node integrates the gyro only, so the marker holds the position you aligned it to."
         case .stale(let age):
             return String(format: "No odometry for %.1f s.", age)
         case .tracking:
-            return "VIO calibrated and visually tracking."
+            return "Calibrated, fresh, and reporting a measured position."
         }
     }
 
     /// Derives the status from the three independent signals.
     ///
     /// Order matters and is deliberate: staleness is checked before the flags,
-    /// because a stale `visual_tracking = true` from thirty seconds ago is not
-    /// evidence of anything.
+    /// because a `calibrated = true` from thirty seconds ago is not evidence
+    /// that anything is running now.
     ///
     /// - Parameters:
-    ///   - isCalibrated: latest `/vio/calibrated`, or `nil` if never received.
-    ///   - isVisualTracking: latest `/vio/visual_tracking`, or `nil`.
-    ///   - odometryAge: seconds since the newest `/vio/odometry`, or `nil` if
-    ///     none has arrived.
+    ///   - isCalibrated: latest `/odom/calibrated`, or `nil` if never received.
+    ///   - isPositionObserved: whether the newest odometry message claims a
+    ///     usable position, from its covariance. `nil` if none has arrived.
+    ///   - odometryAge: seconds since the newest `/odom`, or `nil` if none has
+    ///     arrived.
     ///   - stalenessThreshold: how old odometry may be before it is stale.
     public static func evaluate(
         isCalibrated: Bool?,
-        isVisualTracking: Bool?,
+        isPositionObserved: Bool?,
         odometryAge: Double?,
         stalenessThreshold: Double = 0.5
     ) -> RobotTrackingStatus {
@@ -87,8 +100,8 @@ public enum RobotTrackingStatus: Equatable, Sendable {
         }
         guard let isCalibrated else { return .unknown }
         guard isCalibrated else { return .notCalibrated }
-        guard let isVisualTracking else { return .unknown }
-        return isVisualTracking ? .tracking : .visualTrackingLost
+        guard let isPositionObserved else { return .unknown }
+        return isPositionObserved ? .tracking : .orientationOnly
     }
 }
 

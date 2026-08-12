@@ -22,6 +22,7 @@ public struct ARRobotSceneView: UIViewRepresentable {
     public var showsTrail: Bool
     public var showsPointCloud: Bool
     public var pointSize: Double
+    public var cameraExtrinsics: CameraExtrinsics
     public var placementPhase: AlignmentController.Phase
     public var previewPosition: Vector3?
     public var pendingYaw: Double
@@ -41,6 +42,7 @@ public struct ARRobotSceneView: UIViewRepresentable {
         showsTrail: Bool,
         showsPointCloud: Bool,
         pointSize: Double,
+        cameraExtrinsics: CameraExtrinsics,
         placementPhase: AlignmentController.Phase,
         previewPosition: Vector3?,
         pendingYaw: Double,
@@ -57,6 +59,7 @@ public struct ARRobotSceneView: UIViewRepresentable {
         self.showsTrail = showsTrail
         self.showsPointCloud = showsPointCloud
         self.pointSize = pointSize
+        self.cameraExtrinsics = cameraExtrinsics
         self.placementPhase = placementPhase
         self.previewPosition = previewPosition
         self.pendingYaw = pendingYaw
@@ -104,6 +107,7 @@ public struct ARRobotSceneView: UIViewRepresentable {
             showsTrail: showsTrail,
             showsPointCloud: showsPointCloud,
             pointSize: pointSize,
+            cameraExtrinsics: cameraExtrinsics,
             placementPhase: placementPhase,
             previewPosition: previewPosition,
             pendingYaw: pendingYaw,
@@ -153,6 +157,7 @@ public struct ARRobotSceneView: UIViewRepresentable {
             var showsTrail = true
             var showsPointCloud = true
             var pointSize: Double = 6
+            var cameraExtrinsics: CameraExtrinsics = .identity
             var placementPhase: AlignmentController.Phase = .idle
             var previewPosition: Vector3?
             var pendingYaw: Double = 0
@@ -199,6 +204,7 @@ public struct ARRobotSceneView: UIViewRepresentable {
             showsTrail: Bool,
             showsPointCloud: Bool,
             pointSize: Double,
+            cameraExtrinsics: CameraExtrinsics,
             placementPhase: AlignmentController.Phase,
             previewPosition: Vector3?,
             pendingYaw: Double,
@@ -211,6 +217,7 @@ public struct ARRobotSceneView: UIViewRepresentable {
             config.showsTrail = showsTrail
             config.showsPointCloud = showsPointCloud
             config.pointSize = pointSize
+            config.cameraExtrinsics = cameraExtrinsics
             config.placementPhase = placementPhase
             config.previewPosition = previewPosition
             config.pendingYaw = pendingYaw
@@ -392,6 +399,14 @@ public struct ARRobotSceneView: UIViewRepresentable {
                 frustumNode = node
                 lastFrustumSignature = signature
             }
+            // The mount moves the node rather than the geometry, so changing the
+            // offset never rebuilds the mesh. The point cloud does the opposite
+            // — it folds the mount into the vertices — because it is rebuilt
+            // every frame anyway and a second transform node would be one more
+            // place for the two to disagree.
+            frustumNode?.simdTransform = ARKitBridge.transform(
+                from: current.cameraExtrinsics.poseInARNode
+            )
             frustumNode?.isHidden = false
         }
 

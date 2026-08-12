@@ -91,14 +91,14 @@ public struct PointCloudSettings: Equatable, Codable, Sendable {
 /// transform, and `DepthPointCloudTests` pins down each hop separately so a
 /// future change cannot quietly break one of them.
 ///
+/// That composition is the *identity-mount* case. A camera bolted somewhere
+/// other than `base_link`, or tilted, inserts its own rotation and offset
+/// between the first two hops — see `CameraExtrinsics`, which folds all of it
+/// into one `OpticalToNodeTransform` so the per-pixel cost stays the same.
+///
 /// The resulting points are meant to be attached as a **child of the robot
 /// marker node**, which already carries the `odom`-to-ARKit pose. They inherit
 /// the robot's position and heading for free.
-///
-/// One honest caveat: this assumes the depth camera sits at `base_link` facing
-/// forward. The true camera extrinsic lives in the URDF and is not published on
-/// any topic the app subscribes to, so a physically offset or tilted camera
-/// will put the cloud off by that offset.
 public enum DepthPointCloud {
 
     /// Builds a cloud from a decoded depth image.
@@ -107,12 +107,14 @@ public enum DepthPointCloud {
     ///   - image: metric depth, with `NaN` for invalid samples.
     ///   - cameraInfo: intrinsics for the same stream.
     ///   - settings: density and range limits.
+    ///   - extrinsics: where the camera is mounted on the robot.
     ///   - colorFor: maps a depth in metres to a colour, so the cloud matches
     ///     the 2D view's colour map.
     public static func build(
         from image: ScalarImage,
         cameraInfo: CameraInfoMessage,
         settings: PointCloudSettings,
+        extrinsics: CameraExtrinsics = .identity,
         stamp: Double = 0,
         colorFor: (Double) -> RGBColor
     ) -> PointCloudBuffer {
@@ -121,6 +123,9 @@ public enum DepthPointCloud {
               let intrinsics = scaledIntrinsics(for: image, cameraInfo: cameraInfo) else {
             return .empty
         }
+
+        // Hoisted out of the loop: the mount is constant for the whole frame.
+        let toNode = extrinsics.opticalToARNode
 
         // Widen the stride until the worst case fits the cap, so a large frame
         // cannot blow the budget before a single point is emitted.
@@ -151,10 +156,11 @@ public enum DepthPointCloud {
                 let x = (Double(u) - intrinsics.cx) * z / intrinsics.fx
                 let y = (Double(v) - intrinsics.cy) * z / intrinsics.fy
 
-                // optical -> ARKit node axes, per the composition above.
-                positions.append(Float(x))
-                positions.append(Float(-y))
-                positions.append(Float(-z))
+                // optical -> ARKit node axes, mount included.
+                let node = toNode.apply(x: x, y: y, z: z)
+                positions.append(Float(node.x))
+                positions.append(Float(node.y))
+                positions.append(Float(node.z))
 
                 let color = colorFor(z)
                 colors.append(color.red)
@@ -206,7 +212,9 @@ public enum DepthPointCloud {
         Vector3((u - cx) * depth / fx, (v - cy) * depth / fy, depth)
     }
 
-    /// Re-expresses an optical-frame point in the robot's `base_link` frame.
+    /// Re-expresses an optical-frame point in the robot's `base_link` frame,
+    /// ignoring the mount. Kept as the pure axis-convention hop so the tests can
+    /// check it independently of `CameraExtrinsics`.
     static func bodyPoint(fromOptical point: Vector3) -> Vector3 {
         Vector3(point.z, -point.x, -point.y)
     }

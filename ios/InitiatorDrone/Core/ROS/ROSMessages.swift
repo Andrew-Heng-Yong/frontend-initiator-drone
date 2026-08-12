@@ -120,8 +120,23 @@ public enum ROSMessageParser {
             childFrameId: value["child_frame_id"]?.stringValue ?? "",
             pose: pose,
             linearVelocity: linear,
-            angularVelocity: angular
+            angularVelocity: angular,
+            positionVariance: positionVariance(from: value["pose"]?["covariance"])
         )
+    }
+
+    /// Pulls the x/y/z variances off the diagonal of a 6x6 row-major pose
+    /// covariance — elements 0, 7 and 14 — and returns the largest.
+    ///
+    /// An all-zero covariance means "not filled in" rather than "perfectly
+    /// known", so it reads as absent. That is the ROS convention for every
+    /// field except `orientation_covariance[0] = -1`, which is a different
+    /// message's way of saying the same thing.
+    static func positionVariance(from value: ROSValue?) -> Double? {
+        guard let entries = value?.arrayValue, entries.count >= 15 else { return nil }
+        let diagonal = [0, 7, 14].compactMap { entries[$0].doubleValue }
+        guard diagonal.count == 3, let maximum = diagonal.max(), maximum > 0 else { return nil }
+        return maximum
     }
 
     // MARK: - sensor_msgs/msg/Imu
@@ -129,13 +144,22 @@ public enum ROSMessageParser {
     public static func imu(from value: ROSValue?) -> ImuMessage? {
         guard let value else { return nil }
         let stamped = header(from: value["header"])
+        let hasAcceleration = isFieldAvailable(value["linear_acceleration_covariance"])
         return ImuMessage(
             stamp: stamped.stamp,
             frameId: stamped.frameId,
             orientation: quaternion(from: value["orientation"]),
             angularVelocity: vector3(from: value["angular_velocity"]) ?? .zero,
-            linearAcceleration: vector3(from: value["linear_acceleration"]) ?? .zero
+            linearAcceleration: hasAcceleration ? vector3(from: value["linear_acceleration"]) : nil
         )
+    }
+
+    /// `sensor_msgs/Imu` marks a field unavailable by setting the first element
+    /// of its covariance to `-1`. An absent covariance is treated as available,
+    /// since plenty of publishers leave it zeroed.
+    static func isFieldAvailable(_ covariance: ROSValue?) -> Bool {
+        guard let first = covariance?.arrayValue?.first?.doubleValue else { return true }
+        return first != -1
     }
 
     // MARK: - std_msgs/msg/Bool
@@ -205,13 +229,24 @@ public struct OdometryMessage: Equatable, Sendable {
     public var linearVelocity: Vector3
     public var angularVelocity: Vector3
 
+    /// Largest of the three translational variances on the diagonal of
+    /// `pose.covariance`, in m². `nil` when the publisher sends no covariance.
+    ///
+    /// This exists because `odom_node` publishes orientation only: it holds
+    /// position at zero and marks it with a variance of 1e6 to say so. Reading
+    /// the number the estimator publishes is better than hard-coding "this
+    /// robot has no position", because the day a flow sensor lands the app
+    /// starts believing the position without a code change.
+    public var positionVariance: Double?
+
     public init(
         stamp: Double,
         frameId: String,
         childFrameId: String,
         pose: Pose,
         linearVelocity: Vector3,
-        angularVelocity: Vector3
+        angularVelocity: Vector3,
+        positionVariance: Double? = nil
     ) {
         self.stamp = stamp
         self.frameId = frameId
@@ -219,6 +254,23 @@ public struct OdometryMessage: Equatable, Sendable {
         self.pose = pose
         self.linearVelocity = linearVelocity
         self.angularVelocity = angularVelocity
+        self.positionVariance = positionVariance
+    }
+
+    /// A variance above this counts as "not measured". `odom_node` publishes
+    /// 1e6 m², a kilometre of standard deviation; a real estimator's position
+    /// variance is orders of magnitude below this even while drifting badly, so
+    /// the threshold does not need to be tuned.
+    public static let unobservedPositionVariance: Double = 1.0e3
+
+    /// Whether the publisher claims to know where the robot is.
+    ///
+    /// Absent covariance is treated as observed. Plenty of publishers leave it
+    /// zeroed, and refusing to believe them would be a worse default than
+    /// trusting a value nobody filled in.
+    public var isPositionObserved: Bool {
+        guard let positionVariance else { return true }
+        return positionVariance < Self.unobservedPositionVariance
     }
 
     public var stampedPose: StampedPose {
@@ -237,14 +289,17 @@ public struct ImuMessage: Equatable, Sendable {
     /// `nil` when the publisher marks orientation as unavailable.
     public var orientation: Quaternion?
     public var angularVelocity: Vector3
-    public var linearAcceleration: Vector3
+    /// `nil` when the publisher marks linear acceleration as unavailable, which
+    /// `odom_node` does — it is a gyro-only estimator and never touches the
+    /// accelerometer.
+    public var linearAcceleration: Vector3?
 
     public init(
         stamp: Double,
         frameId: String,
         orientation: Quaternion?,
         angularVelocity: Vector3,
-        linearAcceleration: Vector3
+        linearAcceleration: Vector3?
     ) {
         self.stamp = stamp
         self.frameId = frameId
@@ -254,6 +309,8 @@ public struct ImuMessage: Equatable, Sendable {
     }
 
     /// Magnitude of the acceleration vector, in m/s². Close to 9.81 when the
-    /// robot is still, which is a quick sanity check on the calibration.
-    public var accelerationMagnitude: Double { linearAcceleration.length }
+    /// robot is still, which is a quick sanity check on the calibration —
+    /// `nil` when the publisher does not send acceleration at all, which is not
+    /// the same thing as sending zero.
+    public var accelerationMagnitude: Double? { linearAcceleration?.length }
 }

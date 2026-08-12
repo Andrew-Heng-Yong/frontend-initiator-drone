@@ -62,6 +62,13 @@ public final class ImageStreamPipeline: @unchecked Sendable {
         set { lock.synchronized { pointCloudStorage = newValue } }
     }
 
+    /// Where the camera is mounted on the robot. Safe to set from the main
+    /// thread; it takes effect on the next frame rather than retroactively.
+    public var cameraExtrinsics: CameraExtrinsics {
+        get { lock.synchronized { cameraExtrinsicsStorage } }
+        set { lock.synchronized { cameraExtrinsicsStorage = newValue } }
+    }
+
     /// Colour-map settings. Safe to set from the main thread at any time.
     public var colorMapSettings: ScalarColorMapSettings {
         get { lock.synchronized { renderer.settings } }
@@ -78,6 +85,7 @@ public final class ImageStreamPipeline: @unchecked Sendable {
     private var lastErrorText: String?
     private var cameraInfoStorage: CameraInfoMessage?
     private var pointCloudStorage: PointCloudSettings = .default
+    private var cameraExtrinsicsStorage: CameraExtrinsics = .identity
 
     public init(
         topic: RobotTopic,
@@ -201,6 +209,7 @@ public final class ImageStreamPipeline: @unchecked Sendable {
         lock.lock()
         let settings = pointCloudStorage
         let info = cameraInfoStorage
+        let extrinsics = cameraExtrinsicsStorage
         let rampStyle = renderer.settings.style
         let reversed = renderer.settings.reversed
         lock.unlock()
@@ -224,6 +233,7 @@ public final class ImageStreamPipeline: @unchecked Sendable {
             from: scalar,
             cameraInfo: info,
             settings: settings,
+            extrinsics: extrinsics,
             stamp: stamp
         ) { depth in
             // Same mapping the 2D view uses, so the cloud and the panel agree.

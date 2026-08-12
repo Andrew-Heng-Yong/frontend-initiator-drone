@@ -152,11 +152,29 @@ write(
 
 # -------------------------------------------------------------------- odometry
 # A 90 degree yaw about +Z: quaternion (0, 0, sin(45), cos(45)).
+#
+# Two odometry fixtures, because the covariance is now load-bearing. odom_node
+# integrates the gyro only and flags translation as unobserved with 1e6 on the
+# position diagonal; the app reads that number rather than being told which
+# robot it is talking to. The "observed" fixture keeps a nonzero position so the
+# decoding and interpolation tests still have translation to work with, and so
+# the day a flow sensor lands there is already a fixture for it.
 SQRT_HALF = 0.7071067811865476
+
+
+def odometry_covariance(position_variance):
+    values = [0.0] * 36
+    for index in (0, 7, 14):
+        values[index] = position_variance
+    for index in (21, 28, 35):
+        values[index] = 0.01
+    return values
+
+
 write(
     "odometry.json",
     publish(
-        "/vio/odometry",
+        "/odom",
         {
             "header": header(1717430010, 100000000, "odom"),
             "child_frame_id": "base_link",
@@ -165,7 +183,7 @@ write(
                     "position": {"x": 1.5, "y": -0.25, "z": 0.75},
                     "orientation": {"x": 0.0, "y": 0.0, "z": SQRT_HALF, "w": SQRT_HALF},
                 },
-                "covariance": [0.0] * 36,
+                "covariance": odometry_covariance(0.02),
             },
             "twist": {
                 "twist": {
@@ -178,9 +196,34 @@ write(
     ),
 )
 
+write(
+    "odometry_orientation_only.json",
+    publish(
+        "/odom",
+        {
+            "header": header(1717430010, 100000000, "odom"),
+            "child_frame_id": "base_link",
+            "pose": {
+                "pose": {
+                    "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+                    "orientation": {"x": 0.0, "y": 0.0, "z": SQRT_HALF, "w": SQRT_HALF},
+                },
+                "covariance": odometry_covariance(1.0e6),
+            },
+            "twist": {
+                "twist": {
+                    "linear": {"x": 0.0, "y": 0.0, "z": 0.0},
+                    "angular": {"x": 0.0, "y": 0.0, "z": 0.1},
+                },
+                "covariance": [0.0] * 36,
+            },
+        },
+    ),
+)
+
 # ------------------------------------------------------------------- std_msgs
-write("vio_calibrated_true.json", publish("/vio/calibrated", {"data": True}))
-write("vio_visual_tracking_false.json", publish("/vio/visual_tracking", {"data": False}))
+write("odom_calibrated_true.json", publish("/odom/calibrated", {"data": True}))
+write("odom_calibrated_false.json", publish("/odom/calibrated", {"data": False}))
 
 # ------------------------------------------------------------------------ imu
 write(
@@ -188,13 +231,15 @@ write(
     publish(
         "/imu/data_calibrated",
         {
-            "header": header(1717430010, 120000000, "imu_link"),
+            "header": header(1717430010, 120000000, "base_link"),
             "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-            "orientation_covariance": [0.0] * 9,
+            "orientation_covariance": [0.01] * 9,
             "angular_velocity": {"x": 0.001, "y": -0.002, "z": 0.15},
-            "angular_velocity_covariance": [0.0] * 9,
-            "linear_acceleration": {"x": 0.12, "y": -0.05, "z": 9.79},
-            "linear_acceleration_covariance": [0.0] * 9,
+            "angular_velocity_covariance": [0.02] * 9,
+            # odom_node never reads the accelerometer, and says so the way
+            # sensor_msgs/Imu specifies: -1 in the first covariance element.
+            "linear_acceleration": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "linear_acceleration_covariance": [-1.0] + [0.0] * 8,
         },
     ),
 )
@@ -205,8 +250,8 @@ write(
     {
         "op": "status",
         "level": "error",
-        "msg": "Topic /vio/odometry does not exist",
-        "id": "initiator-drone-/vio/odometry",
+        "msg": "Topic /odom does not exist",
+        "id": "initiator-drone-/odom",
     },
 )
 

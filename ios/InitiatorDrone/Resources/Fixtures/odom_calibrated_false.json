@@ -1,6 +1,6 @@
 {
   "op": "publish",
-  "topic": "/vio/visual_tracking",
+  "topic": "/odom/calibrated",
   "msg": {
     "data": false
   }

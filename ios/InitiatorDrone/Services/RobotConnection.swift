@@ -18,12 +18,15 @@ public final class RobotConnection: ObservableObject {
     @Published public private(set) var dashboardError: String?
 
     @Published public private(set) var isCalibrated: Bool?
-    @Published public private(set) var isVisualTracking: Bool?
+    /// Whether the newest odometry message claims a measured position, read off
+    /// its covariance. `false` with `odom_node`, which estimates orientation
+    /// only. `nil` until the first message arrives.
+    @Published public private(set) var isPositionObserved: Bool?
     @Published public private(set) var trackingStatus: RobotTrackingStatus = .unknown
-    /// Whether `vio_node` itself is up, independently of whether its pose can
-    /// be believed. See `VIONodeStatus` for why this is derived from traffic
+    /// Whether `odom_node` itself is up, independently of whether its pose can
+    /// be believed. See `OdomNodeStatus` for why this is derived from traffic
     /// rather than asked of `/rosapi/nodes`.
-    @Published public private(set) var vioNodeStatus: VIONodeStatus = .unknown
+    @Published public private(set) var odomNodeStatus: OdomNodeStatus = .unknown
 
     @Published public private(set) var latestOdometry: OdometryMessage?
     @Published public private(set) var latestIMU: ImuMessage?
@@ -65,10 +68,10 @@ public final class RobotConnection: ObservableObject {
 
     private var depthRenderRate = RateTracker(windowDuration: 2.0)
 
-    /// Phone-clock time of the newest message on any topic `vio_node` publishes.
-    /// Tracked here rather than read out of `topicHealth`, which is only
-    /// refreshed once a second and would blur the node-status transitions.
-    private var lastVIOMessageTime: Double?
+    /// Phone-clock time of the newest message on any topic `odom_node`
+    /// publishes. Tracked here rather than read out of `topicHealth`, which is
+    /// only refreshed once a second and would blur the node-status transitions.
+    private var lastOdomNodeMessageTime: Double?
 
     private var dashboardTimer: Timer?
     private var statusTimer: Timer?
@@ -100,6 +103,7 @@ public final class RobotConnection: ObservableObject {
 
         depthPipeline?.colorMapSettings = newSettings.depthColorMap
         depthPipeline?.pointCloudSettings = newSettings.pointCloud
+        depthPipeline?.cameraExtrinsics = newSettings.cameraExtrinsics
         sampler.setStalenessThreshold(newSettings.odometryStalenessThreshold)
         sampler.setExtrapolationLimit(newSettings.odometryExtrapolationLimit)
 
@@ -142,6 +146,7 @@ public final class RobotConnection: ObservableObject {
             self?.append(log: RosbridgeLogEntry(level: .error, text: text))
         }
         depth.pointCloudSettings = currentSettings.pointCloud
+        depth.cameraExtrinsics = currentSettings.cameraExtrinsics
         // Called on the pipeline's worker queue; the store is the thread-safe
         // hand-off, so there is no hop to main on this path.
         depth.onPointCloud = { [weak self] cloud in
@@ -224,14 +229,14 @@ public final class RobotConnection: ObservableObject {
         latestOdometry = nil
         latestIMU = nil
         isCalibrated = nil
-        isVisualTracking = nil
-        lastVIOMessageTime = nil
+        isPositionObserved = nil
+        lastOdomNodeMessageTime = nil
         clockOffset = nil
         depthRenderFPS = 0
         odometryRateHz = 0
         topicHealth = []
         trackingStatus = .unknown
-        vioNodeStatus = .unknown
+        odomNodeStatus = .unknown
         isSimulated = false
     }
 
@@ -253,13 +258,13 @@ public final class RobotConnection: ObservableObject {
         )
     }
 
-    /// Requests a VIO calibration. Refused while the graph is stopped, because
+    /// Requests a gyro calibration. Refused while the graph is stopped, because
     /// there is nothing running to calibrate.
-    public func calibrateVIO() async {
+    public func calibrateOdometry() async {
         await performDashboardAction(
             "Calibrate",
             onSimulator: { $0.calibrate() },
-            onRobot: { try await self.dashboard.calibrateVIO() }
+            onRobot: { try await self.dashboard.calibrateOdometry() }
         )
     }
 
@@ -377,7 +382,7 @@ public final class RobotConnection: ObservableObject {
                 sampler.reset()
                 depthPipeline?.reset()
         pointCloudStore.reset()
-                lastVIOMessageTime = nil
+                lastOdomNodeMessageTime = nil
             }
             refreshTrackingStatus()
 
@@ -396,23 +401,23 @@ public final class RobotConnection: ObservableObject {
 
         case .odometry(let odometry):
             latestOdometry = odometry
-            noteVIONodeMessage()
+            isPositionObserved = odometry.isPositionObserved
+            noteOdomNodeMessage()
             sampler.append(odometry.stampedPose, localTime: Date().timeIntervalSince1970)
             clockOffset = sampler.clockOffset
             refreshTrackingStatus()
 
         case .flag(let topic, let value):
             switch topic {
-            case .vioCalibrated: isCalibrated = value
-            case .visualTracking: isVisualTracking = value
+            case .odomCalibrated: isCalibrated = value
             default: break
             }
-            noteVIONodeMessage()
+            noteOdomNodeMessage()
             refreshTrackingStatus()
 
         case .imu(let imu):
             latestIMU = imu
-            noteVIONodeMessage()
+            noteOdomNodeMessage()
             observeClock(rosStamp: imu.stamp)
 
         case .log(let entry):
@@ -424,11 +429,11 @@ public final class RobotConnection: ObservableObject {
         }
     }
 
-    /// Records that `vio_node` was heard from. `/imu/data_calibrated` counts:
-    /// the VIO node republishes it, so it is the node's output rather than the
-    /// MPU6050 driver's.
-    private func noteVIONodeMessage() {
-        lastVIOMessageTime = Date().timeIntervalSince1970
+    /// Records that `odom_node` was heard from. `/imu/data_calibrated` counts:
+    /// `odom_node` republishes it with the bias removed, so it is the node's
+    /// own output rather than the MPU6050 driver's.
+    private func noteOdomNodeMessage() {
+        lastOdomNodeMessageTime = Date().timeIntervalSince1970
     }
 
     private func observeClock(rosStamp: Double) {
@@ -477,18 +482,18 @@ public final class RobotConnection: ObservableObject {
 
         trackingStatus = RobotTrackingStatus.evaluate(
             isCalibrated: isCalibrated,
-            isVisualTracking: isVisualTracking,
+            isPositionObserved: isPositionObserved,
             odometryAge: odometryAge,
             stalenessThreshold: settings.odometryStalenessThreshold
         )
 
-        vioNodeStatus = VIONodeStatus.evaluate(
+        odomNodeStatus = OdomNodeStatus.evaluate(
             isLinkConnected: connectionState.isConnected,
             // The simulator answers this too, so Stop in fixtures mode reaches
             // `.graphStopped` rather than looking like a crashed node.
             isGraphRunning: dashboardState?.isRunning,
             isCalibrated: isCalibrated,
-            vioMessageAge: lastVIOMessageTime.map { now - $0 },
+            nodeMessageAge: lastOdomNodeMessageTime.map { now - $0 },
             odometryAge: odometryAge,
             silenceThreshold: RobotTopic.odometry.silenceThreshold
         )

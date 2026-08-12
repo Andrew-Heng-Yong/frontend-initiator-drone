@@ -22,10 +22,7 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
     public var odometryRate: Double = 30
     public var imuRate: Double = 50
 
-    /// Reports `/vio/visual_tracking` as false, to exercise the "calibrated but
-    /// not tracking" presentation.
-    public var simulatesTrackingLoss = false
-    /// Latest `/vio/calibrated` value. Driven by `calibrate()` and by the
+    /// Latest `/odom/calibrated` value. Driven by `calibrate()` and by the
     /// startup calibration a simulated launch performs.
     public var isCalibrated = true
 
@@ -33,15 +30,11 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
     /// enough to watch, long enough to see the pill change.
     public var calibrationDuration: Double = 2.0
 
-    /// Parks the robot instead of driving it around a figure-of-eight.
-    /// Safe to flip while connected.
+    /// Holds the robot completely still instead of letting it turn on the
+    /// spot. Safe to flip while connected.
     public var isStatic = false
 
-    /// Where the parked robot sits, in the `odom` frame. The default is the
-    /// origin itself, so the marker should land exactly on the alignment ring.
-    public var staticPosition = Vector3.zero
-
-    /// Heading of the parked robot about `odom` +Z, in radians.
+    /// Heading of the held robot about `odom` +Z, in radians.
     public var staticHeading: Double = 0
 
     private let queue = DispatchQueue(label: "com.initiatordrone.rosbridge.simulator")
@@ -153,8 +146,8 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
 
     /// Stands in for `POST /api/start`.
     ///
-    /// A real launch brings the nodes up and `vio_node` immediately runs its
-    /// stationary startup calibration, so this does the same.
+    /// A real launch brings the nodes up and `odom_node` immediately runs its
+    /// stationary gyro-bias calibration, so this does the same.
     public func startGraph() {
         queue.async { [weak self] in
             guard let self, !self.graphRunning else { return }
@@ -184,9 +177,9 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
         }
     }
 
-    /// Stands in for `POST /api/vio/calibrate`.
+    /// Stands in for `POST /api/odom/calibrate`.
     ///
-    /// Mirrors what `vio_node` actually does: publish `calibrated = false`,
+    /// Mirrors what `odom_node` actually does: publish `calibrated = false`,
     /// stop publishing odometry while it collects stationary samples, then
     /// publish `calibrated = true` and resume. Nothing to calibrate while the
     /// graph is stopped.
@@ -203,11 +196,10 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
         calibrationEndsAt = Date().timeIntervalSince(startTime) + calibrationDuration
         // Let the flags go out on the next tick rather than up to a second
         // later, so the button visibly does something.
-        lastSendTimes.removeValue(forKey: RobotTopic.vioCalibrated.topicName)
-        lastSendTimes.removeValue(forKey: RobotTopic.visualTracking.topicName)
+        lastSendTimes.removeValue(forKey: RobotTopic.odomCalibrated.topicName)
     }
 
-    /// Parks or releases the robot while connected.
+    /// Holds or releases the robot while connected.
     ///
     /// The plain `isStatic` property is only safe to set before `connect`;
     /// afterwards it is read on the playback queue, so live changes go through
@@ -240,7 +232,7 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
         let elapsed = Date().timeIntervalSince(startTime)
 
         // A stopped launch has no nodes, so nothing publishes at all. This is
-        // what makes `VIONodeStatus` reach `.graphStopped` in fixtures mode.
+        // what makes `OdomNodeStatus` reach `.graphStopped` in fixtures mode.
         guard graphRunning else { return }
 
         if let endsAt = calibrationEndsAt, elapsed >= endsAt {
@@ -249,7 +241,7 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
         }
         let isCalibrating = calibrationEndsAt != nil
 
-        // The camera is a different node and keeps streaming through a VIO
+        // The camera is a different node and keeps streaming through a gyro
         // calibration, exactly as on the robot.
         publishIfDue(.depthImage, interval: 1.0 / depthFrameRate, elapsed: elapsed) {
             self.depthImageMessage(at: elapsed)
@@ -257,11 +249,8 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
         publishIfDue(.depthCameraInfo, interval: 1.0, elapsed: elapsed) {
             self.cameraInfoMessage(at: elapsed)
         }
-        publishIfDue(.vioCalibrated, interval: 1.0, elapsed: elapsed) {
+        publishIfDue(.odomCalibrated, interval: 1.0, elapsed: elapsed) {
             ["data": self.isCalibrated]
-        }
-        publishIfDue(.visualTracking, interval: 1.0, elapsed: elapsed) {
-            ["data": !isCalibrating && !self.simulatesTrackingLoss]
         }
 
         // No pose exists until initialisation finishes; the real node publishes
@@ -316,45 +305,65 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
         ]
     }
 
-    /// A slow figure-of-eight around the origin at walking pace, with the robot
-    /// facing along its own path — enough motion to make interpolation,
-    /// alignment and the AR marker visibly correct or visibly wrong.
+    /// The robot turning slowly on the spot, with a little pitch and roll.
     ///
-    /// With `isStatic` the robot sits at the `odom` origin instead. Odometry
-    /// still publishes at the same rate with the same timestamps, so the link,
-    /// the buffer and the staleness logic are all still exercised — only the
-    /// pose stops changing. That is the mode to use when you are checking
-    /// whether the marker lands in the right place, because a moving target
-    /// makes an alignment error impossible to distinguish from motion.
+    /// **Position is always zero**, because that is all `odom_node` can report:
+    /// it integrates the gyro and nothing else, so translation is a placeholder
+    /// with a 1e6 m² variance. This used to fly a figure-of-eight, which made
+    /// for a better demo and a worse simulator — it taught the operator to
+    /// expect a marker that moves, when the real one never does.
+    ///
+    /// With `isStatic` even the rotation stops. Odometry still publishes at the
+    /// same rate with the same timestamps, so the link, the buffer and the
+    /// staleness logic are all still exercised. That is the mode to use when
+    /// checking whether the marker and the cloud land in the right place,
+    /// because a turning robot makes a yaw alignment error impossible to
+    /// distinguish from motion.
     func simulatedPose(at elapsed: Double) -> Pose {
         if isStatic {
-            return Pose(
-                position: staticPosition,
-                orientation: Quaternion.aroundZ(staticHeading)
-            )
+            return Pose(position: .zero, orientation: Quaternion.aroundZ(staticHeading))
         }
 
-        let omega = 0.25
-        let x = 1.5 * sin(omega * elapsed)
-        let y = 0.9 * sin(2 * omega * elapsed)
-        let z = 0.05 * sin(0.7 * elapsed)
+        // Yaw sweeps back and forth rather than spinning, so the marker stays
+        // roughly in front of whoever is holding the phone. The pitch and roll
+        // wobble is small and out of phase, which is enough to show that the
+        // full orientation is being applied and not just a heading.
+        let yaw = staticHeading + 0.6 * sin(0.25 * elapsed)
+        let pitch = 0.08 * sin(0.41 * elapsed)
+        let roll = 0.05 * sin(0.33 * elapsed + 1.1)
 
-        let dx = 1.5 * omega * cos(omega * elapsed)
-        let dy = 0.9 * 2 * omega * cos(2 * omega * elapsed)
-        let heading = atan2(dy, dx)
+        let orientation = Quaternion.aroundZ(yaw)
+            * Quaternion(axis: Vector3(0, 1, 0), angle: pitch)
+            * Quaternion(axis: Vector3(1, 0, 0), angle: roll)
 
-        return Pose(
-            position: Vector3(x, y, z),
-            orientation: Quaternion.aroundZ(heading)
-        )
+        return Pose(position: .zero, orientation: orientation.normalized)
     }
 
     private func odometryMessage(at elapsed: Double) -> [String: Any] {
         let pose = simulatedPose(at: elapsed)
         let ahead = simulatedPose(at: elapsed + 0.05)
-        let velocity = (ahead.position - pose.position) * (1.0 / 0.05)
-        // Report the twist in the body frame, as nav_msgs/Odometry specifies.
-        let bodyVelocity = pose.orientation.conjugate.rotate(velocity)
+
+        // Body-frame angular rate from the orientation difference, which is
+        // what `odom_node` publishes in the twist. Position and linear velocity
+        // stay at zero to match it.
+        let delta = (pose.orientation.conjugate * ahead.orientation).normalized
+        let angle = 2.0 * acos(min(1.0, max(-1.0, delta.w)))
+        let sinHalf = sqrt(max(0.0, 1.0 - delta.w * delta.w))
+        let axis = sinHalf > 1e-9
+            ? Vector3(delta.x, delta.y, delta.z) * (1.0 / sinHalf)
+            : Vector3.zero
+        let angularVelocity = axis * (angle / 0.05)
+
+        // Position and linear velocity are unobserved; `odom_node` says so with
+        // a 1e6 variance on the translational diagonal, and the app reads that
+        // rather than being told which robot it is talking to.
+        var poseCovariance = [Double](repeating: 0, count: 36)
+        for index in [0, 7, 14] {
+            poseCovariance[index] = 1.0e6
+        }
+        for index in [21, 28, 35] {
+            poseCovariance[index] = 0.01
+        }
 
         return [
             "header": header(at: elapsed, frameId: "odom"),
@@ -369,41 +378,59 @@ public final class SimulatedRosbridgeTransport: NSObject, RosbridgeTransport, @u
                         "w": pose.orientation.w,
                     ],
                 ],
-                "covariance": [Double](repeating: 0, count: 36),
+                "covariance": poseCovariance,
             ],
             "twist": [
                 "twist": [
-                    "linear": ["x": bodyVelocity.x, "y": bodyVelocity.y, "z": bodyVelocity.z],
-                    "angular": ["x": 0.0, "y": 0.0, "z": 0.0],
+                    "linear": ["x": 0.0, "y": 0.0, "z": 0.0],
+                    "angular": [
+                        "x": angularVelocity.x,
+                        "y": angularVelocity.y,
+                        "z": angularVelocity.z,
+                    ],
                 ],
                 "covariance": [Double](repeating: 0, count: 36),
             ],
         ]
     }
 
+    /// `/imu/data_calibrated` as `odom_node` republishes it: the integrated
+    /// orientation, the bias-corrected angular rate, and `base_link` as the
+    /// frame.
+    ///
+    /// Linear acceleration is marked unavailable with `covariance[0] = -1`,
+    /// which is the `sensor_msgs/Imu` way of saying "this estimator does not
+    /// touch the accelerometer". Sending a plausible 9.81 here would be a lie
+    /// the operator could not check against the real robot.
     private func imuMessage(at elapsed: Double) -> [String: Any] {
         let pose = simulatedPose(at: elapsed)
+        let ahead = simulatedPose(at: elapsed + 0.05)
+        let delta = (pose.orientation.conjugate * ahead.orientation).normalized
+        let sinHalf = sqrt(max(0.0, 1.0 - delta.w * delta.w))
+        let scale = sinHalf > 1e-9
+            ? 2.0 * acos(min(1.0, max(-1.0, delta.w))) / (sinHalf * 0.05)
+            : 0.0
+
+        var accelerationCovariance = [Double](repeating: 0, count: 9)
+        accelerationCovariance[0] = -1.0
+
         return [
-            "header": header(at: elapsed, frameId: "imu_link"),
+            "header": header(at: elapsed, frameId: "base_link"),
             "orientation": [
                 "x": pose.orientation.x,
                 "y": pose.orientation.y,
                 "z": pose.orientation.z,
                 "w": pose.orientation.w,
             ],
-            "orientation_covariance": [Double](repeating: 0, count: 9),
+            "orientation_covariance": [Double](repeating: 0.01, count: 9),
             "angular_velocity": [
-                "x": 0.01 * sin(elapsed),
-                "y": 0.01 * cos(elapsed),
-                "z": 0.2 * cos(0.5 * elapsed),
+                "x": delta.x * scale,
+                "y": delta.y * scale,
+                "z": delta.z * scale,
             ],
-            "angular_velocity_covariance": [Double](repeating: 0, count: 9),
-            "linear_acceleration": [
-                "x": 0.05 * sin(1.3 * elapsed),
-                "y": 0.05 * cos(1.1 * elapsed),
-                "z": 9.81 + 0.03 * sin(2.0 * elapsed),
-            ],
-            "linear_acceleration_covariance": [Double](repeating: 0, count: 9),
+            "angular_velocity_covariance": [Double](repeating: 0.02, count: 9),
+            "linear_acceleration": ["x": 0.0, "y": 0.0, "z": 0.0],
+            "linear_acceleration_covariance": accelerationCovariance,
         ]
     }
 

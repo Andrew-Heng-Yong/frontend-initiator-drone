@@ -2,7 +2,7 @@ import Foundation
 
 /// The single conversion layer between ROS coordinates and ARKit coordinates.
 ///
-/// Nothing else in the app is allowed to reinterpret axes. Every `/vio/odometry`
+/// Nothing else in the app is allowed to reinterpret axes. Every `/odom`
 /// pose passes through `FrameConversion` exactly once, and the accompanying
 /// tests pin the mapping down so a future refactor cannot silently flip a sign.
 ///

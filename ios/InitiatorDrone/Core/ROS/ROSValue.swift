@@ -118,7 +118,7 @@ public extension ROSValue {
         case let number as NSNumber:
             // NSNumber erases Bool into a number, so the underlying ObjC type
             // has to be checked to avoid turning `true` into `1.0` and losing
-            // the /vio/calibrated semantics.
+            // the /odom/calibrated semantics.
             if CFGetTypeID(number) == CFBooleanGetTypeID() {
                 return .bool(number.boolValue)
             }

@@ -349,7 +349,7 @@ public final class RosbridgeClient: RosbridgeTransportDelegate, @unchecked Senda
             }
             emit(.odometry(odometry))
 
-        case .vioCalibrated, .visualTracking:
+        case .odomCalibrated:
             guard let flag = ROSMessageParser.boolean(from: message) else { return }
             emit(.flag(topic: topic, value: flag))
 

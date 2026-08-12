@@ -51,6 +51,7 @@ results.append(runSuite("RenderingTests", RenderingTests.allTests))
 results.append(runSuite("ConnectionTests", ConnectionTests.allTests))
 results.append(runSuite("ImageStreamSoakTests", ImageStreamSoakTests.allTests))
 results.append(runSuite("DepthPointCloudTests", DepthPointCloudTests.allTests))
+results.append(runSuite("CameraExtrinsicsTests", CameraExtrinsicsTests.allTests))
 
 let totalPassed = results.reduce(0) { $0 + $1.passed }
 let totalFailed = results.reduce(0) { $0 + $1.failed }

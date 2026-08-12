@@ -7,7 +7,8 @@ import SwiftUI
 ///
 /// Alignment is the one piece of information the app cannot get from either the
 /// robot or the phone: ARKit's world origin is wherever the session happened to
-/// start, and the robot's `odom` origin is wherever VIO happened to initialise.
+/// start, and the robot's `odom` origin is wherever odom_node happened to
+/// initialise.
 /// Nothing connects them until the operator says so.
 ///
 /// Two ways to say so are offered, matching how the tool is actually used:

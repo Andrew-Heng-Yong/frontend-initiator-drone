@@ -1,7 +1,8 @@
 # Initiator — iPhone / iPad app
 
 A native SwiftUI + ARKit app for watching the Initiator drone from a phone: the
-robot's cropped depth stream, its VIO node status and pose, and a marker drawn
+robot's cropped depth stream, its odometry node status and pose, and a marker
+drawn
 into the live camera view where the robot actually is in the room.
 
 Visualisation and diagnostics only. **The app sends no flight-control commands.**
@@ -144,12 +145,12 @@ the dashboard HTTP API, and it models the same states rather than merely
 flipping a label:
 
 - **Stop** silences every topic, the way killing the launch removes the nodes.
-  The VIO node pill goes to *Graph stopped* and the depth panel stops updating.
+  The Odom node pill goes to *Graph stopped* and the depth panel stops updating.
 - **Start** brings them back and runs a startup calibration first, as a real
   launch does.
 - **Calibrate** publishes `calibrated = false`, withholds odometry while it
   "collects stationary samples", then publishes `true` and resumes — the exact
-  sequence `vio_node` produces, so the *Calibrating → Running* transition is
+  sequence `odom_node` produces, so the *Calibrating → Running* transition is
   worth watching.
 
 One deliberate difference: stopping the real launch also kills rosbridge, so the
@@ -157,12 +158,18 @@ socket drops. The simulator keeps the link up, because otherwise the client woul
 reconnect straight away and the stopped state would never stay on screen long
 enough to inspect.
 
-By default the fixture robot drives a slow figure-of-eight. **Settings ▸
-Fixtures mode ▸ Park the robot at the origin** stops it at the `odom` origin
-instead, while odometry keeps publishing at the same rate with the same
-timestamps — only the pose stops changing. Park it when you are checking
-*where* the marker and point cloud land, because a moving robot makes an
-alignment error indistinguishable from motion.
+The fixture robot turns slowly on the spot and **never translates**, because
+that is all `odom_node` can report — it publishes a 1e6 m² position variance,
+which the app reads and shows as *Heading only*. This used to fly a
+figure-of-eight, which made a better demo and a worse simulator: it taught the
+operator to expect a marker that moves across the room, when the real one never
+does.
+
+**Settings ▸ Fixtures mode ▸ Hold the robot still** stops the rotation too,
+while odometry keeps publishing at the same rate with the same timestamps — only
+the pose stops changing. Hold it still when you are checking *where* the marker
+and point cloud land, because a turning robot makes a yaw alignment error
+indistinguishable from motion.
 
 ## Connecting to a robot
 
@@ -189,23 +196,23 @@ Subscriptions:
 | --- | --- |
 | `/camera/depth/cropped/image_raw` | `sensor_msgs/msg/Image` |
 | `/camera/depth/cropped/camera_info` | `sensor_msgs/msg/CameraInfo` |
-| `/vio/odometry` | `nav_msgs/msg/Odometry` |
-| `/vio/calibrated` | `std_msgs/msg/Bool` |
-| `/vio/visual_tracking` | `std_msgs/msg/Bool` |
+| `/odom` | `nav_msgs/msg/Odometry` |
+| `/odom/calibrated` | `std_msgs/msg/Bool` |
 | `/imu/data_calibrated` | `sensor_msgs/msg/Imu` |
 
 Dashboard API: `GET /api/state`, `POST /api/start`, `POST /api/stop`,
-`POST /api/vio/calibrate`.
+`POST /api/odom/calibrate` (falling back to `/api/vio/calibrate` on a 404, so a
+phone updated ahead of the robot's dashboard still works).
 
 All of these exist on this branch. `server.js` implements the four endpoints,
-and `drone_launch.py` starts `vio_node`, the Orbbec depth camera, the thermal
+and `drone_launch.py` starts `odom_node`, the Orbbec depth camera, the thermal
 cropper that produces the `cropped` topics, and `rosbridge_websocket` on 9090.
 Bring them all up with:
 
 ```bash
 ros2 launch drone_control drone_launch.py \
   start_rosbridge:=true start_depth_camera:=true start_imu:=true \
-  start_vio:=true start_thermal_cropper:=true thermal_cropper_enabled:=true
+  start_odom:=true start_thermal_cropper:=true thermal_cropper_enabled:=true
 ```
 
 or just press **Start** in the app, which asks the dashboard to run its
@@ -219,9 +226,9 @@ never sent to the phone — the app subscribes to the depth output only.
 
 **Live** — the camera view with the robot drawn into it, plus the cropped depth
 stream, Start, Stop, Calibrate, and Align. Status pills across the top cover the
-link, the VIO node, robot tracking, phone AR tracking, and alignment. The metric
-strip shows depth fps, odometry rate, VIO node state, and the robot's position
-and orientation.
+link, the odometry node, robot tracking, phone AR tracking, and alignment. The
+metric strip shows depth fps, odometry rate, odometry node state, and the
+robot's position and orientation.
 
 Two levels of hiding, because they answer different questions. **Hide depth**
 folds away the depth panel while the pills, metrics and controls stay up — for
@@ -238,10 +245,15 @@ and swallow the taps that place the alignment origin.
 
 **Robot** — address entry, connection test, saved robots, fixtures mode.
 
-**Diagnostics** — per-topic rate and last-message age, VIO node status, the full
-VIO pose and twist, IMU values with a gravity sanity check, phone AR pose, every
-ARKit video format the device offers, stream statistics including dropped frames,
-and the raw rosbridge log.
+**Diagnostics** — per-topic rate and last-message age, odometry node status
+including whether position is measured and its published variance, the full pose
+and twist, IMU values, phone AR pose, every ARKit video format the device offers,
+stream statistics including dropped frames, and the raw rosbridge log.
+
+The IMU rows adapt to what the publisher claims: `odom_node` marks linear
+acceleration unavailable with `covariance[0] = -1`, so the acceleration and
+gravity-check rows read *not published* instead of showing 0.00 m/s² and
+flagging a healthy node as broken.
 
 **Settings** — depth colour map (fixed or auto range, six ramps), wire format,
 image throttle, odometry staleness and extrapolation, and AR scene options.
@@ -262,18 +274,54 @@ image topic.
 The thermal sensor is still doing its job on the robot. It drives the cropper,
 which is what makes the depth frames the app receives small and targeted.
 
-## VIO node status
+## What odom_node can and cannot tell you
 
-The **VIO node** pill answers a different question from **Robot track**. Robot
-track asks "can I believe this pose". VIO node asks "is the estimator running at
-all", which is the first thing worth knowing when the marker is missing.
+`vio_node` was replaced by `odom_node`, and the change is larger than a rename.
+The new node integrates the **gyro and nothing else**. It has no camera input,
+no accelerometer fusion, and — the part that shapes the whole app —
+
+> **it does not estimate position at all.**
+
+Translation is held at zero and published with a variance of 1e6 m², which is
+`nav_msgs/Odometry`'s way of saying "this number is not a measurement". So the
+robot marker sits exactly where you aligned it and turns in place. That is not a
+bug and not a lost fix; it is the entire estimate the robot currently has.
+
+The app reads that covariance rather than being told which robot it is talking
+to. If a flow sensor or GPS is added and the variance drops, **Robot track**
+starts reading *Tracking* on its own, with no code change.
+
+What did **not** survive the change: `/vio/visual_tracking` (no camera to track
+with), `/vio/video_working` (same), and the `vio_static_override` bench mode (a
+gyro-only estimator already publishes a fixed pose when the drone is still).
+
+Renamed:
+
+| Old | New |
+| --- | --- |
+| `/vio/odometry` | `/odom` |
+| `/vio/calibrated` | `/odom/calibrated` |
+| `/vio/calibrate` service | `/odom/calibrate` |
+| `start_vio:=true` | `start_odom:=true` |
+
+Calibration is now a stationary **gyro-bias** estimate rather than a gravity and
+visual alignment. It rejects and restarts its own sample window if the drone
+moves during it, so the *Calibrating* state can last longer than you expect on a
+windy roof.
+
+## Odom node status
+
+The **Odom node** pill answers a different question from **Robot track**. Robot
+track asks "how much of this pose can I believe". Odom node asks "is the
+estimator running at all", which is the first thing worth knowing when the
+marker is missing.
 
 | Shown as | Means |
 | --- | --- |
 | **Unknown** | Not connected to rosbridge. |
 | **Graph stopped** | `GET /api/state` reports the launch is not running. Press Start. |
-| **Not running** | Graph is up, but nothing has ever arrived on a `/vio` topic — check `start_vio:=true` and whether `vio_node` exited. |
-| **Calibrating** | `/vio/calibrated` is false: it is collecting stationary samples and publishes no pose until it finishes. Keep the drone still. |
+| **Not running** | Graph is up, but nothing has arrived on `/odom` or `/imu/data_calibrated` — check `start_odom:=true` and whether `odom_node` exited. |
+| **Calibrating** | `/odom/calibrated` is false: it is collecting stationary gyro samples and publishes no pose until it finishes. Keep the drone still. |
 | **Silent** | The node was heard from, but odometry has stopped or never started. |
 | **Running** | Publishing odometry. |
 
@@ -281,19 +329,19 @@ all", which is the first thing worth knowing when the marker is missing.
 `/rosapi/nodes`, but `drone_launch.py` starts `rosbridge_websocket` as a bare
 node rather than through `rosbridge_websocket_launch.xml`, so `rosapi_node` is
 never launched and that service does not exist. The next best evidence is the
-node's own output: `vio_node` publishes `/vio/odometry` at IMU rate from the
-moment it finishes initialising and stops the instant it dies.
+node's own output: `odom_node` publishes `/odom` at IMU rate from the moment it
+finishes calibrating and stops the instant it dies.
 
 Deriving it this way also survives a detail that would otherwise leave the app
-permanently unsure. `/vio/calibrated` and `/vio/visual_tracking` are published
-**only when they change**, so a phone that connects after calibration has already
-finished may never see either flag. The status therefore does not depend on
-them: odometry alone is enough to conclude the node is running, because the node
-publishes none until it is initialised. A `false` flag, when one does arrive, is
-the node explaining an odometry gap it is itself causing, so it outranks the gap.
+permanently unsure. `/odom/calibrated` is latched and published **only when it
+changes**, so a phone that connects after calibration has already finished may
+never see it. The status therefore does not depend on it: odometry alone is
+enough to conclude the node is running, because the node publishes none until it
+is calibrated. A `false` flag, when one does arrive, is the node explaining an
+odometry gap it is itself causing, so it outranks the gap.
 
 (If `rosapi_node` is ever added to the launch, an authoritative node list would
-be a strict improvement and would slot in behind the same `VIONodeStatus` type.)
+be a strict improvement and would slot in behind the same `OdomNodeStatus` type.)
 
 ## Camera field of view
 
@@ -339,20 +387,16 @@ Y = (v - cy) * Z / fy
 ```
 
 Those points are in the **camera optical frame** (`+X` right, `+Y` down, `+Z`
-forward), which is a third convention on top of `base_link` and ARKit. Composing
-optical → `base_link` → ARKit collapses to flipping Y and Z, and
-`DepthPointCloudTests` pins down each hop separately so that shortcut cannot
-quietly rot.
+forward), which is a third convention on top of `base_link` and ARKit. With the
+camera bolted straight to `base_link`, composing optical → `base_link` → ARKit
+collapses to flipping Y and Z, and `DepthPointCloudTests` pins down each hop
+separately so that shortcut cannot quietly rot.
 
 The cloud is attached as a child of the robot marker node, so it inherits the
 `odom`-to-ARKit pose and the alignment for free and needs no transform of its
-own. Two consequences worth knowing:
-
-- **It only appears once you have aligned the robot.** No alignment means no
-  pose, which means no honest place to put the points.
-- It assumes the depth camera sits at `base_link` facing forward. The real
-  extrinsic lives in the URDF, which no subscribed topic carries, so a
-  physically offset or tilted camera puts the cloud off by that offset.
+own. One consequence worth knowing: **it only appears once you have aligned the
+robot.** No alignment means no pose, which means no honest place to put the
+points.
 
 Building it costs nothing extra per frame: it happens on the depth pipeline's
 existing worker, from the decode that was already being done, so it inherits the
@@ -363,6 +407,44 @@ integer comparison rather than rebuilding tens of thousands of vertices.
 
 Density, range and point size are in **Settings ▸ Point cloud**. The colours
 come from the same depth colour map as the 2D panel, so the two always agree.
+
+## The camera mount
+
+The depth camera is not at `base_link`. It sits ahead of and below the body
+origin, usually tilted down, and until that offset is entered the whole cloud
+inherits the error — **a 15° pitch error lifts a wall 2 m away by about half a
+metre**, which reads as a room that is subtly the wrong shape rather than as an
+obvious fault.
+
+**Settings ▸ Camera mount** takes the measured mounting:
+
+| Field | Axis | Units | Sign |
+| --- | --- | --- | --- |
+| Forward | `base_link` `+X` | m | ahead of the origin |
+| Left | `base_link` `+Y` | m | to the robot's left |
+| Up | `base_link` `+Z` | m | above the origin |
+| Pitch | about `+Y` | ° | **positive tilts the camera down** |
+| Roll | about `+X` | ° | **positive drops the right side** |
+
+These are typed rather than dragged on a slider, because they are numbers read
+off a tape measure and a protractor: rounding `0.085 m` to the nearest slider
+step is how a mount ends up a centimetre out for no reason anyone can see.
+
+Both the point cloud and the frustum use it, by two different mechanisms that
+are checked against each other. The frustum is a node moved by
+`CameraExtrinsics.poseInARNode`, so changing the mount never rebuilds its mesh.
+The cloud folds the mount into its vertices instead, because it is rebuilt every
+frame anyway and a second transform node would be one more place for the two to
+disagree. `CameraExtrinsicsTests` asserts they describe the same camera, that an
+identity mount reproduces the flip-Y-and-Z shortcut exactly, and that each sign
+goes the way the table says.
+
+**Yaw is deliberately absent.** A camera rotated about the vertical is
+indistinguishable from a robot pointing somewhere else, so a mis-measured yaw
+entered here would hide a real heading error. A genuinely yawed camera needs the
+URDF, which is also where all of this properly belongs — the honest long-term
+fix is to subscribe to `/tf_static` and read the real extrinsic instead of
+asking a person to type it.
 
 ## How the robot ends up in the right place
 
@@ -385,7 +467,7 @@ paragraph, including that the converted orientation lands a SceneKit node's `-Z`
 forward axis exactly along the robot's `+X`.
 
 **2. Alignment.** Nothing connects ARKit's world origin (wherever the session
-started) to the robot's `odom` origin (wherever VIO initialised) until the
+started) to the robot's `odom` origin (wherever `odom_node` calibrated) until the
 operator says so. Two ways to say it:
 
 - **"The robot is here"** — stand at the robot, point the phone the way the
@@ -418,25 +500,30 @@ gliding on invented motion is worse than one that visibly stops.
 
 ## Trusting the pose
 
-`/vio/odometry` continuing to publish proves only that the VIO node is alive. An
-estimator that has lost its features keeps dead-reckoning off the IMU and keeps
-publishing a pose that drifts away from reality, smoothly and convincingly. So
-the app reports the robot as tracking only when it is calibrated **and**
-visually tracking **and** the messages are fresh:
+`/odom` continuing to publish proves only that `odom_node` is alive. An estimator
+keeps publishing a pose whether or not it has anything to base it on — smoothly,
+convincingly, and in the case of gyro integration, drifting the whole time. So
+the app reports the robot as fully tracking only when it is calibrated **and**
+the messages are fresh **and** the covariance claims a measured position:
 
 | Condition | Shown as |
 | --- | --- |
 | No odometry for longer than the staleness threshold | **Stale**, marker hidden |
-| `/vio/calibrated` false | **Not calibrated**, marker hidden |
-| Calibrated, `/vio/visual_tracking` false | **Tracking lost**, marker amber |
+| `/odom/calibrated` false | **Not calibrated**, marker hidden |
+| Calibrated and fresh, position variance ≥ 1e3 m² | **Heading only**, marker amber |
 | All three good | **Tracking**, marker green |
 
-Staleness is checked before the flags: a "tracking is fine" message from thirty
-seconds ago is not evidence of anything.
+**Heading only is the normal state today.** It is not a warning about a fault;
+it is the app declining to pretend that a position it was never given is a
+measurement. It shows in the pill rather than as a banner over the camera view,
+because a banner that is always up is wallpaper.
+
+Staleness is checked before the flags: a "calibrated" message from thirty
+seconds ago is not evidence that anything is running now.
 
 Calibrate is disabled unless `GET /api/state` reports the graph running, and the
 live view says why any disabled control is disabled — including, ahead of
-everything downstream of it, that the VIO node is not up.
+everything downstream of it, that the odometry node is not up.
 
 ## Keeping the stream from piling up
 
@@ -496,17 +583,27 @@ Coverage of the things most likely to be silently wrong:
 - **Odometry interpolation** — interpolation, clamping at both ends, twist
   extrapolation in the body frame, out-of-order and duplicate stamps, bounded
   history, staleness, and clock-offset recovery under varying latency.
-- **VIO node status** — that odometry alone proves the node is running (the case
-  a latched-flag-only design would get wrong), that a stopped launch is reported
-  as such rather than as a crashed node, that `calibrating` outranks the odometry
-  gap it causes, and that an unknown launch state is not read as a stopped one.
+- **Odom node status** — that odometry alone proves the node is running (the
+  case a latched-flag-only design would get wrong), that a stopped launch is
+  reported as such rather than as a crashed node, that `calibrating` outranks
+  the odometry gap it causes, and that an unknown launch state is not read as a
+  stopped one.
+- **The camera mount** — that each sign goes the way the settings screen says,
+  that rotation is applied before the offset rather than after, that the
+  precomputed transform matches going through `bodyPoint` and `FrameConversion`
+  the slow way, that the frustum node and the cloud vertices describe the same
+  camera, and that an identity mount reproduces the flip-Y-and-Z shortcut
+  exactly.
+- **Position observability** — that a 1e6 m² variance reads as unobserved, that
+  an all-zero covariance means "not filled in" rather than "perfectly known",
+  and that a missing covariance is trusted rather than second-guessed.
 - **AR video format choice** — that the tallest frame wins over any 16:9 crop of
   it, and that equal aspect ratios fall back to ARKit's ordering rather than to
   resolution.
 - **The fixture launch lifecycle** — that Stop makes the graph genuinely silent
   rather than only relabelling it, that Start brings it back, and that Calibrate
-  withholds odometry and drops both VIO flags until it completes, which is the
-  sequence the node status is built to read.
+  withholds odometry and drops the calibrated flag until it completes, which is
+  the sequence the node status is built to read.
 - **Reconnection** — the backoff curve and jitter bounds as pure functions, plus
   an end-to-end run where the fixture transport drops the link the way Wi-Fi
   does (no close handshake, just silence) and the client is required to notice,
@@ -537,7 +634,9 @@ frames stop arriving after changing it.
   no extra node on the robot.
 - AprilTag or automatic alignment.
 - An authoritative node list. Adding `rosapi_node` to `drone_launch.py` would
-  let `VIONodeStatus` confirm what it currently infers.
+  let `OdomNodeStatus` confirm what it currently infers.
+- **Reading the camera extrinsic from `/tf_static`** instead of asking the
+  operator to measure it into Settings ▸ Camera mount.
 - A camera view wider than ARKit's wide lens. It would need `AVCaptureSession`
   on the ultra-wide camera plus pose estimation of our own, since ARKit will not
   give world tracking and that lens at the same time — a large piece of work to

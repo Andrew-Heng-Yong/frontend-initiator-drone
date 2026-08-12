@@ -1,6 +1,6 @@
 {
   "op": "publish",
-  "topic": "/vio/calibrated",
+  "topic": "/odom/calibrated",
   "msg": {
     "data": true
   }

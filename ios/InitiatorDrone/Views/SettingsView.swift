@@ -12,6 +12,7 @@ struct SettingsView: View {
                 poseSection
                 sceneSection
                 pointCloudSection
+                cameraMountSection
                 fixturesSection
                 aboutSection
             }
@@ -142,9 +143,61 @@ struct SettingsView: View {
         Section("AR scene") {
             Toggle("Show camera frustum", isOn: binding(\.showsCameraFrustum))
             Toggle("Show robot trail", isOn: binding(\.showsRobotTrail))
-            Text("The frustum uses the depth CameraInfo field of view, drawn from base_link. It shows coverage, not a calibrated camera mounting.")
+            Text("The frustum uses the depth CameraInfo field of view, drawn from the camera mount set below.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Where the depth camera is bolted to the robot.
+    ///
+    /// Offsets are metres in `base_link` axes and angles are degrees, because
+    /// those are the units of the tape measure and protractor someone will
+    /// actually use on the airframe. Everything converts to radians behind
+    /// `CameraExtrinsics`.
+    private var cameraMountSection: some View {
+        Section {
+            offsetRow(
+                title: "Forward",
+                value: binding(\.cameraExtrinsics.x),
+                help: "+X, ahead of base_link"
+            )
+            offsetRow(
+                title: "Left",
+                value: binding(\.cameraExtrinsics.y),
+                help: "+Y, to the robot's left"
+            )
+            offsetRow(
+                title: "Up",
+                value: binding(\.cameraExtrinsics.z),
+                help: "+Z, above base_link"
+            )
+            angleRow(
+                title: "Pitch",
+                value: binding(\.cameraExtrinsics.pitchDegrees),
+                help: "positive tilts the camera down"
+            )
+            angleRow(
+                title: "Roll",
+                value: binding(\.cameraExtrinsics.rollDegrees),
+                help: "positive drops the right side"
+            )
+
+            if !settings.settings.cameraExtrinsics.isIdentity {
+                Button("Reset mount to base_link") {
+                    settings.settings.cameraExtrinsics = .identity
+                }
+            }
+        } header: {
+            Text("Camera mount")
+        } footer: {
+            Text("""
+            Measured from base_link to the depth camera. Both the point cloud and the frustum use \
+            it, so a wrong value tilts the whole cloud rather than shifting it slightly — a 15° \
+            pitch error lifts a wall 2 m away by about half a metre. Yaw is deliberately absent: a \
+            camera rotated about the vertical looks exactly like a robot pointing elsewhere, and \
+            entering it here would hide real heading errors.
+            """)
         }
     }
 
@@ -196,23 +249,24 @@ struct SettingsView: View {
         } footer: {
             Text("""
             The depth frame is deprojected with the CameraInfo intrinsics and drawn at the robot's \
-            pose, so it needs both a depth stream and an alignment before anything appears. It \
-            assumes the camera sits at base_link facing forward — the true mounting comes from the \
-            URDF, which no subscribed topic carries.
+            pose, so it needs both a depth stream and an alignment before anything appears. Where \
+            it lands relative to the robot comes from the camera mount below.
             """)
         }
     }
 
     private var fixturesSection: some View {
         Section {
-            Toggle("Park the robot at the origin", isOn: binding(\.fixtureRobotIsStatic))
+            Toggle("Hold the robot still", isOn: binding(\.fixtureRobotIsStatic))
         } header: {
             Text("Fixtures mode")
         } footer: {
             Text("""
-            Odometry keeps publishing at the same rate either way; only the pose stops changing. \
-            Park it when you are checking whether the marker and point cloud land in the right \
-            place, because a moving robot makes an alignment error look like motion.
+            The fixture robot turns slowly on the spot; this stops it. Position is always zero \
+            either way, because that is all odom_node reports. Odometry keeps publishing at the \
+            same rate regardless — only the pose stops changing. Hold it still when you are \
+            checking whether the marker and point cloud land in the right place, because a turning \
+            robot makes a yaw alignment error look like motion.
             """)
         }
     }
@@ -259,6 +313,48 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Slider(value: value, in: range, step: step)
+        }
+    }
+
+    private func offsetRow(title: String, value: Binding<Double>, help: String) -> some View {
+        measurementRow(title: title, value: value, unit: "m", step: 0.01, help: help)
+    }
+
+    private func angleRow(title: String, value: Binding<Double>, help: String) -> some View {
+        measurementRow(title: title, value: value, unit: "°", step: 1.0, help: help)
+    }
+
+    /// A typed measurement rather than a slider.
+    ///
+    /// These are numbers someone reads off a tape measure or a protractor, so
+    /// the field has to accept `0.085` exactly. A slider cannot, and rounding a
+    /// measured offset to the nearest slider step is how a mount ends up a
+    /// centimetre out for no reason anyone can see. The stepper is there for
+    /// nudging once the measured value is in.
+    private func measurementRow(
+        title: String,
+        value: Binding<Double>,
+        unit: String,
+        step: Double,
+        help: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(title)
+                Spacer(minLength: 12)
+                TextField(title, value: value, format: .number.precision(.fractionLength(0...3)))
+                    .keyboardType(.numbersAndPunctuation)  // .decimalPad has no minus sign
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .frame(maxWidth: 90)
+                Text(unit)
+                    .foregroundStyle(.secondary)
+                Stepper(title, value: value, step: step)
+                    .labelsHidden()
+            }
+            Text(help)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 

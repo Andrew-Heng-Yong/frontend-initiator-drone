@@ -14,17 +14,12 @@
           <p id="connection">Waiting to start.</p>
         </div>
         <button
-          id="calibrate-vio"
+          id="calibrate-odom"
           class="calibrate"
           type="button"
           disabled
-          title="Reset VIO and recalibrate gyro bias, accelerometer scale, and gravity alignment. Keep the drone stationary."
-        >Calibrate all</button>
-        <label class="vio-override" title="Use only while the robot remains stationary. Takes effect on the next ROS start.">
-          <input id="vio-static-override" type="checkbox" />
-          <span id="vio-static-override-label">Static VIO</span>
-        </label>
-        <div class="vio-video-mini" id="vio-video-mini" aria-live="polite">VIO video waiting</div>
+          title="Re-estimate the gyro bias from stationary samples. Keep the drone still; moving restarts the sample window."
+        >Calibrate gyro</button>
         <div class="imu-mini" id="imu-mini" aria-live="polite">IMU waiting</div>
         <div class="cpu-mini" id="cpu-mini" aria-hidden="false"></div>
         <div class="status"><span id="status-dot"></span><span id="status-text">Stopped</span></div>

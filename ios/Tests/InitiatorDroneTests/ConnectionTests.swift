@@ -57,25 +57,27 @@ final class ConnectionTests: XCTestCase {
 
     // MARK: - Tracking status
 
-    func testPublishingOdometryAloneIsNotTracking() {
-        // The requirement stated as a test: fresh odometry with visual tracking
-        // false must never read as tracking.
+    func testPublishingOdometryAloneIsNotFullTracking() {
+        // The requirement stated as a test: fresh, calibrated odometry whose
+        // covariance says position is unobserved must never read as tracking.
+        // This is the normal state with odom_node.
         let status = RobotTrackingStatus.evaluate(
             isCalibrated: true,
-            isVisualTracking: false,
+            isPositionObserved: false,
             odometryAge: 0.05
         )
-        XCTAssertEqual(status, .visualTrackingLost)
+        XCTAssertEqual(status, .orientationOnly)
         XCTAssertFalse(status.isTrustworthy)
-        // The pose is still worth drawing, greyed out: it says where the robot
-        // was when tracking failed.
+        // The heading is measured even though the position is not, and the pose
+        // is still worth drawing: it says which way the robot is facing.
+        XCTAssertTrue(status.isOrientationTrustworthy)
         XCTAssertTrue(status.hasUsablePose)
     }
 
     func testFreshCalibratedAndTrackingIsTrustworthy() {
         let status = RobotTrackingStatus.evaluate(
             isCalibrated: true,
-            isVisualTracking: true,
+            isPositionObserved: true,
             odometryAge: 0.02
         )
         XCTAssertEqual(status, .tracking)
@@ -86,7 +88,7 @@ final class ConnectionTests: XCTestCase {
         // A "tracking is fine" flag from thirty seconds ago proves nothing.
         let status = RobotTrackingStatus.evaluate(
             isCalibrated: true,
-            isVisualTracking: true,
+            isPositionObserved: true,
             odometryAge: 3.0,
             stalenessThreshold: 0.5
         )
@@ -97,7 +99,7 @@ final class ConnectionTests: XCTestCase {
     func testUncalibratedHasNoUsablePose() {
         let status = RobotTrackingStatus.evaluate(
             isCalibrated: false,
-            isVisualTracking: true,
+            isPositionObserved: true,
             odometryAge: 0.01
         )
         XCTAssertEqual(status, .notCalibrated)
@@ -106,50 +108,50 @@ final class ConnectionTests: XCTestCase {
 
     func testMissingFlagsReadAsUnknownRatherThanGood() {
         XCTAssertEqual(
-            RobotTrackingStatus.evaluate(isCalibrated: nil, isVisualTracking: nil, odometryAge: 0.01),
+            RobotTrackingStatus.evaluate(isCalibrated: nil, isPositionObserved: nil, odometryAge: 0.01),
             .unknown
         )
         XCTAssertEqual(
-            RobotTrackingStatus.evaluate(isCalibrated: true, isVisualTracking: nil, odometryAge: 0.01),
+            RobotTrackingStatus.evaluate(isCalibrated: true, isPositionObserved: nil, odometryAge: 0.01),
             .unknown
         )
         XCTAssertEqual(
-            RobotTrackingStatus.evaluate(isCalibrated: nil, isVisualTracking: nil, odometryAge: nil),
+            RobotTrackingStatus.evaluate(isCalibrated: nil, isPositionObserved: nil, odometryAge: nil),
             .unknown
         )
     }
 
     func testNoOdometryYetButUncalibratedReportsTheRealCause() {
         XCTAssertEqual(
-            RobotTrackingStatus.evaluate(isCalibrated: false, isVisualTracking: nil, odometryAge: nil),
+            RobotTrackingStatus.evaluate(isCalibrated: false, isPositionObserved: nil, odometryAge: nil),
             .notCalibrated
         )
     }
 
-    // MARK: - VIO node status
+    // MARK: - Odom node status
 
     /// The case the whole type exists for: a phone that connects after the
     /// robot has already calibrated never receives either latched flag, because
-    /// `vio_node` publishes them only on transition. Odometry alone has to be
+    /// `odom_node` publishes it only on transition. Odometry alone has to be
     /// enough to conclude the node is up.
     func testOdometryAloneProvesTheNodeIsRunning() {
-        let status = VIONodeStatus.evaluate(
+        let status = OdomNodeStatus.evaluate(
             isLinkConnected: true,
             isGraphRunning: true,
             isCalibrated: nil,
-            vioMessageAge: 0.02,
+            nodeMessageAge: 0.02,
             odometryAge: 0.02
         )
         XCTAssertEqual(status, .running)
         XCTAssertTrue(status.isNodePresent)
     }
 
-    func testNothingOnAnyVIOTopicMeansTheNodeIsNotRunning() {
-        let status = VIONodeStatus.evaluate(
+    func testNothingOnAnyOdomTopicMeansTheNodeIsNotRunning() {
+        let status = OdomNodeStatus.evaluate(
             isLinkConnected: true,
             isGraphRunning: true,
             isCalibrated: nil,
-            vioMessageAge: nil,
+            nodeMessageAge: nil,
             odometryAge: nil
         )
         XCTAssertEqual(status, .notRunning)
@@ -160,11 +162,11 @@ final class ConnectionTests: XCTestCase {
     /// so is the difference between "press Start" and "go and debug the Pi".
     func testAStoppedGraphOutranksTopicSilence() {
         XCTAssertEqual(
-            VIONodeStatus.evaluate(
+            OdomNodeStatus.evaluate(
                 isLinkConnected: true,
                 isGraphRunning: false,
                 isCalibrated: nil,
-                vioMessageAge: nil,
+                nodeMessageAge: nil,
                 odometryAge: nil
             ),
             .graphStopped
@@ -173,11 +175,11 @@ final class ConnectionTests: XCTestCase {
 
     func testNoLinkMeansUnknownRatherThanNotRunning() {
         XCTAssertEqual(
-            VIONodeStatus.evaluate(
+            OdomNodeStatus.evaluate(
                 isLinkConnected: false,
                 isGraphRunning: true,
                 isCalibrated: true,
-                vioMessageAge: 0.1,
+                nodeMessageAge: 0.1,
                 odometryAge: 0.1
             ),
             .unknown
@@ -187,11 +189,11 @@ final class ConnectionTests: XCTestCase {
     /// `calibrated = false` is the node explaining the odometry gap it is
     /// itself causing, so it must not read as a fault.
     func testCalibratingOutranksTheOdometryGapItCauses() {
-        let status = VIONodeStatus.evaluate(
+        let status = OdomNodeStatus.evaluate(
             isLinkConnected: true,
             isGraphRunning: true,
             isCalibrated: false,
-            vioMessageAge: 0.3,
+            nodeMessageAge: 0.3,
             odometryAge: nil
         )
         XCTAssertEqual(status, .calibrating)
@@ -200,11 +202,11 @@ final class ConnectionTests: XCTestCase {
 
     func testANodeThatStopsPublishingReadsAsSilentWithItsAge() {
         XCTAssertEqual(
-            VIONodeStatus.evaluate(
+            OdomNodeStatus.evaluate(
                 isLinkConnected: true,
                 isGraphRunning: true,
                 isCalibrated: true,
-                vioMessageAge: 9.0,
+                nodeMessageAge: 9.0,
                 odometryAge: 9.0,
                 silenceThreshold: 1.0
             ),
@@ -212,11 +214,11 @@ final class ConnectionTests: XCTestCase {
         )
 
         // Heard from, but no pose has ever arrived.
-        guard case .silent(let age) = VIONodeStatus.evaluate(
+        guard case .silent(let age) = OdomNodeStatus.evaluate(
             isLinkConnected: true,
             isGraphRunning: true,
             isCalibrated: true,
-            vioMessageAge: 0.2,
+            nodeMessageAge: 0.2,
             odometryAge: nil
         ) else {
             XCTFail("expected silent")
@@ -229,11 +231,11 @@ final class ConnectionTests: XCTestCase {
     /// not be read as a stopped one.
     func testUnknownGraphStateFallsThroughToTheTopics() {
         XCTAssertEqual(
-            VIONodeStatus.evaluate(
+            OdomNodeStatus.evaluate(
                 isLinkConnected: true,
                 isGraphRunning: nil,
                 isCalibrated: true,
-                vioMessageAge: 0.02,
+                nodeMessageAge: 0.02,
                 odometryAge: 0.02
             ),
             .running
@@ -357,7 +359,7 @@ final class ConnectionTests: XCTestCase {
                sink.odometry.count >= 5,
                !sink.imu.isEmpty,
                !sink.cameraInfo.isEmpty,
-               sink.flags.count == 2 {
+               sink.flags.count == 1 {
                 streaming.fulfill()
             }
         }
@@ -365,8 +367,15 @@ final class ConnectionTests: XCTestCase {
         client.connect(to: RobotEndpoint(host: "fixtures.local"))
         wait(for: [connected, streaming], timeout: 10)
 
-        XCTAssertEqual(sink.flags[.vioCalibrated], true)
-        XCTAssertEqual(sink.flags[.visualTracking], true)
+        XCTAssertEqual(sink.flags[.odomCalibrated], true)
+
+        // Position must be reported as unobserved: odom_node integrates the
+        // gyro only, and the simulator has to model that rather than inventing
+        // a translation the real robot cannot produce.
+        if let newest = sink.odometry.last {
+            XCTAssertFalse(newest.isPositionObserved)
+            XCTAssertEqual(newest.pose.position, .zero)
+        }
 
         // Odometry stamps must advance, which is what makes interpolation
         // meaningful downstream.
@@ -378,7 +387,7 @@ final class ConnectionTests: XCTestCase {
     }
 
     /// Stop has to make the fixture graph genuinely silent, not merely flip a
-    /// label — that silence is what the status pills and `VIONodeStatus` read.
+    /// label — that silence is what the status pills and `OdomNodeStatus` read.
     func testStopSilencesTheFixtureGraphAndStartBringsItBack() {
         let transport = SimulatedRosbridgeTransport()
         transport.calibrationDuration = 0.3
@@ -428,18 +437,15 @@ final class ConnectionTests: XCTestCase {
         let streaming = expectation(description: "streaming")
         client.onEvent = { event in
             sink.handle(event)
-            if sink.odometry.count >= 3, sink.flags[.vioCalibrated] == true { streaming.fulfill() }
+            if sink.odometry.count >= 3, sink.flags[.odomCalibrated] == true { streaming.fulfill() }
         }
         client.connect(to: RobotEndpoint(host: "fixtures.local"))
         wait(for: [streaming], timeout: 10)
 
-        // Both flags must drop: a calibrating estimator is not tracking
-        // anything either. They go out in the same tick but arrive as separate
-        // callbacks, so waiting on only one would race the other.
-        let calibrating = expectation(description: "reports uncalibrated and untracking")
+        let calibrating = expectation(description: "reports uncalibrated")
         client.onEvent = { event in
             sink.handle(event)
-            if sink.flags[.vioCalibrated] == false, sink.flags[.visualTracking] == false {
+            if sink.flags[.odomCalibrated] == false {
                 calibrating.fulfill()
             }
         }
@@ -457,7 +463,7 @@ final class ConnectionTests: XCTestCase {
         let finished = expectation(description: "calibrated again")
         client.onEvent = { event in
             sink.handle(event)
-            if sink.flags[.vioCalibrated] == true, sink.odometry.count > duringCalibration {
+            if sink.flags[.odomCalibrated] == true, sink.odometry.count > duringCalibration {
                 finished.fulfill()
             }
         }
@@ -473,7 +479,7 @@ final class ConnectionTests: XCTestCase {
         let client = RosbridgeClient(
             transport: transport,
             configuration: .init(
-                topics: [.odometry, .vioCalibrated],
+                topics: [.odometry, .odomCalibrated],
                 reconnectPolicy: ReconnectPolicy(
                     initialDelay: 0.1,
                     maximumDelay: 0.3,
@@ -626,14 +632,14 @@ final class ConnectionTests: XCTestCase {
             ("testTLSSwitchesBothSchemes", testTLSSwitchesBothSchemes),
             ("testValidationRejectsUnusableAddresses", testValidationRejectsUnusableAddresses),
             ("testDisplayNameFallsBackToHost", testDisplayNameFallsBackToHost),
-            ("testPublishingOdometryAloneIsNotTracking", testPublishingOdometryAloneIsNotTracking),
+            ("testPublishingOdometryAloneIsNotFullTracking", testPublishingOdometryAloneIsNotFullTracking),
             ("testFreshCalibratedAndTrackingIsTrustworthy", testFreshCalibratedAndTrackingIsTrustworthy),
             ("testStalenessOutranksTheFlags", testStalenessOutranksTheFlags),
             ("testUncalibratedHasNoUsablePose", testUncalibratedHasNoUsablePose),
             ("testMissingFlagsReadAsUnknownRatherThanGood", testMissingFlagsReadAsUnknownRatherThanGood),
             ("testNoOdometryYetButUncalibratedReportsTheRealCause", testNoOdometryYetButUncalibratedReportsTheRealCause),
             ("testOdometryAloneProvesTheNodeIsRunning", testOdometryAloneProvesTheNodeIsRunning),
-            ("testNothingOnAnyVIOTopicMeansTheNodeIsNotRunning", testNothingOnAnyVIOTopicMeansTheNodeIsNotRunning),
+            ("testNothingOnAnyOdomTopicMeansTheNodeIsNotRunning", testNothingOnAnyOdomTopicMeansTheNodeIsNotRunning),
             ("testAStoppedGraphOutranksTopicSilence", testAStoppedGraphOutranksTopicSilence),
             ("testNoLinkMeansUnknownRatherThanNotRunning", testNoLinkMeansUnknownRatherThanNotRunning),
             ("testCalibratingOutranksTheOdometryGapItCauses", testCalibratingOutranksTheOdometryGapItCauses),

@@ -31,7 +31,7 @@ public enum RobotSceneNodes {
     public static func color(for status: RobotTrackingStatus) -> UIColor {
         switch status {
         case .tracking: return Palette.tracking
-        case .visualTrackingLost: return Palette.degraded
+        case .orientationOnly: return Palette.degraded
         case .stale: return Palette.invalid
         case .notCalibrated, .unknown: return Palette.invalid
         }
@@ -132,11 +132,10 @@ public enum RobotSceneNodes {
 
     /// A wireframe pyramid showing where the robot's depth camera is looking.
     ///
-    /// The apex sits at `base_link` and the axis runs along the robot's forward
-    /// direction. That is an approximation: the true camera pose relative to
-    /// `base_link` comes from the URDF and is not published on any topic this
-    /// app subscribes to, so the frustum shows field of view and range, not a
-    /// calibrated mounting.
+    /// Built with its apex at the origin and its axis along `-Z`, the node's own
+    /// forward direction. Where that ends up on the robot is the caller's job:
+    /// it applies `CameraExtrinsics.poseInARNode`, so the mount offset and tilt
+    /// are a transform on this node rather than something baked into the mesh.
     public static func makeFrustumNode(
         horizontalFOV: Double,
         verticalFOV: Double,

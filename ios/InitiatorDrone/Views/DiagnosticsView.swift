@@ -3,7 +3,7 @@ import SwiftUI
 import ARKit
 #endif
 
-/// Topic rates, last message times, the VIO pose, IMU values, and the raw
+/// Topic rates, last message times, the odometry pose, IMU values, and the raw
 /// rosbridge log.
 struct DiagnosticsView: View {
     @EnvironmentObject private var model: AppModel
@@ -26,8 +26,8 @@ struct DiagnosticsView: View {
             List {
                 linkSection
                 topicSection
-                vioNodeSection
-                vioSection
+                odomNodeSection
+                odometrySection
                 imuSection
                 #if canImport(ARKit)
                 phoneSection
@@ -134,7 +134,7 @@ struct DiagnosticsView: View {
         } header: {
             Text("Topic rates")
         } footer: {
-            Text("A rate above zero only proves the publisher is alive. Check the VIO flags below before trusting the pose.")
+            Text("A rate above zero only proves the publisher is alive. Check the odometry status below before trusting the pose.")
         }
     }
 
@@ -144,30 +144,45 @@ struct DiagnosticsView: View {
         return String(format: "%.1f s ago", age)
     }
 
-    // MARK: - VIO
+    // MARK: - Odometry
 
-    private var vioNodeSection: some View {
+    private var odomNodeSection: some View {
         Section {
-            LabeledContent("Node", value: connection.vioNodeStatus.shortLabel)
-            Text(connection.vioNodeStatus.detailLabel)
+            LabeledContent("Node", value: connection.odomNodeStatus.shortLabel)
+            Text(connection.odomNodeStatus.detailLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            LabeledContent("/vio/calibrated", value: flagText(connection.isCalibrated))
-            LabeledContent("/vio/visual_tracking", value: flagText(connection.isVisualTracking))
+            LabeledContent("/odom/calibrated", value: flagText(connection.isCalibrated))
+            LabeledContent("Position", value: positionObservedText)
+            if let variance = connection.latestOdometry?.positionVariance {
+                LabeledContent("Position variance") {
+                    Text(String(format: "%.3g m²", variance))
+                        .font(.system(.caption, design: .monospaced))
+                }
+            }
         } header: {
-            Text("VIO node")
+            Text("Odom node")
         } footer: {
             Text("""
-            Node status is inferred from traffic on the topics vio_node owns, because the robot's \
-            rosbridge is launched without rosapi_node and cannot answer /rosapi/nodes. Both flags \
-            are published only when they change, so "no message yet" is normal on a phone that \
-            connected after calibration had already finished.
+            Node status is inferred from traffic on the topics odom_node owns, because the robot's \
+            rosbridge is launched without rosapi_node and cannot answer /rosapi/nodes. The \
+            calibrated flag is latched and published only when it changes, so "no message yet" is \
+            normal on a phone that connected after calibration had already finished.
+
+            Whether position is measured is read from the covariance the node publishes, not \
+            assumed: odom_node marks it 1e6 m² because it integrates the gyro only. If a flow \
+            sensor is added later this line changes on its own.
             """)
         }
     }
 
-    private var vioSection: some View {
+    private var positionObservedText: String {
+        guard let observed = connection.isPositionObserved else { return "no odometry yet" }
+        return observed ? "measured" : "not measured (held at origin)"
+    }
+
+    private var odometrySection: some View {
         Section {
             LabeledContent("Status", value: connection.trackingStatus.shortLabel)
             Text(connection.trackingStatus.detailLabel)
@@ -222,7 +237,7 @@ struct DiagnosticsView: View {
                     .foregroundStyle(.secondary)
             }
         } header: {
-            Text("VIO pose")
+            Text("Odometry pose")
         }
     }
 
@@ -237,24 +252,32 @@ struct DiagnosticsView: View {
         Section("IMU (calibrated)") {
             if let imu = connection.latestIMU {
                 LabeledContent("Frame", value: imu.frameId.isEmpty ? "—" : imu.frameId)
-                LabeledContent("Linear accel") {
-                    Text(String(
-                        format: "%.2f  %.2f  %.2f m/s²",
-                        imu.linearAcceleration.x,
-                        imu.linearAcceleration.y,
-                        imu.linearAcceleration.z
-                    ))
-                    .font(.system(.caption, design: .monospaced))
-                }
-                LabeledContent("|a|") {
-                    Text(String(format: "%.2f m/s²", imu.accelerationMagnitude))
+                // odom_node marks acceleration unavailable rather than sending
+                // zeros, so these rows disappear instead of reading 0.00 m/s²
+                // and looking like a dead accelerometer.
+                if let acceleration = imu.linearAcceleration,
+                   let magnitude = imu.accelerationMagnitude {
+                    LabeledContent("Linear accel") {
+                        Text(String(
+                            format: "%.2f  %.2f  %.2f m/s²",
+                            acceleration.x,
+                            acceleration.y,
+                            acceleration.z
+                        ))
                         .font(.system(.caption, design: .monospaced))
-                        // Both branches must be the same type: `.primary` alone
-                        // is a HierarchicalShapeStyle, which will not unify
-                        // with a Color.
-                        .foregroundStyle(
-                            abs(imu.accelerationMagnitude - 9.81) < 0.5 ? Color.primary : Color.orange
-                        )
+                    }
+                    LabeledContent("|a|") {
+                        Text(String(format: "%.2f m/s²", magnitude))
+                            .font(.system(.caption, design: .monospaced))
+                            // Both branches must be the same type: `.primary`
+                            // alone is a HierarchicalShapeStyle, which will not
+                            // unify with a Color.
+                            .foregroundStyle(
+                                abs(magnitude - 9.81) < 0.5 ? Color.primary : Color.orange
+                            )
+                    }
+                } else {
+                    LabeledContent("Linear accel", value: "not published")
                 }
                 LabeledContent("Angular rate") {
                     Text(String(

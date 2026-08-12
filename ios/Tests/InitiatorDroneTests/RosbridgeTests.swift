@@ -14,7 +14,7 @@ final class RosbridgeTests: XCTestCase {
     // MARK: - ROSValue
 
     func testJSONBooleansSurviveAsBooleansNotNumbers() throws {
-        // NSNumber erases Bool; if that leaks through, /vio/calibrated stops
+        // NSNumber erases Bool; if that leaks through, /odom/calibrated stops
         // meaning anything.
         let value = try ROSValue.fromJSON(Data(#"{"data": true, "count": 1}"#.utf8))
         XCTAssertEqual(value["data"], .bool(true))
@@ -235,10 +235,10 @@ final class RosbridgeTests: XCTestCase {
     }
 
     func testUnsubscribeCommandRoundTripsThroughJSON() throws {
-        let command = RosbridgeCommand.unsubscribe(topic: "/vio/odometry", id: "sub-2")
+        let command = RosbridgeCommand.unsubscribe(topic: "/odom", id: "sub-2")
         let value = try ROSValue.fromJSON(try command.encoded())
         XCTAssertEqual(value["op"]?.stringValue, "unsubscribe")
-        XCTAssertEqual(value["topic"]?.stringValue, "/vio/odometry")
+        XCTAssertEqual(value["topic"]?.stringValue, "/odom")
         XCTAssertEqual(value["id"]?.stringValue, "sub-2")
     }
 
@@ -253,8 +253,7 @@ final class RosbridgeTests: XCTestCase {
         XCTAssertEqual(RobotTopic.depthImage.messageType, "sensor_msgs/msg/Image")
         XCTAssertEqual(RobotTopic.depthCameraInfo.messageType, "sensor_msgs/msg/CameraInfo")
         XCTAssertEqual(RobotTopic.odometry.messageType, "nav_msgs/msg/Odometry")
-        XCTAssertEqual(RobotTopic.vioCalibrated.messageType, "std_msgs/msg/Bool")
-        XCTAssertEqual(RobotTopic.visualTracking.messageType, "std_msgs/msg/Bool")
+        XCTAssertEqual(RobotTopic.odomCalibrated.messageType, "std_msgs/msg/Bool")
         XCTAssertEqual(RobotTopic.imu.messageType, "sensor_msgs/msg/Imu")
     }
 
@@ -265,12 +264,12 @@ final class RosbridgeTests: XCTestCase {
         XCTAssertEqual(RobotTopic.allCases.filter(\.isImageTopic), [.depthImage])
     }
 
-    /// `VIONodeStatus` reads these and nothing else, so a topic added to the
+    /// `OdomNodeStatus` reads these and nothing else, so a topic added to the
     /// wrong side of this split would silently change what "running" means.
-    func testVIONodeTopicsAreTheOnesVIOPublishes() {
+    func testOdomNodeTopicsAreTheOnesOdomNodePublishes() {
         XCTAssertEqual(
-            Set(RobotTopic.allCases.filter(\.isPublishedByVIONode)),
-            [.odometry, .vioCalibrated, .visualTracking, .imu]
+            Set(RobotTopic.allCases.filter(\.isPublishedByOdomNode)),
+            [.odometry, .odomCalibrated, .imu]
         )
     }
 
@@ -293,7 +292,7 @@ final class RosbridgeTests: XCTestCase {
             return
         }
         XCTAssertEqual(level, "error")
-        XCTAssertTrue(message.contains("/vio/odometry"))
+        XCTAssertTrue(message.contains("/odom"))
     }
 
     func testUnknownOpsAreKeptRatherThanDropped() throws {
@@ -417,6 +416,50 @@ final class RosbridgeTests: XCTestCase {
         XCTAssertEqual(odometry.pose.orientation.yawAroundZ, .pi / 2, accuracy: 1e-9)
         XCTAssertEqual(odometry.linearVelocity.x, 0.4, accuracy: 1e-9)
         XCTAssertEqual(odometry.angularVelocity.z, 0.1, accuracy: 1e-9)
+
+        XCTAssertEqual(try XCTUnwrap(odometry.positionVariance), 0.02, accuracy: 1e-9)
+        XCTAssertTrue(odometry.isPositionObserved)
+    }
+
+    /// What `odom_node` actually publishes: a real orientation, a placeholder
+    /// position, and a covariance that admits it.
+    func testOrientationOnlyOdometryFixtureReportsPositionUnobserved() throws {
+        let odometry = try XCTUnwrap(
+            ROSMessageParser.odometry(from: try FixtureLibrary.message(named: "odometry_orientation_only"))
+        )
+        XCTAssertEqual(odometry.pose.orientation.yawAroundZ, .pi / 2, accuracy: 1e-9)
+        XCTAssertEqual(odometry.pose.position, .zero)
+        XCTAssertEqual(try XCTUnwrap(odometry.positionVariance), 1.0e6, accuracy: 1e-3)
+        XCTAssertFalse(odometry.isPositionObserved)
+    }
+
+    /// A zeroed covariance is "nobody filled this in", not "perfectly known".
+    /// Treating it as absent — and absent as observed — keeps the app working
+    /// with publishers that never populate the field.
+    func testZeroedCovarianceReadsAsAbsentRatherThanCertain() throws {
+        let json = """
+        {"header":{"stamp":{"sec":1,"nanosec":0},"frame_id":"odom"},
+         "child_frame_id":"base_link",
+         "pose":{"pose":{"position":{"x":1,"y":0,"z":0},
+                         "orientation":{"x":0,"y":0,"z":0,"w":1}},
+                 "covariance":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                               0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}}
+        """
+        let odometry = try XCTUnwrap(ROSMessageParser.odometry(from: try ROSValue.fromJSON(Data(json.utf8))))
+        XCTAssertNil(odometry.positionVariance)
+        XCTAssertTrue(odometry.isPositionObserved)
+    }
+
+    func testMissingCovarianceIsTreatedAsObserved() throws {
+        let json = """
+        {"header":{"stamp":{"sec":1,"nanosec":0},"frame_id":"odom"},
+         "child_frame_id":"base_link",
+         "pose":{"pose":{"position":{"x":1,"y":0,"z":0},
+                         "orientation":{"x":0,"y":0,"z":0,"w":1}}}}
+        """
+        let odometry = try XCTUnwrap(ROSMessageParser.odometry(from: try ROSValue.fromJSON(Data(json.utf8))))
+        XCTAssertNil(odometry.positionVariance)
+        XCTAssertTrue(odometry.isPositionObserved)
     }
 
     func testOdometryWithoutAPoseIsRejected() throws {
@@ -426,22 +469,43 @@ final class RosbridgeTests: XCTestCase {
 
     func testBoolFixturesParse() throws {
         XCTAssertEqual(
-            ROSMessageParser.boolean(from: try FixtureLibrary.message(named: "vio_calibrated_true")),
+            ROSMessageParser.boolean(from: try FixtureLibrary.message(named: "odom_calibrated_true")),
             true
         )
         XCTAssertEqual(
-            ROSMessageParser.boolean(from: try FixtureLibrary.message(named: "vio_visual_tracking_false")),
+            ROSMessageParser.boolean(from: try FixtureLibrary.message(named: "odom_calibrated_false")),
             false
         )
     }
 
     func testImuFixtureParses() throws {
         let imu = try XCTUnwrap(ROSMessageParser.imu(from: try FixtureLibrary.message(named: "imu")))
-        XCTAssertEqual(imu.frameId, "imu_link")
-        XCTAssertEqual(imu.linearAcceleration.z, 9.79, accuracy: 1e-9)
-        XCTAssertEqual(imu.accelerationMagnitude, 9.79082, accuracy: 1e-4)
+        XCTAssertEqual(imu.frameId, "base_link")
         XCTAssertEqual(imu.angularVelocity.z, 0.15, accuracy: 1e-9)
         XCTAssertNotNil(imu.orientation)
+
+        // odom_node marks acceleration unavailable with covariance[0] = -1.
+        // Reading it as an honest nil rather than as (0, 0, 0) is what keeps
+        // the diagnostics screen from showing a 0.00 m/s² gravity check and
+        // flagging a perfectly healthy node as broken.
+        XCTAssertNil(imu.linearAcceleration)
+        XCTAssertNil(imu.accelerationMagnitude)
+    }
+
+    func testImuAccelerationIsReadWhenTheCovarianceDoesNotDisclaimIt() throws {
+        let json = """
+        {"header":{"stamp":{"sec":1,"nanosec":0},"frame_id":"base_link"},
+         "orientation":{"x":0,"y":0,"z":0,"w":1},
+         "orientation_covariance":[0,0,0,0,0,0,0,0,0],
+         "angular_velocity":{"x":0,"y":0,"z":0},
+         "angular_velocity_covariance":[0,0,0,0,0,0,0,0,0],
+         "linear_acceleration":{"x":0.12,"y":-0.05,"z":9.79},
+         "linear_acceleration_covariance":[0,0,0,0,0,0,0,0,0]}
+        """
+        let imu = try XCTUnwrap(ROSMessageParser.imu(from: try ROSValue.fromJSON(Data(json.utf8))))
+        let acceleration = try XCTUnwrap(imu.linearAcceleration)
+        XCTAssertEqual(acceleration.z, 9.79, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(imu.accelerationMagnitude), 9.79082, accuracy: 1e-4)
     }
 
     func testDashboardStateFixtureParses() throws {
@@ -486,7 +550,7 @@ final class RosbridgeTests: XCTestCase {
             ("testTopicDefaultsKeepImagesThrottledAndOdometryFree", testTopicDefaultsKeepImagesThrottledAndOdometryFree),
             ("testTopicMessageTypesMatchTheRobotContract", testTopicMessageTypesMatchTheRobotContract),
             ("testNoThermalTopicIsSubscribed", testNoThermalTopicIsSubscribed),
-            ("testVIONodeTopicsAreTheOnesVIOPublishes", testVIONodeTopicsAreTheOnesVIOPublishes),
+            ("testOdomNodeTopicsAreTheOnesOdomNodePublishes", testOdomNodeTopicsAreTheOnesOdomNodePublishes),
             ("testIncomingPublishParses", testIncomingPublishParses),
             ("testIncomingStatusParses", testIncomingStatusParses),
             ("testUnknownOpsAreKeptRatherThanDropped", testUnknownOpsAreKeptRatherThanDropped),
@@ -500,8 +564,12 @@ final class RosbridgeTests: XCTestCase {
             ("testCameraInfoFixtureYieldsAFieldOfView", testCameraInfoFixtureYieldsAFieldOfView),
             ("testOdometryFixtureParsesPoseAndTwist", testOdometryFixtureParsesPoseAndTwist),
             ("testOdometryWithoutAPoseIsRejected", testOdometryWithoutAPoseIsRejected),
+            ("testOrientationOnlyOdometryFixtureReportsPositionUnobserved", testOrientationOnlyOdometryFixtureReportsPositionUnobserved),
+            ("testZeroedCovarianceReadsAsAbsentRatherThanCertain", testZeroedCovarianceReadsAsAbsentRatherThanCertain),
+            ("testMissingCovarianceIsTreatedAsObserved", testMissingCovarianceIsTreatedAsObserved),
             ("testBoolFixturesParse", testBoolFixturesParse),
             ("testImuFixtureParses", testImuFixtureParses),
+            ("testImuAccelerationIsReadWhenTheCovarianceDoesNotDisclaimIt", testImuAccelerationIsReadWhenTheCovarianceDoesNotDisclaimIt),
             ("testDashboardStateFixtureParses", testDashboardStateFixtureParses),
             ("testEveryFixtureIsReadable", testEveryFixtureIsReadable),
         ]

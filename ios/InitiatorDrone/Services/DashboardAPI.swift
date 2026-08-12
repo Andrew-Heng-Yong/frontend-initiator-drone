@@ -123,18 +123,30 @@ public actor DashboardAPI {
         return value?["ok"]?.boolValue ?? true
     }
 
-    /// `POST /api/vio/calibrate`
+    /// `POST /api/odom/calibrate`, falling back to the old `/api/vio/calibrate`.
     ///
     /// Refuses to fire unless the graph is running, so the operator gets a
     /// clear reason rather than a silent no-op from a robot with no nodes up.
+    ///
+    /// The fallback exists because the phone app and the robot's dashboard are
+    /// deployed separately: a phone updated for `odom_node` will meet robots
+    /// still running the dashboard that only knows `/api/vio/calibrate`. Trying
+    /// the new path first and treating a 404 — and only a 404 — as "this robot
+    /// is older" keeps Calibrate working across the changeover without hiding a
+    /// genuine failure, which any other status code still is.
     @discardableResult
-    public func calibrateVIO(requireRunningGraph: Bool = true) async throws -> Bool {
+    public func calibrateOdometry(requireRunningGraph: Bool = true) async throws -> Bool {
         if requireRunningGraph {
             let state = try await fetchState()
             guard state.isRunning else { throw DashboardAPIError.graphNotRunning }
         }
-        let value = try await request(path: "/api/vio/calibrate", method: "POST")
-        return value?["ok"]?.boolValue ?? true
+        do {
+            let value = try await request(path: "/api/odom/calibrate", method: "POST")
+            return value?["ok"]?.boolValue ?? true
+        } catch DashboardAPIError.httpStatus(404) {
+            let value = try await request(path: "/api/vio/calibrate", method: "POST")
+            return value?["ok"]?.boolValue ?? true
+        }
     }
 
     /// Round-trips `GET /api/state` purely to report reachability and latency.

@@ -135,9 +135,8 @@ public enum RosbridgeIncoming: Equatable, Sendable {
 public enum RobotTopic: String, CaseIterable, Identifiable, Sendable {
     case depthImage = "/camera/depth/cropped/image_raw"
     case depthCameraInfo = "/camera/depth/cropped/camera_info"
-    case odometry = "/vio/odometry"
-    case vioCalibrated = "/vio/calibrated"
-    case visualTracking = "/vio/visual_tracking"
+    case odometry = "/odom"
+    case odomCalibrated = "/odom/calibrated"
     case imu = "/imu/data_calibrated"
 
     public var id: String { rawValue }
@@ -148,7 +147,7 @@ public enum RobotTopic: String, CaseIterable, Identifiable, Sendable {
         case .depthImage: return "sensor_msgs/msg/Image"
         case .depthCameraInfo: return "sensor_msgs/msg/CameraInfo"
         case .odometry: return "nav_msgs/msg/Odometry"
-        case .vioCalibrated, .visualTracking: return "std_msgs/msg/Bool"
+        case .odomCalibrated: return "std_msgs/msg/Bool"
         case .imu: return "sensor_msgs/msg/Imu"
         }
     }
@@ -157,20 +156,19 @@ public enum RobotTopic: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .depthImage: return "Depth image"
         case .depthCameraInfo: return "Depth camera info"
-        case .odometry: return "VIO odometry"
-        case .vioCalibrated: return "VIO calibrated"
-        case .visualTracking: return "Visual tracking"
+        case .odometry: return "Odometry"
+        case .odomCalibrated: return "Gyro calibrated"
         case .imu: return "IMU (calibrated)"
         }
     }
 
-    /// Topics published by the VIO node, and therefore evidence that it is
-    /// alive. `VIONodeStatus` reads these rather than a node list, because the
+    /// Topics published by `odom_node`, and therefore evidence that it is
+    /// alive. `OdomNodeStatus` reads these rather than a node list, because the
     /// robot's rosbridge is launched without `rosapi_node` and so cannot answer
     /// `/rosapi/nodes`.
-    public var isPublishedByVIONode: Bool {
+    public var isPublishedByOdomNode: Bool {
         switch self {
-        case .odometry, .vioCalibrated, .visualTracking, .imu: return true
+        case .odometry, .odomCalibrated, .imu: return true
         case .depthImage, .depthCameraInfo: return false
         }
     }
@@ -184,7 +182,7 @@ public enum RobotTopic: String, CaseIterable, Identifiable, Sendable {
         case .depthCameraInfo: return 1000              // static; once a second is plenty
         case .odometry: return 0                        // unthrottled: needed for interpolation
         case .imu: return 20                            // ~50 Hz ceiling
-        case .vioCalibrated, .visualTracking: return 0  // latched-style status flags
+        case .odomCalibrated: return 0                  // latched status flag
         }
     }
 
@@ -209,7 +207,7 @@ public enum RobotTopic: String, CaseIterable, Identifiable, Sendable {
         case .odometry: return 1.0
         case .imu: return 1.0
         case .depthCameraInfo: return 10.0
-        case .vioCalibrated, .visualTracking: return 15.0
+        case .odomCalibrated: return 15.0
         }
     }
 }

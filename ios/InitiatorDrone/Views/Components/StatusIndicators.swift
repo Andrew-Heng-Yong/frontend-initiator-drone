@@ -101,14 +101,14 @@ extension RobotTrackingStatus {
     var pillLevel: StatusPill.Level {
         switch self {
         case .tracking: return .good
-        case .visualTrackingLost: return .warning
+        case .orientationOnly: return .warning
         case .stale, .notCalibrated: return .bad
         case .unknown: return .neutral
         }
     }
 }
 
-extension VIONodeStatus {
+extension OdomNodeStatus {
     var pillLevel: StatusPill.Level {
         switch self {
         case .running: return .good

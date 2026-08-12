@@ -122,6 +122,7 @@ struct LiveView: View {
                 showsTrail: settings.settings.showsRobotTrail,
                 showsPointCloud: settings.settings.pointCloud.isEnabled,
                 pointSize: settings.settings.pointCloud.pointSize,
+                cameraExtrinsics: settings.settings.cameraExtrinsics,
                 placementPhase: alignment.phase,
                 previewPosition: alignment.previewPosition,
                 pendingYaw: alignment.pendingYaw,
@@ -218,9 +219,9 @@ struct LiveView: View {
                 )
 
                 StatusPill(
-                    title: "VIO node",
-                    value: connection.vioNodeStatus.shortLabel,
-                    level: connection.vioNodeStatus.pillLevel
+                    title: "Odom node",
+                    value: connection.odomNodeStatus.shortLabel,
+                    level: connection.odomNodeStatus.pillLevel
                 )
 
                 StatusPill(
@@ -269,11 +270,11 @@ struct LiveView: View {
                     isDimmed: connection.latestOdometry == nil
                 )
                 MetricTile(
-                    label: "VIO node",
-                    value: connection.vioNodeStatus.shortLabel,
+                    label: "Odom node",
+                    value: connection.odomNodeStatus.shortLabel,
                     caption: connection.isCalibrated.map { $0 ? "calibrated" : "not calibrated" }
                         ?? "no flag yet",
-                    isDimmed: !connection.vioNodeStatus.isNodePresent
+                    isDimmed: !connection.odomNodeStatus.isNodePresent
                 )
             }
 
@@ -383,7 +384,7 @@ struct LiveView: View {
                 .disabled(!canControlGraph || !(connection.dashboardState?.isRunning ?? false))
 
                 Button {
-                    Task { await connection.calibrateVIO() }
+                    Task { await connection.calibrateOdometry() }
                 } label: {
                     Label("Calibrate", systemImage: "scope")
                         .frame(maxWidth: .infinity)
@@ -462,13 +463,17 @@ struct LiveView: View {
         }
         // The node not being up explains a missing marker better than anything
         // downstream of it can, so it is reported ahead of the pose status.
-        if !connection.vioNodeStatus.isNodePresent, connection.connectionState.isConnected {
-            return connection.vioNodeStatus.detailLabel
+        if !connection.odomNodeStatus.isNodePresent, connection.connectionState.isConnected {
+            return connection.odomNodeStatus.detailLabel
         }
-        if case .calibrating = connection.vioNodeStatus {
-            return connection.vioNodeStatus.detailLabel
+        if case .calibrating = connection.odomNodeStatus {
+            return connection.odomNodeStatus.detailLabel
         }
-        if case .visualTrackingLost = connection.trackingStatus {
+        // Deliberately not banners: `.orientationOnly` is the permanent, correct
+        // state with odom_node, and a banner that is always up is wallpaper. The
+        // "Robot track" pill carries it in amber instead. `.stale` is the
+        // transient version of the same problem, which is what banners are for.
+        if case .stale = connection.trackingStatus {
             return connection.trackingStatus.detailLabel
         }
         return nil

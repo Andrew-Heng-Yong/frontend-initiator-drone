@@ -21,8 +21,11 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var showsRobotTrail: Bool
     /// Deproject the depth frame into a 3D point cloud in the AR scene.
     public var pointCloud: PointCloudSettings
-    /// In fixtures mode, park the robot at the `odom` origin instead of
-    /// driving it around.
+    /// Where the depth camera is mounted relative to `base_link`. Drives both
+    /// the point cloud and the frustum.
+    public var cameraExtrinsics: CameraExtrinsics
+    /// In fixtures mode, hold the robot completely still instead of letting it
+    /// turn on the spot.
     public var fixtureRobotIsStatic: Bool
 
     public init(
@@ -34,6 +37,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         showsCameraFrustum: Bool = true,
         showsRobotTrail: Bool = true,
         pointCloud: PointCloudSettings = .default,
+        cameraExtrinsics: CameraExtrinsics = .identity,
         fixtureRobotIsStatic: Bool = false
     ) {
         self.depthColorMap = depthColorMap
@@ -44,6 +48,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         self.showsCameraFrustum = showsCameraFrustum
         self.showsRobotTrail = showsRobotTrail
         self.pointCloud = pointCloud
+        self.cameraExtrinsics = cameraExtrinsics
         self.fixtureRobotIsStatic = fixtureRobotIsStatic
     }
 
@@ -68,7 +73,8 @@ public final class SettingsStore: ObservableObject {
     /// an add. The preference has since been removed altogether. `v4` adds the
     /// point-cloud settings and the fixtures static-robot flag — both genuine
     /// adds, so a `v3` blob would throw on decode and has to be abandoned.
-    private static let storageKey = "com.initiatordrone.settings.v4"
+    /// `v5` adds the camera mount extrinsics.
+    private static let storageKey = "com.initiatordrone.settings.v5"
 
     @Published public var settings: AppSettings {
         didSet { persist() }

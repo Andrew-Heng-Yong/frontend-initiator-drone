@@ -239,27 +239,34 @@ final class DepthPointCloudTests: XCTestCase {
         let later = transport.simulatedPose(at: 37.5)
         XCTAssertTrue(
             first.isApproximatelyEqual(to: later),
-            "a parked robot must not drift; got \(first.position) then \(later.position)"
+            "a held robot must not drift; got \(first.position) then \(later.position)"
         )
         XCTAssertTrue(first.position.isApproximatelyEqual(to: .zero))
     }
 
-    func testMovingFixtureRobotStillMoves() {
+    /// The fixture robot turns but never translates, because `odom_node` cannot
+    /// translate. A simulator that drove it around taught the operator to
+    /// expect a marker that moves across the room, which the real one never
+    /// does.
+    func testMovingFixtureRobotRotatesWithoutTranslating() {
         let transport = SimulatedRosbridgeTransport()
         transport.isStatic = false
+
         let first = transport.simulatedPose(at: 0)
         let later = transport.simulatedPose(at: 3.0)
-        XCTAssertGreaterThan(first.position.distance(to: later.position), 0.1)
+
+        XCTAssertTrue(first.position.isApproximatelyEqual(to: .zero))
+        XCTAssertTrue(later.position.isApproximatelyEqual(to: .zero))
+        XCTAssertGreaterThan(abs(first.orientation.yawAroundZ - later.orientation.yawAroundZ), 0.05)
     }
 
-    func testStaticPoseIsConfigurable() {
+    func testHeldHeadingIsConfigurable() {
         let transport = SimulatedRosbridgeTransport()
         transport.isStatic = true
-        transport.staticPosition = Vector3(1.5, -0.5, 0.2)
         transport.staticHeading = .pi / 2
 
         let pose = transport.simulatedPose(at: 12.0)
-        XCTAssertTrue(pose.position.isApproximatelyEqual(to: Vector3(1.5, -0.5, 0.2)))
+        XCTAssertTrue(pose.position.isApproximatelyEqual(to: .zero))
         XCTAssertEqual(pose.orientation.yawAroundZ, .pi / 2, accuracy: 1e-9)
     }
 
@@ -282,8 +289,8 @@ final class DepthPointCloudTests: XCTestCase {
         ("testStoreOnlyReportsNewGenerations", testStoreOnlyReportsNewGenerations),
         ("testResetClearsAndBumpsGeneration", testResetClearsAndBumpsGeneration),
         ("testStaticFixtureRobotHoldsItsPose", testStaticFixtureRobotHoldsItsPose),
-        ("testMovingFixtureRobotStillMoves", testMovingFixtureRobotStillMoves),
-        ("testStaticPoseIsConfigurable", testStaticPoseIsConfigurable),
+        ("testMovingFixtureRobotRotatesWithoutTranslating", testMovingFixtureRobotRotatesWithoutTranslating),
+        ("testHeldHeadingIsConfigurable", testHeldHeadingIsConfigurable),
         ]
     }
 }
