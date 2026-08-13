@@ -297,6 +297,11 @@ it calibrated. The app then shows **Robot track: Tracking**. This is an explicit
 promise that the robot will not move, not a translation estimate; disable it and
 restart before the robot can move.
 
+`odom_quality_override:=true` keeps the live gyro orientation but publishes low
+position covariance anyway. The app consequently shows **Tracking**, although
+translation remains an unmeasured zero placeholder. This is deliberately a
+reported-quality override and does not improve odometry.
+
 `/vio/visual_tracking` and `/vio/video_working` did not survive the change because
 the odometry node has no camera input. The old `vio_static_override` launch option
 is now `odom_static_override`.
@@ -526,6 +531,9 @@ because a banner that is always up is wallpaper.
 Static override is the intentional exception: its low covariance makes the fixed
 origin a complete tracked pose for visualization while the stationary promise is
 in force.
+
+Quality override is the explicit diagnostic exception: it also supplies low
+covariance, but preserves live gyro rotation and makes no stationary guarantee.
 
 Staleness is checked before the flags: a "calibrated" message from thirty
 seconds ago is not evidence that anything is running now.

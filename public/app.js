@@ -7,6 +7,8 @@ const startToggle = document.querySelector('#start-toggle');
 const calibrateOdomButton = document.querySelector('#calibrate-odom');
 const odomStaticOverrideInput = document.querySelector('#odom-static-override');
 const odomStaticOverrideLabel = document.querySelector('#odom-static-override-label');
+const odomQualityOverrideInput = document.querySelector('#odom-quality-override');
+const odomQualityOverrideLabel = document.querySelector('#odom-quality-override-label');
 const cpuMini = document.querySelector('#cpu-mini');
 const imuMini = document.querySelector('#imu-mini');
 const canvas = document.querySelector('#thermal-canvas');
@@ -94,6 +96,9 @@ let calibrationRequestActive = false;
 let odomStaticOverride = false;
 let odomStaticOverrideActive = false;
 let odomStaticOverrideRestartRequired = false;
+let odomQualityOverride = false;
+let odomQualityOverrideActive = false;
+let odomQualityOverrideRestartRequired = false;
 const messageFragments = new Map();
 
 function setRunning(running) {
@@ -113,6 +118,9 @@ function applyOdomState(odom) {
   odomStaticOverride = state.staticOverride === true;
   odomStaticOverrideActive = state.activeStaticOverride === true;
   odomStaticOverrideRestartRequired = state.restartRequired === true;
+  odomQualityOverride = state.qualityOverride === true;
+  odomQualityOverrideActive = state.activeQualityOverride === true;
+  odomQualityOverrideRestartRequired = state.qualityRestartRequired === true;
   if (odomStaticOverrideInput && document.activeElement !== odomStaticOverrideInput) {
     odomStaticOverrideInput.checked = odomStaticOverride;
   }
@@ -125,6 +133,20 @@ function applyOdomState(odom) {
     odomStaticOverrideLabel.textContent = odomStaticOverrideRestartRequired
       ? 'Static odom (restart)'
       : 'Static odom';
+  }
+  if (odomQualityOverrideInput && document.activeElement !== odomQualityOverrideInput) {
+    odomQualityOverrideInput.checked = odomQualityOverride;
+  }
+  const qualityControl =
+    odomQualityOverrideInput && odomQualityOverrideInput.closest('.odom-quality');
+  if (qualityControl) {
+    qualityControl.classList.toggle('active', odomQualityOverrideActive);
+    qualityControl.classList.toggle('pending', odomQualityOverrideRestartRequired);
+  }
+  if (odomQualityOverrideLabel) {
+    odomQualityOverrideLabel.textContent = odomQualityOverrideRestartRequired
+      ? 'Force good odom (restart)'
+      : 'Force good odom';
   }
   if (calibrateOdomButton) {
     const running = statusDot.classList.contains('running');
@@ -1186,6 +1208,26 @@ if (odomStaticOverrideInput) {
       connection.textContent = error.message;
     } finally {
       odomStaticOverrideInput.disabled = false;
+    }
+  });
+}
+
+if (odomQualityOverrideInput) {
+  odomQualityOverrideInput.addEventListener('change', async () => {
+    const previous = odomQualityOverride;
+    const enabled = odomQualityOverrideInput.checked;
+    odomQualityOverrideInput.disabled = true;
+    try {
+      const response = await request('/api/odom-quality-override', { enabled });
+      applyOdomState(response.odom);
+      connection.textContent = enabled
+        ? 'Odom quality override saved. Restart ROS to report position quality as good.'
+        : 'Odom quality override disabled. Restart ROS to report measured quality.';
+    } catch (error) {
+      odomQualityOverrideInput.checked = previous;
+      connection.textContent = error.message;
+    } finally {
+      odomQualityOverrideInput.disabled = false;
     }
   });
 }

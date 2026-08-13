@@ -24,6 +24,10 @@
           <input id="odom-static-override" type="checkbox" />
           <span id="odom-static-override-label">Static odom</span>
         </label>
+        <label class="odom-quality" title="Reports odom position quality as good even though gyro-only translation is not measured. Takes effect after restart.">
+          <input id="odom-quality-override" type="checkbox" />
+          <span id="odom-quality-override-label">Force good odom</span>
+        </label>
         <div class="imu-mini" id="imu-mini" aria-live="polite">IMU waiting</div>
         <div class="cpu-mini" id="cpu-mini" aria-hidden="false"></div>
         <div class="status"><span id="status-dot"></span><span id="status-text">Stopped</span></div>

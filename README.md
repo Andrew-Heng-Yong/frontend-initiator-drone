@@ -91,6 +91,11 @@ variance, so the iPhone reports **Robot track: Tracking**. Changing the checkbox
 running marks it for a restart; it never switches the live estimator. Disable it before the robot
 can move.
 
+The adjacent **Force good odom** checkbox leaves live gyro integration enabled but forces the
+published position covariance to look observed. This makes the iPhone show **Robot track:
+Tracking** even though translation remains fixed and unmeasured. It is a presentation/quality
+override only and takes effect on restart.
+
 Without the override, startup calibration collects 1000 stationary gyro samples. The header's
 **Calibrate gyro** button calls `/odom/calibrate` and repeats the bias estimate with 200 samples.
 The button is disabled while static odometry is active.

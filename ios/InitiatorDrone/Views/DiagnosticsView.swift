@@ -171,8 +171,8 @@ struct DiagnosticsView: View {
             connects after calibration still receives the current state.
 
             Whether position is measured is read from the covariance the node publishes, not \
-            assumed: gyro-only mode marks it 1e6 m², while stationary static override publishes \
-            a low variance for its intentional fixed pose.
+            assumed: gyro-only mode marks it 1e6 m², while static and quality overrides publish \
+            low variance. Quality override changes this reported signal without improving odom.
             """)
         }
     }

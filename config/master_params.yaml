@@ -26,6 +26,8 @@ drone_control:
     start_odom: true
     # Bench-only fixed pose. Disable and restart before the robot can move.
     odom_static_override: true
+    # Force the iPhone's covariance-derived odom quality to read as good.
+    odom_quality_override: true
     start_thermal_overlay: false
     start_thermal_cropper: true
     require_depth_camera: true

@@ -88,6 +88,7 @@ let activeCropperEnabled = null;
 let activeCropperSettings = null;
 let activeThermalAlignment = null;
 let activeOdomStaticOverride = null;
+let activeOdomQualityOverride = null;
 let logs = [];
 let previousCpuStats = null;
 let overlayAlpha = Number(process.env.THERMAL_OVERLAY_ALPHA || DASHBOARD_PARAMS.overlay_alpha || 0.5);
@@ -96,6 +97,7 @@ let thermalAlignment = readThermalAlignment();
 let savedThermalAlignment = { ...thermalAlignment };
 let thermalCropper = readThermalCropper();
 let odomStaticOverride = DRONE_PARAMS.odom_static_override === true;
+let odomQualityOverride = DRONE_PARAMS.odom_quality_override === true;
 
 function resolveLocalPath(value) {
   if (!value) return value;
@@ -166,6 +168,7 @@ function launchCommandFor(cropper) {
   let command = setLaunchArgument(BASE_LAUNCH_COMMAND, 'start_thermal_cropper', cropper.enabled);
   command = setLaunchArgument(command, 'thermal_cropper_enabled', cropper.enabled);
   command = setLaunchArgument(command, 'odom_static_override', odomStaticOverride);
+  command = setLaunchArgument(command, 'odom_quality_override', odomQualityOverride);
   return appendThermalCropperLaunchArgs(command, cropper);
 }
 
@@ -464,6 +467,11 @@ function odomState() {
     restartRequired: Boolean(
       launchProcess && odomStaticOverride !== activeOdomStaticOverride
     ),
+    qualityOverride: odomQualityOverride,
+    activeQualityOverride: Boolean(launchProcess && activeOdomQualityOverride),
+    qualityRestartRequired: Boolean(
+      launchProcess && odomQualityOverride !== activeOdomQualityOverride
+    ),
   };
 }
 
@@ -719,6 +727,24 @@ async function setOdomStaticOverride(request) {
   return { ok: true, saved: true, appliesOnNextStart: true, odom: odomState() };
 }
 
+async function setOdomQualityOverride(request) {
+  const body = await readJson(request);
+  if (typeof body.enabled !== 'boolean') {
+    throw new Error('enabled must be a boolean');
+  }
+  const source = fs.readFileSync(MASTER_PARAMS_FILE, 'utf8');
+  const updates = new Map([
+    ['drone_control.ros__parameters.odom_quality_override', body.enabled],
+  ]);
+  fs.writeFileSync(MASTER_PARAMS_FILE, updateYamlScalars(source, updates));
+  odomQualityOverride = body.enabled;
+  addLog(
+    `Odometry quality override ${odomQualityOverride ? 'enabled' : 'disabled'} for the next ROS start; `
+      + 'the running graph is unchanged.',
+  );
+  return { ok: true, saved: true, appliesOnNextStart: true, odom: odomState() };
+}
+
 async function saveFullModeParams(request) {
   const body = await readJson(request);
   const nextOverlayAlpha = Number(body.overlayAlpha);
@@ -794,6 +820,7 @@ function startLaunch() {
   activeCropperSettings = launchCropper;
   activeThermalAlignment = { ...savedThermalAlignment };
   activeOdomStaticOverride = odomStaticOverride;
+  activeOdomQualityOverride = odomQualityOverride;
   activeLaunchCommand = launchCommand;
   launchProcess = spawn('bash', ['-lc', command], {
     cwd: ROS_WORKSPACE,
@@ -819,6 +846,7 @@ function startLaunch() {
     activeCropperSettings = null;
     activeThermalAlignment = null;
     activeOdomStaticOverride = null;
+    activeOdomQualityOverride = null;
   });
   launchProcess.on('exit', (code, signal) => {
     addLog(`Camera launch exited (code ${code}, signal ${signal || 'none'}).`);
@@ -828,6 +856,7 @@ function startLaunch() {
     activeCropperSettings = null;
     activeThermalAlignment = null;
     activeOdomStaticOverride = null;
+    activeOdomQualityOverride = null;
   });
   return { ok: true, alreadyRunning: false };
 }
@@ -846,6 +875,7 @@ function stopLaunch() {
     activeCropperSettings = null;
     activeThermalAlignment = null;
     activeOdomStaticOverride = null;
+    activeOdomQualityOverride = null;
   }
   return { ok: true, alreadyStopped: false };
 }
@@ -872,6 +902,9 @@ const server = http.createServer(async (request, response) => {
     // independently from the robot workspace.
     if (request.method === 'POST' && (url.pathname === '/api/odom-static-override' || url.pathname === '/api/vio-static-override')) {
       return sendJson(response, 200, await setOdomStaticOverride(request));
+    }
+    if (request.method === 'POST' && url.pathname === '/api/odom-quality-override') {
+      return sendJson(response, 200, await setOdomQualityOverride(request));
     }
     if (request.method === 'POST' && url.pathname === '/api/overlay-alpha') return sendJson(response, 200, await setOverlayAlpha(request));
     if (request.method === 'POST' && url.pathname === '/api/thermal-alignment') return sendJson(response, 200, await setThermalAlignment(request));
