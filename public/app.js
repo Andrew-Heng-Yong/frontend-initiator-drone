@@ -757,11 +757,19 @@ function renderOdomPlot() {
 
 function renderOdomPreview() {
   if (!latestOdometry) {
-    setPreviewState(odomPreviewState, 'Waiting');
+    const calibrationInProgress = odomCalibrated === false;
+    const calibratedWithoutPose = odomCalibrated === true;
+    setPreviewState(
+      odomPreviewState,
+      calibrationInProgress ? 'Calibrating' : calibratedWithoutPose ? 'No pose' : 'Waiting',
+      calibrationInProgress ? 'warn' : calibratedWithoutPose ? 'bad' : '',
+    );
     if (odomForward) odomForward.textContent = 'Forward +X: --';
     if (odomQuality) {
-      odomQuality.textContent = 'No odometry received';
-      odomQuality.className = 'odom-quality-readout';
+      odomQuality.textContent = calibrationInProgress
+        ? 'Gyro calibration in progress · keep robot stationary'
+        : calibratedWithoutPose ? 'Calibration finished · waiting for first pose' : 'No odometry received';
+      odomQuality.className = `odom-quality-readout ${calibrationInProgress ? 'warn' : calibratedWithoutPose ? 'bad' : ''}`.trim();
     }
     renderOdomPlot();
     if (odomCanvas) odomCanvas.setAttribute('aria-label', '3D odometry scene waiting for data');
