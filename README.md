@@ -96,6 +96,13 @@ published position covariance to look observed. This makes the iPhone show **Rob
 Tracking** even though translation remains fixed and unmeasured. It is a presentation/quality
 override only and takes effect on restart.
 
+The main web viewer has two live cards beside the depth/thermal display. **Gyro horizon** turns
+`/imu/data_calibrated` orientation into an artificial horizon with roll, pitch, and yaw readouts.
+**Odometry** subscribes to `/odom` and `/odom/calibrated`, draws the top-down XY trail and heading,
+and shows pose, received rate, message age, calibration/tracking state, position variance, and
+whether static or forced-quality mode supplied the reported quality. The cards move below the
+camera on narrow screens.
+
 Without the override, startup calibration collects 1000 stationary gyro samples. The header's
 **Calibrate gyro** button calls `/odom/calibrate` and repeats the bias estimate with 200 samples.
 The button is disabled while static odometry is active.

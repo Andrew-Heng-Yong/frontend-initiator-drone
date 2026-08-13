@@ -11,6 +11,24 @@ const odomQualityOverrideInput = document.querySelector('#odom-quality-override'
 const odomQualityOverrideLabel = document.querySelector('#odom-quality-override-label');
 const cpuMini = document.querySelector('#cpu-mini');
 const imuMini = document.querySelector('#imu-mini');
+const gyroHorizon = document.querySelector('#gyro-horizon');
+const horizonWorld = document.querySelector('#horizon-world');
+const gyroPreviewState = document.querySelector('#gyro-preview-state');
+const gyroRoll = document.querySelector('#gyro-roll');
+const gyroPitch = document.querySelector('#gyro-pitch');
+const gyroYaw = document.querySelector('#gyro-yaw');
+const odomPlot = document.querySelector('#odom-plot');
+const odomTrailElement = document.querySelector('#odom-trail');
+const odomRobot = document.querySelector('#odom-robot');
+const odomScale = document.querySelector('#odom-scale');
+const odomPreviewState = document.querySelector('#odom-preview-state');
+const odomX = document.querySelector('#odom-x');
+const odomY = document.querySelector('#odom-y');
+const odomZ = document.querySelector('#odom-z');
+const odomYaw = document.querySelector('#odom-yaw');
+const odomRate = document.querySelector('#odom-rate');
+const odomAge = document.querySelector('#odom-age');
+const odomQuality = document.querySelector('#odom-quality');
 const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
 const zoomBufferCanvas = document.createElement('canvas');
@@ -46,6 +64,8 @@ let imageTopics = {
   cameraInfo: '/camera/depth/camera_info',
   thermal: '/thermal/image_raw',
   imu: '/imu/data_calibrated',
+  odom: '/odom',
+  odomCalibrated: '/odom/calibrated',
 };
 let frontendMode = 'full';
 const SIMPLE_DISPLAY_SIZE = { width: 1024, height: 768 };
@@ -99,6 +119,14 @@ let odomStaticOverrideRestartRequired = false;
 let odomQualityOverride = false;
 let odomQualityOverrideActive = false;
 let odomQualityOverrideRestartRequired = false;
+let latestGyroEuler = null;
+let lastGyroMessageAt = 0;
+let latestOdometry = null;
+let lastOdometryAt = 0;
+let odomCalibrated = null;
+let odomArrivalTimes = [];
+let odomTrailPoints = [];
+let telemetryDrawScheduled = false;
 const messageFragments = new Map();
 
 function setRunning(running) {
@@ -152,6 +180,7 @@ function applyOdomState(odom) {
     const running = statusDot.classList.contains('running');
     calibrateOdomButton.disabled = !running || calibrationRequestActive || odomStaticOverrideActive;
   }
+  renderOdomPreview();
 }
 
 async function request(path, body) {
@@ -175,6 +204,7 @@ function closeRosbridge() {
   thermalStatus = 'thermal waiting';
   imuStatus = 'IMU waiting';
   renderImuStatus();
+  resetTelemetryPreviews();
   subscribedTopics = new Set();
   connection.textContent = 'Camera stream disconnected.';
 }
@@ -192,6 +222,7 @@ function connectRosbridge() {
       : `Waiting for depth frames: ${imageTopics.color}`;
     subscribeImageTopic(imageTopics.color);
     subscribeImuTopic();
+    subscribeOdomTopics();
     if (frontendMode !== 'simple') subscribeCameraInfo();
   };
   rosSocket.onmessage = (event) => {
@@ -217,6 +248,11 @@ function connectRosbridge() {
     }
 
     if (message.topic === imageTopics.imu) updateImu(message.msg);
+    if (message.topic === imageTopics.odom) updateOdometry(message.msg);
+    if (message.topic === imageTopics.odomCalibrated) {
+      odomCalibrated = message.msg && message.msg.data === true;
+      scheduleTelemetryRender();
+    }
   };
   rosSocket.onerror = () => {
     connection.textContent = 'Waiting for rosbridge on port 9090...';
@@ -238,9 +274,21 @@ function subscribeCameraInfo() {
 function subscribeImuTopic() {
   if (imageTopics.imu) {
     subscribeRosTopic(imageTopics.imu, 'sensor_msgs/msg/Imu', {
-      throttle_rate: frontendMode === 'simple' ? 100 : 0,
+      throttle_rate: frontendMode === 'simple' ? 100 : 50,
       queue_length: 1,
     });
+  }
+}
+
+function subscribeOdomTopics() {
+  if (imageTopics.odom) {
+    subscribeRosTopic(imageTopics.odom, 'nav_msgs/msg/Odometry', {
+      throttle_rate: 0,
+      queue_length: 1,
+    });
+  }
+  if (imageTopics.odomCalibrated) {
+    subscribeRosTopic(imageTopics.odomCalibrated, 'std_msgs/msg/Bool', { queue_length: 1 });
   }
 }
 
@@ -334,6 +382,7 @@ function updateCameraInfo(info) {
 }
 
 function updateImu(message) {
+  updateGyroPreview(message);
   const gyro = message && message.angular_velocity;
   const acceleration = message && message.linear_acceleration;
   if (!gyro && !acceleration) {
@@ -359,6 +408,267 @@ function formatImuValue(value) {
 
 function renderImuStatus() {
   if (imuMini) imuMini.textContent = imuStatus;
+}
+
+function finiteNumberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function quaternionEuler(quaternion) {
+  if (!quaternion) return null;
+  const x = finiteNumberOrNull(quaternion.x);
+  const y = finiteNumberOrNull(quaternion.y);
+  const z = finiteNumberOrNull(quaternion.z);
+  const w = finiteNumberOrNull(quaternion.w);
+  if ([x, y, z, w].some((value) => value === null)) return null;
+  const norm = Math.hypot(x, y, z, w);
+  if (norm < 1e-9) return null;
+  const qx = x / norm;
+  const qy = y / norm;
+  const qz = z / norm;
+  const qw = w / norm;
+  const roll = Math.atan2(
+    2 * (qw * qx + qy * qz),
+    1 - 2 * (qx * qx + qy * qy),
+  );
+  const pitchInput = Math.max(-1, Math.min(1, 2 * (qw * qy - qz * qx)));
+  const pitch = Math.asin(pitchInput);
+  const yaw = Math.atan2(
+    2 * (qw * qz + qx * qy),
+    1 - 2 * (qy * qy + qz * qz),
+  );
+  const radiansToDegrees = 180 / Math.PI;
+  return {
+    roll: roll * radiansToDegrees,
+    pitch: pitch * radiansToDegrees,
+    yaw: yaw * radiansToDegrees,
+  };
+}
+
+function setPreviewState(element, text, tone = '') {
+  if (!element) return;
+  element.textContent = text;
+  element.classList.remove('live', 'warn', 'bad');
+  if (tone) element.classList.add(tone);
+}
+
+function formatPreviewAngle(value) {
+  return Number.isFinite(value) ? `${value.toFixed(1)}°` : '--';
+}
+
+function updateGyroPreview(message) {
+  const euler = quaternionEuler(message && message.orientation);
+  if (!euler) {
+    latestGyroEuler = null;
+    lastGyroMessageAt = Date.now();
+    scheduleTelemetryRender();
+    return;
+  }
+  latestGyroEuler = euler;
+  lastGyroMessageAt = Date.now();
+  scheduleTelemetryRender();
+}
+
+function renderGyroPreview() {
+  if (!latestGyroEuler) {
+    setPreviewState(gyroPreviewState, lastGyroMessageAt ? 'No pose' : 'Waiting', lastGyroMessageAt ? 'bad' : '');
+    if (horizonWorld) horizonWorld.style.transform = '';
+    if (gyroRoll) gyroRoll.textContent = '--';
+    if (gyroPitch) gyroPitch.textContent = '--';
+    if (gyroYaw) gyroYaw.textContent = '--';
+    if (gyroHorizon) gyroHorizon.setAttribute('aria-label', 'Artificial horizon has no valid IMU orientation');
+    return;
+  }
+  const age = (Date.now() - lastGyroMessageAt) / 1000;
+  const stale = age > 1;
+  setPreviewState(gyroPreviewState, stale ? 'Stale' : 'Live', stale ? 'bad' : 'live');
+  if (gyroRoll) gyroRoll.textContent = formatPreviewAngle(latestGyroEuler.roll);
+  if (gyroPitch) gyroPitch.textContent = formatPreviewAngle(latestGyroEuler.pitch);
+  if (gyroYaw) gyroYaw.textContent = formatPreviewAngle(latestGyroEuler.yaw);
+  if (horizonWorld && gyroHorizon) {
+    const displayedPitch = Math.max(-45, Math.min(45, latestGyroEuler.pitch));
+    const pitchOffset = displayedPitch * gyroHorizon.clientHeight / 90;
+    horizonWorld.style.transform =
+      `translateY(${pitchOffset.toFixed(2)}px) rotate(${-latestGyroEuler.roll.toFixed(2)}deg)`;
+  }
+  if (gyroHorizon) {
+    gyroHorizon.setAttribute(
+      'aria-label',
+      `Artificial horizon: roll ${latestGyroEuler.roll.toFixed(1)} degrees, pitch ${latestGyroEuler.pitch.toFixed(1)} degrees, yaw ${latestGyroEuler.yaw.toFixed(1)} degrees`,
+    );
+  }
+}
+
+function positionVariance(covariance) {
+  if (!Array.isArray(covariance) || covariance.length < 15) return null;
+  const diagonal = [0, 7, 14].map((index) => finiteNumberOrNull(covariance[index]));
+  if (diagonal.some((value) => value === null)) return null;
+  const maximum = Math.max(...diagonal);
+  return maximum > 0 ? maximum : null;
+}
+
+function updateOdometry(message) {
+  const poseWithCovariance = message && message.pose;
+  const pose = poseWithCovariance && poseWithCovariance.pose;
+  const position = pose && pose.position;
+  const euler = quaternionEuler(pose && pose.orientation);
+  const x = finiteNumberOrNull(position && position.x);
+  const y = finiteNumberOrNull(position && position.y);
+  const z = finiteNumberOrNull(position && position.z);
+  if ([x, y, z].some((value) => value === null) || !euler) return;
+
+  const now = Date.now();
+  latestOdometry = {
+    x,
+    y,
+    z,
+    euler,
+    positionVariance: positionVariance(poseWithCovariance.covariance),
+  };
+  lastOdometryAt = now;
+  odomArrivalTimes.push(now);
+  odomArrivalTimes = odomArrivalTimes.filter((arrival) => now - arrival <= 3000);
+
+  const previous = odomTrailPoints[odomTrailPoints.length - 1];
+  if (!previous || Math.hypot(x - previous.x, y - previous.y) >= 0.002) {
+    odomTrailPoints.push({ x, y });
+    if (odomTrailPoints.length > 120) odomTrailPoints.shift();
+  }
+  scheduleTelemetryRender();
+}
+
+function renderOdomPlot() {
+  if (!latestOdometry || !odomTrailElement || !odomRobot) return;
+  const allPoints = [...odomTrailPoints, latestOdometry];
+  const maximumExtent = allPoints.reduce(
+    (maximum, point) => Math.max(maximum, Math.abs(point.x), Math.abs(point.y)),
+    0,
+  );
+  const halfSpanMetres = Math.max(1, Math.ceil(maximumExtent * 2) / 2);
+  const plotScale = 42 / halfSpanMetres;
+  odomTrailElement.setAttribute(
+    'points',
+    odomTrailPoints.map((point) =>
+      `${(point.x * plotScale).toFixed(2)},${(-point.y * plotScale).toFixed(2)}`).join(' '),
+  );
+  const robotX = latestOdometry.x * plotScale;
+  const robotY = -latestOdometry.y * plotScale;
+  odomRobot.setAttribute(
+    'transform',
+    `translate(${robotX.toFixed(2)} ${robotY.toFixed(2)}) rotate(${-latestOdometry.euler.yaw.toFixed(2)})`,
+  );
+  odomRobot.classList.add('visible');
+  if (odomScale) odomScale.textContent = `±${halfSpanMetres.toFixed(1)} m`;
+}
+
+function renderOdomPreview() {
+  if (!latestOdometry) {
+    setPreviewState(odomPreviewState, 'Waiting');
+    if (odomQuality) {
+      odomQuality.textContent = 'No odometry received';
+      odomQuality.className = 'odom-quality-readout';
+    }
+    return;
+  }
+
+  const now = Date.now();
+  const age = (now - lastOdometryAt) / 1000;
+  const stale = age > 1;
+  odomArrivalTimes = odomArrivalTimes.filter((arrival) => now - arrival <= 3000);
+  const rateDuration = odomArrivalTimes.length > 1
+    ? odomArrivalTimes[odomArrivalTimes.length - 1] - odomArrivalTimes[0]
+    : 0;
+  const rate = rateDuration > 0
+    ? (odomArrivalTimes.length - 1) * 1000 / rateDuration
+    : null;
+  const observed = latestOdometry.positionVariance === null ||
+    latestOdometry.positionVariance < 1.0e3;
+
+  let stateText = 'Tracking';
+  let tone = 'live';
+  if (stale) {
+    stateText = 'Stale';
+    tone = 'bad';
+  } else if (odomCalibrated === false) {
+    stateText = 'Calibrating';
+    tone = 'warn';
+  } else if (odomCalibrated === null) {
+    stateText = 'No calib';
+    tone = 'warn';
+  } else if (!observed) {
+    stateText = 'Heading only';
+    tone = 'warn';
+  }
+  setPreviewState(odomPreviewState, stateText, tone);
+
+  if (odomX) odomX.textContent = `${latestOdometry.x.toFixed(2)} m`;
+  if (odomY) odomY.textContent = `${latestOdometry.y.toFixed(2)} m`;
+  if (odomZ) odomZ.textContent = `${latestOdometry.z.toFixed(2)} m`;
+  if (odomYaw) odomYaw.textContent = formatPreviewAngle(latestOdometry.euler.yaw);
+  if (odomRate) odomRate.textContent = rate === null ? '--' : `${rate.toFixed(1)} Hz`;
+  if (odomAge) odomAge.textContent = `${age.toFixed(1)} s`;
+
+  if (odomQuality) {
+    const varianceText = latestOdometry.positionVariance === null
+      ? 'covariance absent'
+      : `variance ${latestOdometry.positionVariance.toPrecision(3)} m²`;
+    const overrideText = odomStaticOverrideActive
+      ? ' · static override'
+      : odomQualityOverrideActive ? ' · forced quality' : '';
+    odomQuality.textContent = `${observed ? 'Position reported good' : 'Position unobserved'} · ${varianceText}${overrideText}`;
+    odomQuality.className = `odom-quality-readout ${observed ? 'live' : 'warn'}`;
+  }
+  renderOdomPlot();
+  if (odomPlot) {
+    odomPlot.setAttribute(
+      'aria-label',
+      `Odometry track: x ${latestOdometry.x.toFixed(2)} metres, y ${latestOdometry.y.toFixed(2)} metres, yaw ${latestOdometry.euler.yaw.toFixed(1)} degrees, ${stateText}`,
+    );
+  }
+}
+
+function renderTelemetryPreviews() {
+  renderGyroPreview();
+  renderOdomPreview();
+}
+
+function scheduleTelemetryRender() {
+  if (telemetryDrawScheduled) return;
+  telemetryDrawScheduled = true;
+  requestAnimationFrame(() => {
+    telemetryDrawScheduled = false;
+    renderTelemetryPreviews();
+  });
+}
+
+function resetTelemetryPreviews() {
+  latestGyroEuler = null;
+  lastGyroMessageAt = 0;
+  latestOdometry = null;
+  lastOdometryAt = 0;
+  odomCalibrated = null;
+  odomArrivalTimes = [];
+  odomTrailPoints = [];
+  telemetryDrawScheduled = false;
+  if (horizonWorld) horizonWorld.style.transform = '';
+  if (gyroRoll) gyroRoll.textContent = '--';
+  if (gyroPitch) gyroPitch.textContent = '--';
+  if (gyroYaw) gyroYaw.textContent = '--';
+  if (odomX) odomX.textContent = '--';
+  if (odomY) odomY.textContent = '--';
+  if (odomZ) odomZ.textContent = '--';
+  if (odomYaw) odomYaw.textContent = '--';
+  if (odomRate) odomRate.textContent = '--';
+  if (odomAge) odomAge.textContent = '--';
+  if (odomTrailElement) odomTrailElement.setAttribute('points', '');
+  if (odomRobot) {
+    odomRobot.removeAttribute('transform');
+    odomRobot.classList.remove('visible');
+  }
+  if (odomScale) odomScale.textContent = '±1.0 m';
+  renderTelemetryPreviews();
 }
 
 function showWaitingForSimpleCrop() {
@@ -804,11 +1114,15 @@ function applyStreamConfig(stream) {
     cameraInfo: stream.cameraInfoTopic || imageTopics.cameraInfo,
     thermal: stream.thermalTopic || imageTopics.thermal,
     imu: stream.imuTopic || imageTopics.imu,
+    odom: stream.odomTopic || imageTopics.odom,
+    odomCalibrated: stream.odomCalibratedTopic || imageTopics.odomCalibrated,
   };
   const topicsChanged = nextTopics.color !== imageTopics.color
     || nextTopics.cameraInfo !== imageTopics.cameraInfo
     || nextTopics.thermal !== imageTopics.thermal
-    || nextTopics.imu !== imageTopics.imu;
+    || nextTopics.imu !== imageTopics.imu
+    || nextTopics.odom !== imageTopics.odom
+    || nextTopics.odomCalibrated !== imageTopics.odomCalibrated;
   if (topicsChanged) cameraInfoFov = null;
   imageTopics = nextTopics;
   thermalFov = finiteFov(stream.thermalFov, thermalFov);
@@ -1339,3 +1653,4 @@ if (logPanel && logResizeHandle) {
 
 refresh();
 setInterval(refresh, 2000);
+setInterval(renderTelemetryPreviews, 250);

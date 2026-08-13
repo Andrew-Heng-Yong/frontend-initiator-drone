@@ -44,6 +44,65 @@
             <div id="range">--</div>
             <canvas id="thermal-canvas" width="32" height="24" aria-label="Thermal-guided cropped depth stream"></canvas>
           </div>
+          <aside class="telemetry-panel" aria-label="Odometry node previews">
+            <article class="preview-card gyro-preview">
+              <div class="preview-heading">
+                <h2>Gyro horizon</h2>
+                <span id="gyro-preview-state" class="preview-state">Waiting</span>
+              </div>
+              <div id="gyro-horizon" class="artificial-horizon" role="img" aria-label="Artificial horizon waiting for calibrated IMU orientation">
+                <div id="horizon-world" class="horizon-world">
+                  <span class="pitch-line pitch-up-30"><b>30</b></span>
+                  <span class="pitch-line pitch-up-15"><b>15</b></span>
+                  <span class="pitch-line pitch-zero"></span>
+                  <span class="pitch-line pitch-down-15"><b>15</b></span>
+                  <span class="pitch-line pitch-down-30"><b>30</b></span>
+                </div>
+                <div class="roll-pointer"></div>
+                <div class="aircraft-symbol"><span></span><i></i><span></span></div>
+              </div>
+              <div class="preview-values">
+                <span>Roll <strong id="gyro-roll">--</strong></span>
+                <span>Pitch <strong id="gyro-pitch">--</strong></span>
+                <span>Yaw <strong id="gyro-yaw">--</strong></span>
+              </div>
+            </article>
+
+            <article class="preview-card odom-preview">
+              <div class="preview-heading">
+                <h2>Odometry</h2>
+                <span id="odom-preview-state" class="preview-state">Waiting</span>
+              </div>
+              <div class="odom-plot-wrap">
+                <svg id="odom-plot" class="odom-plot" viewBox="-50 -50 100 100" role="img" aria-label="Top-down odometry track waiting for data">
+                  <defs>
+                    <pattern id="odom-small-grid" width="10" height="10" patternUnits="userSpaceOnUse">
+                      <path d="M 10 0 L 0 0 0 10" class="odom-grid-minor"></path>
+                    </pattern>
+                  </defs>
+                  <rect x="-50" y="-50" width="100" height="100" fill="url(#odom-small-grid)"></rect>
+                  <line x1="-50" y1="0" x2="50" y2="0" class="odom-axis"></line>
+                  <line x1="0" y1="-50" x2="0" y2="50" class="odom-axis"></line>
+                  <polyline id="odom-trail" class="odom-trail" points=""></polyline>
+                  <circle cx="0" cy="0" r="1.7" class="odom-origin"></circle>
+                  <g id="odom-robot" class="odom-robot">
+                    <circle cx="0" cy="0" r="6"></circle>
+                    <path d="M 8 0 L -5 -4 L -3 0 L -5 4 Z"></path>
+                  </g>
+                </svg>
+                <span id="odom-scale" class="odom-scale">±1.0 m</span>
+              </div>
+              <div class="preview-values odom-values">
+                <span>X <strong id="odom-x">--</strong></span>
+                <span>Y <strong id="odom-y">--</strong></span>
+                <span>Z <strong id="odom-z">--</strong></span>
+                <span>Yaw <strong id="odom-yaw">--</strong></span>
+                <span>Rate <strong id="odom-rate">--</strong></span>
+                <span>Age <strong id="odom-age">--</strong></span>
+              </div>
+              <p id="odom-quality" class="odom-quality-readout">No odometry received</p>
+            </article>
+          </aside>
           <div class="tuning-panel" aria-label="Thermal tuning parameters">
             <div class="tuning-group">
               <h2>View</h2>
