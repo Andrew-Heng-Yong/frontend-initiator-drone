@@ -167,12 +167,12 @@ struct DiagnosticsView: View {
             Text("""
             Node status is inferred from traffic on the topics odom_node owns, because the robot's \
             rosbridge is launched without rosapi_node and cannot answer /rosapi/nodes. The \
-            calibrated flag is latched and published only when it changes, so "no message yet" is \
-            normal on a phone that connected after calibration had already finished.
+            calibrated flag is transient-local and repeated once per second so a phone that \
+            connects after calibration still receives the current state.
 
             Whether position is measured is read from the covariance the node publishes, not \
-            assumed: odom_node marks it 1e6 m² because it integrates the gyro only. If a flow \
-            sensor is added later this line changes on its own.
+            assumed: gyro-only mode marks it 1e6 m², while stationary static override publishes \
+            a low variance for its intentional fixed pose.
             """)
         }
     }

@@ -82,28 +82,18 @@ source install/setup.bash
 
 For MI0802 hardware, the default device is `/dev/ttyACM0`; the stable target path is `/dev/serial/by-id/usb-Nuvoton_USB_Virtual_COM-if00`. The ROS user normally needs membership in `dialout`. The MLX90640 package remains available as a fallback but is no longer the frontend thermal source.
 
-For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. At startup the driver logs the device identity and reads back the actual gyro/accelerometer ranges instead of assuming its register writes succeeded. It publishes unmodified `sensor_msgs/Imu` samples on `/imu/data_raw` and chip temperature on `/imu/temperature`. After VIO calibration, the frontend reads `/imu/data_calibrated`, whose gyro is bias-corrected and whose acceleration has gravity removed using the current estimated attitude, so a stationary sensor reads approximately zero at any orientation.
+For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. At startup the driver logs the device identity and reads back the actual gyro/accelerometer ranges instead of assuming its register writes succeeded. It publishes unmodified `sensor_msgs/Imu` samples on `/imu/data_raw` and chip temperature on `/imu/temperature`. After odometry calibration, the frontend reads `/imu/data_calibrated`, whose gyro is bias-corrected and whose orientation is the gyro-integrated relative attitude. Linear acceleration is marked unavailable.
 
-The Orbbec RGB stream is capped at 5 FPS to match VIO processing and reduce camera and transport load. The header's VIO
-video indicator listens to `/vio/video_working`; it reports **VIO video working** when VIO can
-decode current RGB frames and has valid camera intrinsics. This remains distinct from visual
-motion tracking, which can correctly be inactive while the camera is stationary.
+The header's **Static odom** checkbox is a persisted, next-start override for stationary bench
+testing. When active, `odom_node` skips calibration and gyro integration and publishes a fixed
+zero pose/motion with an identity orientation. It publishes calibrated status and a low position
+variance, so the iPhone reports **Robot track: Tracking**. Changing the checkbox while ROS is
+running marks it for a restart; it never switches the live estimator. Disable it before the robot
+can move.
 
-The header's **Static VIO** checkbox is a persisted, next-start override for stationary bench
-testing. When active, VIO skips alignment and visual fusion and publishes fixed zero pose/motion
-values with an identity orientation. The fixed pose is advertised as calibrated so visualization
-clients can render it, while visual tracking remains false because no visual fusion is running.
-Changing the checkbox while ROS is running marks it for a restart; it never switches the live
-estimator. Disable it before the robot can move.
-
-There is no calibration startup gate: the depth/RGB camera, IMU, VIO, cropper, rosbridge, and thermal pipeline begin launching together. VIO startup alignment independently uses 1000 IMU samples; the manual **Calibrate all** action remains at 20 samples.
-
-The header's **Calibrate all** button calls `/vio/calibrate`. Use it only while the drone is
-stationary. It resets the VIO odometry origin and visual tracker, then re-estimates gyro bias,
-accelerometer scale, and gravity alignment from the configured stationary sample window. The
-button is enabled only while the drone launch is running, and progress is written to Launch
-output. VIO also performs this full stationary calibration automatically whenever it starts;
-the button is for repeating it without restarting the launch.
+Without the override, startup calibration collects 1000 stationary gyro samples. The header's
+**Calibrate gyro** button calls `/odom/calibrate` and repeats the bias estimate with 200 samples.
+The button is disabled while static odometry is active.
 
 If the thermal image is visible but does not line up with depth, use a small hot target such as a candle or warm hand and tune the dashboard `X`, `Y`, `Scale`, `Barrel`, `H`, and `V` controls until the thermal hot spot lands on the same depth object. `Barrel` applies signed radial distortion to the thermal overlay in Full mode: `0` disables it, positive values contract the image near the edges, and negative values expand it while leaving the center fixed. Edits are a browser preview only. **Save to parameter file** commits the transform to `.thermal-alignment.json` and `master_params.yaml`; it is applied immediately when the ROS cropper is running, or passed to the cropper on its next start. Values can also be seeded with `THERMAL_OFFSET_X`, `THERMAL_OFFSET_Y`, `THERMAL_SCALE`, `THERMAL_BARREL_DISTORTION`, `THERMAL_STRETCH_X`, and `THERMAL_STRETCH_Y`.
 

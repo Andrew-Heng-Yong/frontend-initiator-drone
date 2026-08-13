@@ -16,10 +16,9 @@ import Foundation
 /// it finishes calibrating and stops the instant it dies, so traffic on the
 /// topics it owns is a sound liveness proxy.
 ///
-/// It also survives a detail of the real robot that would otherwise leave the
-/// app permanently unsure: `/odom/calibrated` is latched and published only on
-/// transition. A phone that connects after calibration finished sees the
-/// retained `true` if the QoS survives the bridge and nothing if it does not,
+/// It also survives legacy nodes that publish `/odom/calibrated` only on a
+/// transition. Current nodes add a one-second heartbeat for rosbridge clients,
+/// but that heartbeat can still be delayed or dropped,
 /// so the status must not depend on it — odometry alone is enough to conclude
 /// the node is running, because the node publishes none until it is calibrated.
 public enum OdomNodeStatus: Equatable, Sendable {

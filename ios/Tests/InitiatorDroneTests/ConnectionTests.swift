@@ -130,9 +130,8 @@ final class ConnectionTests: XCTestCase {
 
     // MARK: - Odom node status
 
-    /// The case the whole type exists for: a phone that connects after the
-    /// robot has already calibrated never receives either latched flag, because
-    /// `odom_node` publishes it only on transition. Odometry alone has to be
+    /// Legacy nodes may publish calibration only on transition, and a status
+    /// heartbeat can still be delayed or dropped. Odometry alone has to be
     /// enough to conclude the node is up.
     func testOdometryAloneProvesTheNodeIsRunning() {
         let status = OdomNodeStatus.evaluate(

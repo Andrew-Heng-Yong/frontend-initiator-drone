@@ -20,6 +20,10 @@
           disabled
           title="Re-estimate the gyro bias from stationary samples. Keep the drone still; moving restarts the sample window."
         >Calibrate gyro</button>
+        <label class="odom-override" title="Bench use only. Publishes a fixed calibrated pose after the next ROS start; disable before the robot moves.">
+          <input id="odom-static-override" type="checkbox" />
+          <span id="odom-static-override-label">Static odom</span>
+        </label>
         <div class="imu-mini" id="imu-mini" aria-live="polite">IMU waiting</div>
         <div class="cpu-mini" id="cpu-mini" aria-hidden="false"></div>
         <div class="status"><span id="status-dot"></span><span id="status-text">Stopped</span></div>

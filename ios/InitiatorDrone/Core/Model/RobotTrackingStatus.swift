@@ -25,7 +25,7 @@ public enum RobotTrackingStatus: Equatable, Sendable {
     /// Flags look good but odometry has stopped arriving.
     case stale(age: Double)
     /// Calibrated, fresh, and the publisher claims to know where the robot is.
-    /// Unreachable until a translation source (flow sensor, GPS) is added.
+    /// Reached by a translation source or by the stationary static override.
     case tracking
 
     /// Whether the full pose — position included — should be believed.

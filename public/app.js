@@ -5,6 +5,8 @@ const statusText = document.querySelector('#status-text');
 const connection = document.querySelector('#connection');
 const startToggle = document.querySelector('#start-toggle');
 const calibrateOdomButton = document.querySelector('#calibrate-odom');
+const odomStaticOverrideInput = document.querySelector('#odom-static-override');
+const odomStaticOverrideLabel = document.querySelector('#odom-static-override-label');
 const cpuMini = document.querySelector('#cpu-mini');
 const imuMini = document.querySelector('#imu-mini');
 const canvas = document.querySelector('#thermal-canvas');
@@ -89,6 +91,9 @@ let viewerZoomPercent = readStoredViewerZoom();
 let cameraFrameToken = 0;
 let subscribedTopics = new Set();
 let calibrationRequestActive = false;
+let odomStaticOverride = false;
+let odomStaticOverrideActive = false;
+let odomStaticOverrideRestartRequired = false;
 const messageFragments = new Map();
 
 function setRunning(running) {
@@ -99,7 +104,31 @@ function setRunning(running) {
   if (!running) closeRosbridge();
   if (startToggle) startToggle.textContent = running ? 'Stop node' : 'Start node';
   if (calibrateOdomButton) {
-    calibrateOdomButton.disabled = !running || calibrationRequestActive;
+    calibrateOdomButton.disabled = !running || calibrationRequestActive || odomStaticOverrideActive;
+  }
+}
+
+function applyOdomState(odom) {
+  const state = odom || {};
+  odomStaticOverride = state.staticOverride === true;
+  odomStaticOverrideActive = state.activeStaticOverride === true;
+  odomStaticOverrideRestartRequired = state.restartRequired === true;
+  if (odomStaticOverrideInput && document.activeElement !== odomStaticOverrideInput) {
+    odomStaticOverrideInput.checked = odomStaticOverride;
+  }
+  const control = odomStaticOverrideInput && odomStaticOverrideInput.closest('.odom-override');
+  if (control) {
+    control.classList.toggle('active', odomStaticOverrideActive);
+    control.classList.toggle('pending', odomStaticOverrideRestartRequired);
+  }
+  if (odomStaticOverrideLabel) {
+    odomStaticOverrideLabel.textContent = odomStaticOverrideRestartRequired
+      ? 'Static odom (restart)'
+      : 'Static odom';
+  }
+  if (calibrateOdomButton) {
+    const running = statusDot.classList.contains('running');
+    calibrateOdomButton.disabled = !running || calibrationRequestActive || odomStaticOverrideActive;
   }
 }
 
@@ -1065,6 +1094,7 @@ async function refresh() {
     const response = await fetch('/api/state');
     const state = await response.json();
     applyStreamConfig(state.stream);
+    applyOdomState(state.odom);
     setRunning(state.running);
     renderCpu(state.cpu, state.cpuTemp);
     if (typeof state.overlayAlpha === 'number' && document.activeElement !== overlayAlphaInput) {
@@ -1140,6 +1170,26 @@ if (saveParamsButton) {
   saveParamsButton.addEventListener('click', () => saveFullModeParams());
 }
 
+if (odomStaticOverrideInput) {
+  odomStaticOverrideInput.addEventListener('change', async () => {
+    const previous = odomStaticOverride;
+    const enabled = odomStaticOverrideInput.checked;
+    odomStaticOverrideInput.disabled = true;
+    try {
+      const response = await request('/api/odom-static-override', { enabled });
+      applyOdomState(response.odom);
+      connection.textContent = enabled
+        ? 'Static odometry saved. Restart ROS to publish a fixed calibrated pose.'
+        : 'Static odometry disabled. Restart ROS to restore gyro odometry.';
+    } catch (error) {
+      odomStaticOverrideInput.checked = previous;
+      connection.textContent = error.message;
+    } finally {
+      odomStaticOverrideInput.disabled = false;
+    }
+  });
+}
+
 if (startToggle) {
   startToggle.addEventListener('click', async () => {
     try {
@@ -1168,7 +1218,8 @@ if (calibrateOdomButton) {
     } finally {
       calibrationRequestActive = false;
       calibrateOdomButton.textContent = 'Calibrate gyro';
-      calibrateOdomButton.disabled = !statusDot.classList.contains('running');
+      calibrateOdomButton.disabled =
+        !statusDot.classList.contains('running') || odomStaticOverrideActive;
       await refresh();
     }
   });

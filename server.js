@@ -87,6 +87,7 @@ let activeLaunchCommand = null;
 let activeCropperEnabled = null;
 let activeCropperSettings = null;
 let activeThermalAlignment = null;
+let activeOdomStaticOverride = null;
 let logs = [];
 let previousCpuStats = null;
 let overlayAlpha = Number(process.env.THERMAL_OVERLAY_ALPHA || DASHBOARD_PARAMS.overlay_alpha || 0.5);
@@ -94,6 +95,7 @@ if (!Number.isFinite(overlayAlpha) || overlayAlpha < 0 || overlayAlpha > 1) over
 let thermalAlignment = readThermalAlignment();
 let savedThermalAlignment = { ...thermalAlignment };
 let thermalCropper = readThermalCropper();
+let odomStaticOverride = DRONE_PARAMS.odom_static_override === true;
 
 function resolveLocalPath(value) {
   if (!value) return value;
@@ -163,8 +165,7 @@ function setLaunchArgument(command, name, value) {
 function launchCommandFor(cropper) {
   let command = setLaunchArgument(BASE_LAUNCH_COMMAND, 'start_thermal_cropper', cropper.enabled);
   command = setLaunchArgument(command, 'thermal_cropper_enabled', cropper.enabled);
-  // vio_static_override is deliberately not injected any more: odom_node
-  // replaced vio_node and drone_launch.py no longer declares that argument.
+  command = setLaunchArgument(command, 'odom_static_override', odomStaticOverride);
   return appendThermalCropperLaunchArgs(command, cropper);
 }
 
@@ -446,12 +447,23 @@ function state() {
     overlayAlpha,
     rgbOverlayEnabled: true,
     stream: { ...activeStreamConfig(), alignment: thermalAlignment, cropper },
+    odom: odomState(),
     launchCommand: activeLaunchCommand || launchCommandFor(thermalCropper),
     params: {
       master: MASTER_PARAMS_FILE,
       cameraCalibrations: CAMERA_CALIBRATIONS_PARAMS_FILE,
       cameraCalibrationsLoaded: Boolean(CAMERA_CALIBRATIONS_PARAMS.camera_calibrations),
     },
+  };
+}
+
+function odomState() {
+  return {
+    staticOverride: odomStaticOverride,
+    activeStaticOverride: Boolean(launchProcess && activeOdomStaticOverride),
+    restartRequired: Boolean(
+      launchProcess && odomStaticOverride !== activeOdomStaticOverride
+    ),
   };
 }
 
@@ -588,6 +600,9 @@ function calibrateOdometry() {
   if (!launchProcess) {
     return Promise.reject(new Error('Start the drone nodes before calibrating the gyro.'));
   }
+  if (activeOdomStaticOverride) {
+    return Promise.reject(new Error('Disable the odometry static override and restart before calibrating.'));
+  }
 
   const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
   const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
@@ -686,6 +701,24 @@ async function setThermalCropper(request) {
   return { ok: true, saved: true, appliesOnNextStart: true, cropper };
 }
 
+async function setOdomStaticOverride(request) {
+  const body = await readJson(request);
+  if (typeof body.enabled !== 'boolean') {
+    throw new Error('enabled must be a boolean');
+  }
+  const source = fs.readFileSync(MASTER_PARAMS_FILE, 'utf8');
+  const updates = new Map([
+    ['drone_control.ros__parameters.odom_static_override', body.enabled],
+  ]);
+  fs.writeFileSync(MASTER_PARAMS_FILE, updateYamlScalars(source, updates));
+  odomStaticOverride = body.enabled;
+  addLog(
+    `Odometry static override ${odomStaticOverride ? 'enabled' : 'disabled'} for the next ROS start; `
+      + 'the running graph is unchanged.',
+  );
+  return { ok: true, saved: true, appliesOnNextStart: true, odom: odomState() };
+}
+
 async function saveFullModeParams(request) {
   const body = await readJson(request);
   const nextOverlayAlpha = Number(body.overlayAlpha);
@@ -760,6 +793,7 @@ function startLaunch() {
   activeCropperEnabled = launchCropper.enabled;
   activeCropperSettings = launchCropper;
   activeThermalAlignment = { ...savedThermalAlignment };
+  activeOdomStaticOverride = odomStaticOverride;
   activeLaunchCommand = launchCommand;
   launchProcess = spawn('bash', ['-lc', command], {
     cwd: ROS_WORKSPACE,
@@ -784,6 +818,7 @@ function startLaunch() {
     activeCropperEnabled = null;
     activeCropperSettings = null;
     activeThermalAlignment = null;
+    activeOdomStaticOverride = null;
   });
   launchProcess.on('exit', (code, signal) => {
     addLog(`Camera launch exited (code ${code}, signal ${signal || 'none'}).`);
@@ -792,6 +827,7 @@ function startLaunch() {
     activeCropperEnabled = null;
     activeCropperSettings = null;
     activeThermalAlignment = null;
+    activeOdomStaticOverride = null;
   });
   return { ok: true, alreadyRunning: false };
 }
@@ -809,6 +845,7 @@ function stopLaunch() {
     activeCropperEnabled = null;
     activeCropperSettings = null;
     activeThermalAlignment = null;
+    activeOdomStaticOverride = null;
   }
   return { ok: true, alreadyStopped: false };
 }
@@ -830,6 +867,11 @@ const server = http.createServer(async (request, response) => {
     // path an older build asks for.
     if (request.method === 'POST' && (url.pathname === '/api/odom/calibrate' || url.pathname === '/api/vio/calibrate')) {
       return sendJson(response, 200, await calibrateOdometry());
+    }
+    // Keep the old VIO path as a compatibility alias for dashboards deployed
+    // independently from the robot workspace.
+    if (request.method === 'POST' && (url.pathname === '/api/odom-static-override' || url.pathname === '/api/vio-static-override')) {
+      return sendJson(response, 200, await setOdomStaticOverride(request));
     }
     if (request.method === 'POST' && url.pathname === '/api/overlay-alpha') return sendJson(response, 200, await setOverlayAlpha(request));
     if (request.method === 'POST' && url.pathname === '/api/thermal-alignment') return sendJson(response, 200, await setThermalAlignment(request));

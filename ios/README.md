@@ -291,9 +291,15 @@ The app reads that covariance rather than being told which robot it is talking
 to. If a flow sensor or GPS is added and the variance drops, **Robot track**
 starts reading *Tracking* on its own, with no code change.
 
-What did **not** survive the change: `/vio/visual_tracking` (no camera to track
-with), `/vio/video_working` (same), and the `vio_static_override` bench mode (a
-gyro-only estimator already publishes a fixed pose when the drone is still).
+For stationary bench testing, `odom_static_override:=true` changes that contract:
+the node publishes a fixed identity pose with low position covariance and reports
+it calibrated. The app then shows **Robot track: Tracking**. This is an explicit
+promise that the robot will not move, not a translation estimate; disable it and
+restart before the robot can move.
+
+`/vio/visual_tracking` and `/vio/video_working` did not survive the change because
+the odometry node has no camera input. The old `vio_static_override` launch option
+is now `odom_static_override`.
 
 Renamed:
 
@@ -303,6 +309,7 @@ Renamed:
 | `/vio/calibrated` | `/odom/calibrated` |
 | `/vio/calibrate` service | `/odom/calibrate` |
 | `start_vio:=true` | `start_odom:=true` |
+| `vio_static_override:=true` | `odom_static_override:=true` |
 
 Calibration is now a stationary **gyro-bias** estimate rather than a gravity and
 visual alignment. It rejects and restarts its own sample window if the drone
@@ -332,13 +339,11 @@ never launched and that service does not exist. The next best evidence is the
 node's own output: `odom_node` publishes `/odom` at IMU rate from the moment it
 finishes calibrating and stops the instant it dies.
 
-Deriving it this way also survives a detail that would otherwise leave the app
-permanently unsure. `/odom/calibrated` is latched and published **only when it
-changes**, so a phone that connects after calibration has already finished may
-never see it. The status therefore does not depend on it: odometry alone is
-enough to conclude the node is running, because the node publishes none until it
-is calibrated. A `false` flag, when one does arrive, is the node explaining an
-odometry gap it is itself causing, so it outranks the gap.
+`/odom/calibrated` uses transient-local durability and is also republished once
+per second. The heartbeat matters for rosbridge clients: a phone connecting after
+startup still receives the current calibrated state. Odom-node presence is
+derived from odometry/IMU traffic independently, so a missing status message does
+not make a healthy node look absent.
 
 (If `rosapi_node` is ever added to the launch, an authoritative node list would
 be a strict improvement and would slot in behind the same `OdomNodeStatus` type.)
@@ -513,15 +518,20 @@ the messages are fresh **and** the covariance claims a measured position:
 | Calibrated and fresh, position variance ≥ 1e3 m² | **Heading only**, marker amber |
 | All three good | **Tracking**, marker green |
 
-**Heading only is the normal state today.** It is not a warning about a fault;
+**Heading only is the normal state when static override is disabled.** It is not a warning about a fault;
 it is the app declining to pretend that a position it was never given is a
 measurement. It shows in the pill rather than as a banner over the camera view,
 because a banner that is always up is wallpaper.
 
+Static override is the intentional exception: its low covariance makes the fixed
+origin a complete tracked pose for visualization while the stationary promise is
+in force.
+
 Staleness is checked before the flags: a "calibrated" message from thirty
 seconds ago is not evidence that anything is running now.
 
-Calibrate is disabled unless `GET /api/state` reports the graph running, and the
+Calibrate is disabled unless `GET /api/state` reports the graph running and
+static override is inactive, and the
 live view says why any disabled control is disabled — including, ahead of
 everything downstream of it, that the odometry node is not up.
 

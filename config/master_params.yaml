@@ -23,9 +23,9 @@ drone_control:
     start_rosbridge: true
     start_depth_camera: true
     start_imu: true
-    # Gyro odometry replaced vio_node; drone_launch.py no longer declares
-    # start_vio or vio_static_override.
     start_odom: true
+    # Bench-only fixed pose. Disable and restart before the robot can move.
+    odom_static_override: true
     start_thermal_overlay: false
     start_thermal_cropper: true
     require_depth_camera: true

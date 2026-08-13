@@ -18,6 +18,10 @@ header { justify-content: flex-start; }
 .status { display: flex; align-items: center; gap: .5rem; color: #aebdd2; font-weight: 700; }.status span:first-child { width: .65rem; height: .65rem; border-radius: 50%; background: #66758b; }.status span.running { background: #38d996; box-shadow: 0 0 1rem #38d996; }
 .controls { display: none; margin: 0; }.controls p { color: #9fb0c9; flex: 1; min-width: 14rem; }
 button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; font: inherit; font-weight: 750; cursor: pointer; }.start { background: #148560; }.stop { background: #bd3544; }.calibrate { flex: 0 0 auto; background: #7657b5; padding: .58rem .78rem; font-size: .75rem; }button:disabled { opacity: .43; cursor: not-allowed; }
+.odom-override { display: flex; align-items: center; gap: .4rem; color: #aabbd1; font-size: .72rem; font-weight: 750; white-space: nowrap; }
+.odom-override input { accent-color: #38d996; }
+.odom-override.active { color: #38d996; }
+.odom-override.pending { color: #f9ce62; }
 .viewer, .cpu-panel, .log-panel { background: rgba(11, 26, 46, .78); border: 1px solid #264463; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 1.5rem 4rem rgba(0,0,0,.22); }.viewer-heading { align-items: flex-start; }.viewer-heading #range, .canvas-panel #range { color: #f9ce62; font-variant-numeric: tabular-nums; font-weight: 700; font-size: .82rem; line-height: 1.25; }
 .viewer-layout { display: grid; grid-template-columns: minmax(0, 1fr) 17rem; align-items: start; gap: 1rem; }
 .canvas-panel { min-width: 0; }
