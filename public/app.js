@@ -17,9 +17,8 @@ const gyroPreviewState = document.querySelector('#gyro-preview-state');
 const gyroRoll = document.querySelector('#gyro-roll');
 const gyroPitch = document.querySelector('#gyro-pitch');
 const gyroYaw = document.querySelector('#gyro-yaw');
-const odomPlot = document.querySelector('#odom-plot');
-const odomTrailElement = document.querySelector('#odom-trail');
-const odomRobot = document.querySelector('#odom-robot');
+const odomCanvas = document.querySelector('#odom-3d-canvas');
+const odomContext = odomCanvas ? odomCanvas.getContext('2d') : null;
 const odomScale = document.querySelector('#odom-scale');
 const odomPreviewState = document.querySelector('#odom-preview-state');
 const odomX = document.querySelector('#odom-x');
@@ -28,6 +27,7 @@ const odomZ = document.querySelector('#odom-z');
 const odomYaw = document.querySelector('#odom-yaw');
 const odomRate = document.querySelector('#odom-rate');
 const odomAge = document.querySelector('#odom-age');
+const odomForward = document.querySelector('#odom-forward');
 const odomQuality = document.querySelector('#odom-quality');
 const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
@@ -416,7 +416,7 @@ function finiteNumberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function quaternionEuler(quaternion) {
+function normalizedQuaternion(quaternion) {
   if (!quaternion) return null;
   const x = finiteNumberOrNull(quaternion.x);
   const y = finiteNumberOrNull(quaternion.y);
@@ -425,10 +425,13 @@ function quaternionEuler(quaternion) {
   if ([x, y, z, w].some((value) => value === null)) return null;
   const norm = Math.hypot(x, y, z, w);
   if (norm < 1e-9) return null;
-  const qx = x / norm;
-  const qy = y / norm;
-  const qz = z / norm;
-  const qw = w / norm;
+  return { x: x / norm, y: y / norm, z: z / norm, w: w / norm };
+}
+
+function quaternionEuler(quaternion) {
+  const normalized = normalizedQuaternion(quaternion);
+  if (!normalized) return null;
+  const { x: qx, y: qy, z: qz, w: qw } = normalized;
   const roll = Math.atan2(
     2 * (qw * qx + qy * qz),
     1 - 2 * (qx * qx + qy * qy),
@@ -444,6 +447,17 @@ function quaternionEuler(quaternion) {
     roll: roll * radiansToDegrees,
     pitch: pitch * radiansToDegrees,
     yaw: yaw * radiansToDegrees,
+  };
+}
+
+function rotateVectorByQuaternion(vector, quaternion) {
+  const tx = 2 * (quaternion.y * vector.z - quaternion.z * vector.y);
+  const ty = 2 * (quaternion.z * vector.x - quaternion.x * vector.z);
+  const tz = 2 * (quaternion.x * vector.y - quaternion.y * vector.x);
+  return {
+    x: vector.x + quaternion.w * tx + quaternion.y * tz - quaternion.z * ty,
+    y: vector.y + quaternion.w * ty + quaternion.z * tx - quaternion.x * tz,
+    z: vector.z + quaternion.w * tz + quaternion.x * ty - quaternion.y * tx,
   };
 }
 
@@ -513,18 +527,23 @@ function updateOdometry(message) {
   const poseWithCovariance = message && message.pose;
   const pose = poseWithCovariance && poseWithCovariance.pose;
   const position = pose && pose.position;
-  const euler = quaternionEuler(pose && pose.orientation);
+  const orientation = normalizedQuaternion(pose && pose.orientation);
+  const euler = quaternionEuler(orientation);
   const x = finiteNumberOrNull(position && position.x);
   const y = finiteNumberOrNull(position && position.y);
   const z = finiteNumberOrNull(position && position.z);
-  if ([x, y, z].some((value) => value === null) || !euler) return;
+  if ([x, y, z].some((value) => value === null) || !orientation || !euler) return;
+
+  const forward = rotateVectorByQuaternion({ x: 1, y: 0, z: 0 }, orientation);
 
   const now = Date.now();
   latestOdometry = {
     x,
     y,
     z,
+    orientation,
     euler,
+    forward,
     positionVariance: positionVariance(poseWithCovariance.covariance),
   };
   lastOdometryAt = now;
@@ -532,44 +551,220 @@ function updateOdometry(message) {
   odomArrivalTimes = odomArrivalTimes.filter((arrival) => now - arrival <= 3000);
 
   const previous = odomTrailPoints[odomTrailPoints.length - 1];
-  if (!previous || Math.hypot(x - previous.x, y - previous.y) >= 0.002) {
-    odomTrailPoints.push({ x, y });
+  if (!previous || Math.hypot(x - previous.x, y - previous.y, z - previous.z) >= 0.002) {
+    odomTrailPoints.push({ x, y, z });
     if (odomTrailPoints.length > 120) odomTrailPoints.shift();
   }
   scheduleTelemetryRender();
 }
 
+function prepareOdomCanvas() {
+  if (!odomCanvas || !odomContext) return null;
+  const cssWidth = Math.max(1, odomCanvas.clientWidth || 240);
+  const cssHeight = Math.max(1, odomCanvas.clientHeight || cssWidth * 0.75);
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  const bitmapWidth = Math.round(cssWidth * pixelRatio);
+  const bitmapHeight = Math.round(cssHeight * pixelRatio);
+  if (odomCanvas.width !== bitmapWidth || odomCanvas.height !== bitmapHeight) {
+    odomCanvas.width = bitmapWidth;
+    odomCanvas.height = bitmapHeight;
+  }
+  odomContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  return { width: cssWidth, height: cssHeight };
+}
+
+function projectOdomPoint(point, scene) {
+  return {
+    x: scene.originX + (point.x - point.y) * 0.68 * scene.scale,
+    y: scene.originY + (point.x + point.y) * 0.32 * scene.scale - point.z * 0.76 * scene.scale,
+  };
+}
+
+function drawOdomLine(start, end, scene, color, width = 1) {
+  const from = projectOdomPoint(start, scene);
+  const to = projectOdomPoint(end, scene);
+  odomContext.beginPath();
+  odomContext.moveTo(from.x, from.y);
+  odomContext.lineTo(to.x, to.y);
+  odomContext.strokeStyle = color;
+  odomContext.lineWidth = width;
+  odomContext.stroke();
+}
+
+function drawOdomArrow(start, end, scene, color, label, width = 1.5) {
+  const from = projectOdomPoint(start, scene);
+  const to = projectOdomPoint(end, scene);
+  const angle = Math.atan2(to.y - from.y, to.x - from.x);
+  const headLength = Math.max(5, Math.min(9, Math.hypot(to.x - from.x, to.y - from.y) * 0.28));
+
+  odomContext.save();
+  odomContext.strokeStyle = color;
+  odomContext.fillStyle = color;
+  odomContext.lineWidth = width;
+  odomContext.lineCap = 'round';
+  odomContext.lineJoin = 'round';
+  odomContext.beginPath();
+  odomContext.moveTo(from.x, from.y);
+  odomContext.lineTo(to.x, to.y);
+  odomContext.stroke();
+  odomContext.beginPath();
+  odomContext.moveTo(to.x, to.y);
+  odomContext.lineTo(
+    to.x - headLength * Math.cos(angle - Math.PI / 6),
+    to.y - headLength * Math.sin(angle - Math.PI / 6),
+  );
+  odomContext.lineTo(
+    to.x - headLength * Math.cos(angle + Math.PI / 6),
+    to.y - headLength * Math.sin(angle + Math.PI / 6),
+  );
+  odomContext.closePath();
+  odomContext.fill();
+  if (label) {
+    odomContext.font = '700 9px ui-monospace, Consolas, monospace';
+    odomContext.textAlign = to.x >= from.x ? 'left' : 'right';
+    odomContext.textBaseline = to.y >= from.y ? 'top' : 'bottom';
+    odomContext.fillText(label, to.x + (to.x >= from.x ? 4 : -4), to.y + (to.y >= from.y ? 3 : -3));
+  }
+  odomContext.restore();
+}
+
 function renderOdomPlot() {
-  if (!latestOdometry || !odomTrailElement || !odomRobot) return;
-  const allPoints = [...odomTrailPoints, latestOdometry];
+  const dimensions = prepareOdomCanvas();
+  if (!dimensions || !odomContext) return;
+  const { width, height } = dimensions;
+  odomContext.clearRect(0, 0, width, height);
+  const background = odomContext.createRadialGradient(
+    width * 0.5, height * 0.54, 4,
+    width * 0.5, height * 0.54, Math.max(width, height) * 0.72,
+  );
+  background.addColorStop(0, '#17304a');
+  background.addColorStop(1, '#040c16');
+  odomContext.fillStyle = background;
+  odomContext.fillRect(0, 0, width, height);
+
+  const allPoints = latestOdometry ? [...odomTrailPoints, latestOdometry] : [];
   const maximumExtent = allPoints.reduce(
-    (maximum, point) => Math.max(maximum, Math.abs(point.x), Math.abs(point.y)),
+    (maximum, point) => Math.max(maximum, Math.abs(point.x), Math.abs(point.y), Math.abs(point.z)),
     0,
   );
   const halfSpanMetres = Math.max(1, Math.ceil(maximumExtent * 2) / 2);
-  const plotScale = 42 / halfSpanMetres;
-  odomTrailElement.setAttribute(
-    'points',
-    odomTrailPoints.map((point) =>
-      `${(point.x * plotScale).toFixed(2)},${(-point.y * plotScale).toFixed(2)}`).join(' '),
-  );
-  const robotX = latestOdometry.x * plotScale;
-  const robotY = -latestOdometry.y * plotScale;
-  odomRobot.setAttribute(
-    'transform',
-    `translate(${robotX.toFixed(2)} ${robotY.toFixed(2)}) rotate(${-latestOdometry.euler.yaw.toFixed(2)})`,
-  );
-  odomRobot.classList.add('visible');
+  const viewSpan = halfSpanMetres * 1.35;
+  const scene = {
+    originX: width * 0.5,
+    originY: height * 0.64,
+    scale: Math.max(1, (width - 30) / (2.72 * viewSpan)),
+  };
+
+  const gridDivisions = 4;
+  for (let index = -gridDivisions; index <= gridDivisions; index += 1) {
+    const offset = halfSpanMetres * index / gridDivisions;
+    const major = index === 0;
+    const color = major ? 'rgba(161, 194, 224, .30)' : 'rgba(111, 151, 185, .14)';
+    drawOdomLine(
+      { x: -halfSpanMetres, y: offset, z: 0 },
+      { x: halfSpanMetres, y: offset, z: 0 },
+      scene,
+      color,
+      major ? 1.2 : 0.75,
+    );
+    drawOdomLine(
+      { x: offset, y: -halfSpanMetres, z: 0 },
+      { x: offset, y: halfSpanMetres, z: 0 },
+      scene,
+      color,
+      major ? 1.2 : 0.75,
+    );
+  }
+
+  const axisLength = halfSpanMetres * 0.82;
+  const origin = { x: 0, y: 0, z: 0 };
+  drawOdomArrow(origin, { x: axisLength, y: 0, z: 0 }, scene, '#f97367', 'X');
+  drawOdomArrow(origin, { x: 0, y: axisLength, z: 0 }, scene, '#38d996', 'Y');
+  drawOdomArrow(origin, { x: 0, y: 0, z: axisLength }, scene, '#46c6ff', 'Z');
+
+  const projectedOrigin = projectOdomPoint(origin, scene);
+  odomContext.beginPath();
+  odomContext.arc(projectedOrigin.x, projectedOrigin.y, 2.4, 0, Math.PI * 2);
+  odomContext.fillStyle = '#f9ce62';
+  odomContext.fill();
+
+  if (odomTrailPoints.length > 1) {
+    odomContext.save();
+    odomContext.beginPath();
+    odomTrailPoints.forEach((point, index) => {
+      const projected = projectOdomPoint(point, scene);
+      if (index === 0) odomContext.moveTo(projected.x, projected.y);
+      else odomContext.lineTo(projected.x, projected.y);
+    });
+    odomContext.strokeStyle = 'rgba(70, 198, 255, .22)';
+    odomContext.lineWidth = 5;
+    odomContext.lineCap = 'round';
+    odomContext.lineJoin = 'round';
+    odomContext.stroke();
+    odomContext.strokeStyle = '#46c6ff';
+    odomContext.lineWidth = 1.6;
+    odomContext.stroke();
+    odomContext.restore();
+  }
+
+  if (latestOdometry) {
+    const robot = {
+      x: latestOdometry.x,
+      y: latestOdometry.y,
+      z: latestOdometry.z,
+    };
+    const projectedRobot = projectOdomPoint(robot, scene);
+    if (Math.abs(robot.z) > 0.002) {
+      odomContext.save();
+      odomContext.setLineDash([3, 3]);
+      drawOdomLine(robot, { x: robot.x, y: robot.y, z: 0 }, scene, 'rgba(212, 229, 246, .38)');
+      odomContext.restore();
+    }
+
+    odomContext.save();
+    odomContext.shadowColor = '#38d996';
+    odomContext.shadowBlur = 10;
+    odomContext.beginPath();
+    odomContext.arc(projectedRobot.x, projectedRobot.y, 5, 0, Math.PI * 2);
+    odomContext.fillStyle = '#0b2a27';
+    odomContext.fill();
+    odomContext.lineWidth = 2;
+    odomContext.strokeStyle = '#38d996';
+    odomContext.stroke();
+    odomContext.restore();
+
+    const vectorLength = Math.max(0.28, halfSpanMetres * 0.34);
+    const vectorEnd = {
+      x: robot.x + latestOdometry.forward.x * vectorLength,
+      y: robot.y + latestOdometry.forward.y * vectorLength,
+      z: robot.z + latestOdometry.forward.z * vectorLength,
+    };
+    odomContext.save();
+    odomContext.shadowColor = '#f9ce62';
+    odomContext.shadowBlur = 7;
+    drawOdomArrow(robot, vectorEnd, scene, '#f9ce62', 'FORWARD', 2.6);
+    odomContext.restore();
+  } else {
+    odomContext.fillStyle = 'rgba(207, 225, 243, .7)';
+    odomContext.font = '700 9px ui-monospace, Consolas, monospace';
+    odomContext.textAlign = 'center';
+    odomContext.textBaseline = 'top';
+    odomContext.fillText('WAITING FOR ODOM', width * 0.5, 10);
+  }
+
   if (odomScale) odomScale.textContent = `±${halfSpanMetres.toFixed(1)} m`;
 }
 
 function renderOdomPreview() {
   if (!latestOdometry) {
     setPreviewState(odomPreviewState, 'Waiting');
+    if (odomForward) odomForward.textContent = 'Forward +X: --';
     if (odomQuality) {
       odomQuality.textContent = 'No odometry received';
       odomQuality.className = 'odom-quality-readout';
     }
+    renderOdomPlot();
+    if (odomCanvas) odomCanvas.setAttribute('aria-label', '3D odometry scene waiting for data');
     return;
   }
 
@@ -609,6 +804,11 @@ function renderOdomPreview() {
   if (odomYaw) odomYaw.textContent = formatPreviewAngle(latestOdometry.euler.yaw);
   if (odomRate) odomRate.textContent = rate === null ? '--' : `${rate.toFixed(1)} Hz`;
   if (odomAge) odomAge.textContent = `${age.toFixed(1)} s`;
+  if (odomForward) {
+    const signed = (value) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}`;
+    odomForward.textContent =
+      `Forward +X: [${signed(latestOdometry.forward.x)}, ${signed(latestOdometry.forward.y)}, ${signed(latestOdometry.forward.z)}]`;
+  }
 
   if (odomQuality) {
     const varianceText = latestOdometry.positionVariance === null
@@ -621,10 +821,10 @@ function renderOdomPreview() {
     odomQuality.className = `odom-quality-readout ${observed ? 'live' : 'warn'}`;
   }
   renderOdomPlot();
-  if (odomPlot) {
-    odomPlot.setAttribute(
+  if (odomCanvas) {
+    odomCanvas.setAttribute(
       'aria-label',
-      `Odometry track: x ${latestOdometry.x.toFixed(2)} metres, y ${latestOdometry.y.toFixed(2)} metres, yaw ${latestOdometry.euler.yaw.toFixed(1)} degrees, ${stateText}`,
+      `3D odometry scene: x ${latestOdometry.x.toFixed(2)} metres, y ${latestOdometry.y.toFixed(2)} metres, z ${latestOdometry.z.toFixed(2)} metres; forward vector ${latestOdometry.forward.x.toFixed(2)}, ${latestOdometry.forward.y.toFixed(2)}, ${latestOdometry.forward.z.toFixed(2)}; ${stateText}`,
     );
   }
 }
@@ -662,11 +862,7 @@ function resetTelemetryPreviews() {
   if (odomYaw) odomYaw.textContent = '--';
   if (odomRate) odomRate.textContent = '--';
   if (odomAge) odomAge.textContent = '--';
-  if (odomTrailElement) odomTrailElement.setAttribute('points', '');
-  if (odomRobot) {
-    odomRobot.removeAttribute('transform');
-    odomRobot.classList.remove('visible');
-  }
+  if (odomForward) odomForward.textContent = 'Forward +X: --';
   if (odomScale) odomScale.textContent = '±1.0 m';
   renderTelemetryPreviews();
 }

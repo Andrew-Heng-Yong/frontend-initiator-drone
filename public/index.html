@@ -74,22 +74,9 @@
                 <span id="odom-preview-state" class="preview-state">Waiting</span>
               </div>
               <div class="odom-plot-wrap">
-                <svg id="odom-plot" class="odom-plot" viewBox="-50 -50 100 100" role="img" aria-label="Top-down odometry track waiting for data">
-                  <defs>
-                    <pattern id="odom-small-grid" width="10" height="10" patternUnits="userSpaceOnUse">
-                      <path d="M 10 0 L 0 0 0 10" class="odom-grid-minor"></path>
-                    </pattern>
-                  </defs>
-                  <rect x="-50" y="-50" width="100" height="100" fill="url(#odom-small-grid)"></rect>
-                  <line x1="-50" y1="0" x2="50" y2="0" class="odom-axis"></line>
-                  <line x1="0" y1="-50" x2="0" y2="50" class="odom-axis"></line>
-                  <polyline id="odom-trail" class="odom-trail" points=""></polyline>
-                  <circle cx="0" cy="0" r="1.7" class="odom-origin"></circle>
-                  <g id="odom-robot" class="odom-robot">
-                    <circle cx="0" cy="0" r="6"></circle>
-                    <path d="M 8 0 L -5 -4 L -3 0 L -5 4 Z"></path>
-                  </g>
-                </svg>
+                <canvas id="odom-3d-canvas" class="odom-3d-canvas" width="480" height="360" role="img" aria-label="3D odometry scene waiting for data">
+                  3D odometry preview with XYZ axes, robot trail, and forward direction.
+                </canvas>
                 <span id="odom-scale" class="odom-scale">±1.0 m</span>
               </div>
               <div class="preview-values odom-values">
@@ -100,6 +87,7 @@
                 <span>Rate <strong id="odom-rate">--</strong></span>
                 <span>Age <strong id="odom-age">--</strong></span>
               </div>
+              <p id="odom-forward" class="odom-vector-readout">Forward +X: --</p>
               <p id="odom-quality" class="odom-quality-readout">No odometry received</p>
             </article>
           </aside>
