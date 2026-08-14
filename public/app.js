@@ -17,6 +17,9 @@ const gyroPreviewState = document.querySelector('#gyro-preview-state');
 const gyroRoll = document.querySelector('#gyro-roll');
 const gyroPitch = document.querySelector('#gyro-pitch');
 const gyroYaw = document.querySelector('#gyro-yaw');
+const rawAccelX = document.querySelector('#raw-accel-x');
+const rawAccelY = document.querySelector('#raw-accel-y');
+const rawAccelZ = document.querySelector('#raw-accel-z');
 const odomCanvas = document.querySelector('#odom-3d-canvas');
 const odomContext = odomCanvas ? odomCanvas.getContext('2d') : null;
 const odomScale = document.querySelector('#odom-scale');
@@ -64,6 +67,7 @@ let imageTopics = {
   cameraInfo: '/camera/depth/camera_info',
   thermal: '/thermal/image_raw',
   imu: '/imu/data_calibrated',
+  rawImu: '/imu/data_raw',
   odom: '/odom',
   odomCalibrated: '/odom/calibrated',
 };
@@ -221,7 +225,7 @@ function connectRosbridge() {
       ? `Waiting for thermal crop: ${imageTopics.color}`
       : `Waiting for depth frames: ${imageTopics.color}`;
     subscribeImageTopic(imageTopics.color);
-    subscribeImuTopic();
+    subscribeImuTopics();
     subscribeOdomTopics();
     if (frontendMode !== 'simple') subscribeCameraInfo();
   };
@@ -248,6 +252,7 @@ function connectRosbridge() {
     }
 
     if (message.topic === imageTopics.imu) updateImu(message.msg);
+    if (message.topic === imageTopics.rawImu) updateRawAcceleration(message.msg);
     if (message.topic === imageTopics.odom) updateOdometry(message.msg);
     if (message.topic === imageTopics.odomCalibrated) {
       odomCalibrated = message.msg && message.msg.data === true;
@@ -271,9 +276,15 @@ function subscribeCameraInfo() {
   if (imageTopics.cameraInfo) subscribeRosTopic(imageTopics.cameraInfo, 'sensor_msgs/msg/CameraInfo');
 }
 
-function subscribeImuTopic() {
+function subscribeImuTopics() {
   if (imageTopics.imu) {
     subscribeRosTopic(imageTopics.imu, 'sensor_msgs/msg/Imu', {
+      throttle_rate: frontendMode === 'simple' ? 100 : 50,
+      queue_length: 1,
+    });
+  }
+  if (imageTopics.rawImu && imageTopics.rawImu !== imageTopics.imu) {
+    subscribeRosTopic(imageTopics.rawImu, 'sensor_msgs/msg/Imu', {
       throttle_rate: frontendMode === 'simple' ? 100 : 50,
       queue_length: 1,
     });
@@ -398,6 +409,18 @@ function updateImu(message) {
     : 'accel unavailable';
   imuStatus = `${gyroText} | ${accelerationText}`;
   renderImuStatus();
+}
+
+function updateRawAcceleration(message) {
+  const acceleration = message && message.linear_acceleration;
+  if (rawAccelX) rawAccelX.textContent = formatRawAcceleration(acceleration && acceleration.x);
+  if (rawAccelY) rawAccelY.textContent = formatRawAcceleration(acceleration && acceleration.y);
+  if (rawAccelZ) rawAccelZ.textContent = formatRawAcceleration(acceleration && acceleration.z);
+}
+
+function formatRawAcceleration(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(3) : '--';
 }
 
 function formatImuValue(value) {
@@ -1105,6 +1128,9 @@ function resetTelemetryPreviews() {
   if (gyroRoll) gyroRoll.textContent = '--';
   if (gyroPitch) gyroPitch.textContent = '--';
   if (gyroYaw) gyroYaw.textContent = '--';
+  if (rawAccelX) rawAccelX.textContent = '--';
+  if (rawAccelY) rawAccelY.textContent = '--';
+  if (rawAccelZ) rawAccelZ.textContent = '--';
   if (odomX) odomX.textContent = '--';
   if (odomY) odomY.textContent = '--';
   if (odomZ) odomZ.textContent = '--';
@@ -1559,6 +1585,7 @@ function applyStreamConfig(stream) {
     cameraInfo: stream.cameraInfoTopic || imageTopics.cameraInfo,
     thermal: stream.thermalTopic || imageTopics.thermal,
     imu: stream.imuTopic || imageTopics.imu,
+    rawImu: stream.rawImuTopic || imageTopics.rawImu,
     odom: stream.odomTopic || imageTopics.odom,
     odomCalibrated: stream.odomCalibratedTopic || imageTopics.odomCalibrated,
   };
@@ -1566,6 +1593,7 @@ function applyStreamConfig(stream) {
     || nextTopics.cameraInfo !== imageTopics.cameraInfo
     || nextTopics.thermal !== imageTopics.thermal
     || nextTopics.imu !== imageTopics.imu
+    || nextTopics.rawImu !== imageTopics.rawImu
     || nextTopics.odom !== imageTopics.odom
     || nextTopics.odomCalibrated !== imageTopics.odomCalibrated;
   if (topicsChanged) cameraInfoFov = null;

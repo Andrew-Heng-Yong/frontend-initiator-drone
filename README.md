@@ -99,7 +99,8 @@ override only and takes effect on restart.
 The main web viewer has two live cards beside the depth/thermal display. **Gyro navball** turns
 `/imu/data_calibrated` orientation into a circular cyan-sky/orange-ground attitude ball with
 spherical degree markings and a fixed gold/cyan vessel reticle. Roll, pitch, and yaw rotate the
-ball itself; there are no separate heading or speed panels.
+ball itself; there are no separate heading or speed panels. The card also subscribes directly to
+`/imu/data_raw` and displays the unmodified X/Y/Z accelerometer samples in `m/s²`.
 **Odometry** subscribes to `/odom` and `/odom/calibrated`, draws an isometric XYZ trail, and rotates
 a forward vector from the full pose quaternion to show where the robot's body +X axis faces. It
 also shows pose, received rate, message age, calibration/tracking state, position variance, and

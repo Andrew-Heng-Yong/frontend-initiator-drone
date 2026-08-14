@@ -46,6 +46,7 @@ camera_streams:
     raw_depth_camera_info_topic: /camera/depth/camera_info
     raw_thermal_image_topic: /thermal/image_raw
     imu_topic: /imu/data_calibrated
+    raw_imu_topic: /imu/data_raw
     odom_topic: /odom
     odom_calibrated_topic: /odom/calibrated
     imu_temperature_topic: /imu/temperature

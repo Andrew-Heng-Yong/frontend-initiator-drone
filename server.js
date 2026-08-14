@@ -46,6 +46,7 @@ const STREAM_CONFIG = {
   rawCameraInfoTopic: process.env.RAW_DEPTH_CAMERA_INFO_TOPIC || process.env.DEPTH_CAMERA_INFO_TOPIC || STREAM_PARAMS.raw_depth_camera_info_topic || '/camera/depth/camera_info',
   rawThermalTopic: process.env.RAW_THERMAL_IMAGE_TOPIC || process.env.THERMAL_IMAGE_TOPIC || STREAM_PARAMS.raw_thermal_image_topic || '/thermal/image_raw',
   imuTopic: process.env.IMU_TOPIC || STREAM_PARAMS.imu_topic || '/imu/data_calibrated',
+  rawImuTopic: process.env.RAW_IMU_TOPIC || STREAM_PARAMS.raw_imu_topic || '/imu/data_raw',
   odomTopic: process.env.ODOM_TOPIC || STREAM_PARAMS.odom_topic || '/odom',
   odomCalibratedTopic: process.env.ODOM_CALIBRATED_TOPIC || STREAM_PARAMS.odom_calibrated_topic || '/odom/calibrated',
   baseViewMode: process.env.BASE_VIEW_MODE || STREAM_PARAMS.base_view_mode || 'full-depth',
@@ -836,7 +837,7 @@ function startLaunch() {
   addLog(`Params: master=${MASTER_PARAMS_FILE}; camera_calibrations=${CAMERA_CALIBRATIONS_PARAMS_FILE}`);
   addLog(`Frontend mode: ${STREAM_CONFIG.frontendMode}`);
   const stream = activeStreamConfig();
-  addLog(`Stream topics: base=${stream.colorTopic}; thermal=${stream.thermalTopic}; imu=${stream.imuTopic}; odom=${stream.odomTopic}`);
+  addLog(`Stream topics: base=${stream.colorTopic}; thermal=${stream.thermalTopic}; imu=${stream.imuTopic}; raw_imu=${stream.rawImuTopic}; odom=${stream.odomTopic}`);
   addLog(`Base view mode: ${STREAM_CONFIG.baseViewMode}`);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));
