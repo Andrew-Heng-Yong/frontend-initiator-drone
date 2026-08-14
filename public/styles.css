@@ -37,15 +37,20 @@ button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; f
 .pitch-line { position: absolute; left: 38%; width: 24%; height: 1px; background: rgba(255,255,255,.85); transform: translateY(-50%); }
 .pitch-line b { position: absolute; right: calc(100% + .3rem); top: -.35rem; color: rgba(255,255,255,.8); font: 700 .5rem/1 ui-monospace, Consolas, monospace; }
 .pitch-up-30 { top: 38%; }.pitch-up-15 { top: 44%; width: 16%; left: 42%; }.pitch-zero { top: 50%; left: 31%; width: 38%; height: 2px; }.pitch-down-15 { top: 56%; width: 16%; left: 42%; }.pitch-down-30 { top: 62%; }
-.heading-display { position: absolute; z-index: 6; top: 0; right: 0; left: 0; height: 2.25rem; overflow: hidden; background: linear-gradient(to bottom, rgba(4,13,24,.78), rgba(4,13,24,.18) 72%, transparent); text-shadow: 0 1px 2px #000; }
+.heading-display { position: absolute; z-index: 6; right: 0; bottom: 0; left: 0; height: 2.15rem; overflow: hidden; background: linear-gradient(to top, rgba(4,13,24,.84), rgba(4,13,24,.22) 76%, transparent); text-shadow: 0 1px 2px #000; }
 .heading-tape { position: absolute; inset: 0; overflow: hidden; }
-.heading-tick { position: absolute; top: .24rem; width: 1.8rem; transform: translateX(-50%); color: #d3e3f1; font: 800 .47rem/1 ui-monospace, Consolas, monospace; text-align: center; white-space: nowrap; }
-.heading-tick::after { content: ""; display: block; width: 1px; height: .28rem; margin: .17rem auto 0; background: rgba(224,239,250,.78); }
-.heading-tick.labeled::after { height: .43rem; background: #edf7ff; }
+.heading-tick { position: absolute; top: .32rem; width: 1.8rem; transform: translateX(-50%); color: #d3e3f1; font: 800 .47rem/1 ui-monospace, Consolas, monospace; text-align: center; white-space: nowrap; }
+.heading-tick::before { content: ""; display: block; width: 1px; height: .28rem; margin: 0 auto .17rem; background: rgba(224,239,250,.78); }
+.heading-tick.labeled::before { height: .43rem; background: #edf7ff; }
 .heading-tick.major { color: #fff; font-size: .56rem; font-weight: 950; }
-.heading-tick.major::after { width: 2px; height: .55rem; background: #fff; }
-.heading-value { position: absolute; z-index: 2; top: .1rem; left: 50%; min-width: 2.55rem; transform: translateX(-50%); border: 1px solid #edf7ff; border-radius: .15rem; background: rgba(3,10,18,.94); color: #fff; padding: .14rem .3rem; font: 950 .62rem/1 ui-monospace, Consolas, monospace; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.55); }
-.heading-value::after { content: ""; position: absolute; top: calc(100% + 1px); left: 50%; width: 0; height: 0; transform: translateX(-50%); border-top: .34rem solid #edf7ff; border-right: .24rem solid transparent; border-left: .24rem solid transparent; }
+.heading-tick.major::before { width: 2px; height: .55rem; background: #fff; }
+.heading-value { position: absolute; z-index: 2; bottom: .08rem; left: 50%; min-width: 2.55rem; transform: translateX(-50%); border: 1px solid #edf7ff; border-radius: .15rem; background: rgba(3,10,18,.94); color: #fff; padding: .14rem .3rem; font: 950 .62rem/1 ui-monospace, Consolas, monospace; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.55); }
+.heading-value::before { content: ""; position: absolute; bottom: calc(100% + 1px); left: 50%; width: 0; height: 0; transform: translateX(-50%); border-top: .34rem solid #edf7ff; border-right: .24rem solid transparent; border-left: .24rem solid transparent; }
+.roll-angle-scale { position: absolute; z-index: 5; top: .05rem; left: 50%; width: 76%; overflow: visible; transform: translateX(-50%); filter: drop-shadow(0 1px 2px rgba(0,0,0,.8)); }
+.roll-scale-arc, .roll-scale-ticks path { fill: none; stroke: rgba(247,251,255,.92); stroke-linecap: square; }
+.roll-scale-arc { stroke-width: 1; stroke-dasharray: 1.2 4; }
+.roll-scale-ticks path { stroke-width: 2; }
+.roll-scale-pointer path { fill: #f59e0b; stroke: #02060b; stroke-width: 2; stroke-linejoin: round; }
 .horizon-aircraft-reference { position: absolute; z-index: 6; top: 50%; left: 50%; width: 76%; overflow: visible; transform: translate(-50%, -50%); filter: drop-shadow(0 1px 1px rgba(0,0,0,.65)); }
 .aircraft-reference-shadow path, .aircraft-reference-shadow rect { fill: none; stroke: #02060b; stroke-width: 7; stroke-linecap: square; stroke-linejoin: miter; }
 .aircraft-reference-outline path, .aircraft-reference-outline rect { fill: none; stroke: #f7fbff; stroke-width: 3; stroke-linecap: square; stroke-linejoin: miter; }

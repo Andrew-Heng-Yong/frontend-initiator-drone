@@ -15,6 +15,7 @@ const gyroHorizon = document.querySelector('#gyro-horizon');
 const horizonWorld = document.querySelector('#horizon-world');
 const gyroHeadingTape = document.querySelector('#gyro-heading-tape');
 const gyroHeadingValue = document.querySelector('#gyro-heading-value');
+const gyroRollPointer = document.querySelector('#gyro-roll-pointer');
 const gyroPreviewState = document.querySelector('#gyro-preview-state');
 const gyroRoll = document.querySelector('#gyro-roll');
 const gyroPitch = document.querySelector('#gyro-pitch');
@@ -532,6 +533,7 @@ function renderGyroPreview() {
     if (gyroRoll) gyroRoll.textContent = '--';
     if (gyroPitch) gyroPitch.textContent = '--';
     if (gyroYaw) gyroYaw.textContent = '--';
+    if (gyroRollPointer) gyroRollPointer.removeAttribute('transform');
     renderHeadingTape(null);
     if (gyroHorizon) gyroHorizon.setAttribute('aria-label', 'Artificial horizon has no valid IMU orientation');
     return;
@@ -543,6 +545,10 @@ function renderGyroPreview() {
   if (gyroPitch) gyroPitch.textContent = formatPreviewAngle(latestGyroEuler.pitch);
   if (gyroYaw) gyroYaw.textContent = formatPreviewAngle(latestGyroEuler.yaw);
   renderHeadingTape(latestGyroEuler.yaw);
+  if (gyroRollPointer) {
+    const displayedRoll = Math.max(-60, Math.min(60, latestGyroEuler.roll));
+    gyroRollPointer.setAttribute('transform', `rotate(${displayedRoll.toFixed(2)} 90 70)`);
+  }
   if (horizonWorld && gyroHorizon) {
     const displayedPitch = Math.max(-45, Math.min(45, latestGyroEuler.pitch));
     const pitchOffset = displayedPitch * gyroHorizon.clientHeight / 90;
