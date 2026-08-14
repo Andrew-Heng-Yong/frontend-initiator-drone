@@ -487,6 +487,38 @@ function navballHeadingLabel(value) {
     : String(value).padStart(3, '0');
 }
 
+function projectNavballPoint(latitude, heading, pitch, yaw, radius) {
+  const latitudeRadians = latitude * Math.PI / 180;
+  const longitudeRadians = signedHeadingDifference(heading, yaw) * Math.PI / 180;
+  const pitchRadians = pitch * Math.PI / 180;
+  const cosLatitude = Math.cos(latitudeRadians);
+  const sinLatitude = Math.sin(latitudeRadians);
+  const cosLongitude = Math.cos(longitudeRadians);
+  const x = cosLatitude * Math.sin(longitudeRadians);
+  const up = sinLatitude * Math.cos(pitchRadians) -
+    cosLatitude * cosLongitude * Math.sin(pitchRadians);
+  const depth = cosLatitude * cosLongitude * Math.cos(pitchRadians) +
+    sinLatitude * Math.sin(pitchRadians);
+  if (depth <= 0.002) return null;
+  return { x: x * radius, y: -up * radius, depth };
+}
+
+function strokeNavballCurve(context, start, end, step, projectPoint) {
+  context.beginPath();
+  let penDown = false;
+  for (let value = start; value <= end + step * .5; value += step) {
+    const point = projectPoint(value);
+    if (!point) {
+      penDown = false;
+      continue;
+    }
+    if (penDown) context.lineTo(point.x, point.y);
+    else context.moveTo(point.x, point.y);
+    penDown = true;
+  }
+  context.stroke();
+}
+
 function drawNavball(euler) {
   if (!gyroNavball || !gyroNavballContext) return;
   const context = gyroNavballContext;
@@ -530,80 +562,86 @@ function drawNavball(euler) {
   context.clip();
   context.translate(center, center);
   context.rotate(rollRadians);
-  const pitchOffset = pitch * ballRadius / 90;
-  context.translate(0, pitchOffset);
 
+  // Paint the visible sphere hemispheres. The projected equator bows toward the rim as pitch
+  // changes instead of sliding like a flat artificial horizon.
   context.fillStyle = '#159fc3';
-  context.fillRect(-ballRadius * 3, -ballRadius * 3, ballRadius * 6, ballRadius * 3);
-  context.fillStyle = '#a85218';
-  context.fillRect(-ballRadius * 3, 0, ballRadius * 6, ballRadius * 3);
-
-  const sectorWidth = ballRadius * 0.88;
-  const sectorOffset = -(yaw % 90) * sectorWidth / 90;
-  for (let index = -4; index <= 4; index += 1) {
-    if (Math.abs(index) % 2 !== 0) continue;
-    const x = sectorOffset + index * sectorWidth;
-    context.fillStyle = 'rgba(1, 69, 91, .19)';
-    context.fillRect(x, -ballRadius * 3, sectorWidth, ballRadius * 3);
-    context.fillStyle = 'rgba(91, 31, 6, .2)';
-    context.fillRect(x, 0, sectorWidth, ballRadius * 3);
+  context.fillRect(-ballRadius, -ballRadius, ballRadius * 2, ballRadius * 2);
+  const pitchRadians = pitch * Math.PI / 180;
+  context.beginPath();
+  for (let relativeHeading = -90; relativeHeading <= 90; relativeHeading += 2) {
+    const longitudeRadians = relativeHeading * Math.PI / 180;
+    const x = Math.sin(longitudeRadians) * ballRadius;
+    const y = Math.cos(longitudeRadians) * Math.sin(pitchRadians) * ballRadius;
+    if (relativeHeading === -90) context.moveTo(x, y);
+    else context.lineTo(x, y);
   }
+  context.arc(0, 0, ballRadius, 0, Math.PI);
+  context.closePath();
+  context.fillStyle = '#a85218';
+  context.fill();
 
   context.font = '800 12px ui-monospace, Consolas, monospace';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
+
+  // Longitude lines are great-circle arcs. They converge at the poles and disappear when they
+  // rotate behind the visible hemisphere.
   for (let heading = 0; heading < 360; heading += 15) {
-    const relativeHeading = signedHeadingDifference(heading, yaw);
-    if (Math.abs(relativeHeading) > 92) continue;
-    const relativeRadians = relativeHeading * Math.PI / 180;
-    const x = Math.sin(relativeRadians) * ballRadius;
-    context.beginPath();
-    context.moveTo(x * .7, -ballRadius * 2.4);
-    context.quadraticCurveTo(x * 1.12, 0, x * .7, ballRadius * 2.4);
     context.setLineDash(heading % 30 === 0 ? [8, 8] : [3, 11]);
     context.lineWidth = heading % 30 === 0 ? 1.6 : 1;
     context.strokeStyle = heading % 90 === 0 ? 'rgba(246, 238, 207, .9)' :
       'rgba(218, 238, 229, .62)';
-    context.stroke();
+    strokeNavballCurve(
+      context, -90, 90, 2,
+      (latitude) => projectNavballPoint(latitude, heading, pitch, yaw, ballRadius),
+    );
     if (heading % 30 === 0) {
+      const labelPoint = projectNavballPoint(0, heading, pitch, yaw, ballRadius);
+      if (!labelPoint || labelPoint.depth < .08) continue;
       context.setLineDash([]);
       context.fillStyle = '#f4ecd0';
-      context.fillText(navballHeadingLabel(heading), x, -13);
+      context.fillText(navballHeadingLabel(heading), labelPoint.x, labelPoint.y - 12);
     }
   }
 
-  const pitchScale = ballRadius / 90;
+  // Latitude rings use the same projection, producing the compressed ellipse effect near the
+  // sphere edge instead of a stack of flat horizontal bars.
   context.setLineDash([]);
-  for (let angle = -85; angle <= 85; angle += 5) {
-    if (angle === 0) continue;
-    const y = -angle * pitchScale;
-    const minor = Math.abs(angle) % 10 !== 0;
-    const halfWidth = minor ? 25 : (Math.abs(angle) % 30 === 0 ? 79 : 58);
-    const centerGap = minor ? 14 : 23;
-    context.beginPath();
-    context.moveTo(-halfWidth, y);
-    context.lineTo(-centerGap, y);
-    context.moveTo(centerGap, y);
-    context.lineTo(halfWidth, y);
-    context.lineWidth = minor ? 1.2 : 2.2;
-    context.strokeStyle = minor ? 'rgba(246, 238, 207, .6)' : '#f4ecd0';
-    context.stroke();
-    if (!minor) {
-      context.fillStyle = '#f4ecd0';
-      context.fillText(String(Math.abs(angle)), -halfWidth - 18, y);
-      context.fillText(String(Math.abs(angle)), halfWidth + 18, y);
+  for (let latitude = -80; latitude <= 80; latitude += 10) {
+    if (latitude === 0) continue;
+    context.setLineDash(Math.abs(latitude) % 30 === 0 ? [] : [7, 7]);
+    context.lineWidth = Math.abs(latitude) % 30 === 0 ? 2 : 1.35;
+    context.strokeStyle = Math.abs(latitude) % 30 === 0 ? '#f4ecd0' :
+      'rgba(246, 238, 207, .72)';
+    strokeNavballCurve(
+      context, yaw - 180, yaw + 180, 2,
+      (heading) => projectNavballPoint(latitude, heading, pitch, yaw, ballRadius),
+    );
+    const leftLabel = projectNavballPoint(latitude, yaw - 24, pitch, yaw, ballRadius);
+    const rightLabel = projectNavballPoint(latitude, yaw + 24, pitch, yaw, ballRadius);
+    context.fillStyle = '#f4ecd0';
+    if (leftLabel && leftLabel.depth > .16) {
+      context.fillText(String(Math.abs(latitude)), leftLabel.x, leftLabel.y);
+    }
+    if (rightLabel && rightLabel.depth > .16) {
+      context.fillText(String(Math.abs(latitude)), rightLabel.x, rightLabel.y);
     }
   }
 
-  context.beginPath();
-  context.moveTo(-ballRadius * 2, 0);
-  context.lineTo(ballRadius * 2, 0);
+  context.setLineDash([]);
   context.lineWidth = 7;
   context.strokeStyle = '#47260b';
-  context.stroke();
+  strokeNavballCurve(
+    context, yaw - 90, yaw + 90, 1,
+    (heading) => projectNavballPoint(0, heading, pitch, yaw, ballRadius),
+  );
   context.lineWidth = 3.5;
   context.strokeStyle = '#f0bd1c';
-  context.stroke();
+  strokeNavballCurve(
+    context, yaw - 90, yaw + 90, 1,
+    (heading) => projectNavballPoint(0, heading, pitch, yaw, ballRadius),
+  );
   context.restore();
 
   context.save();
