@@ -480,9 +480,9 @@ function normalizedHeading(value) {
 
 function headingTickLabel(value) {
   const heading = normalizedHeading(value);
-  const cardinalLabels = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-  if (heading % 45 === 0) return cardinalLabels[(heading / 45) % cardinalLabels.length];
-  return String(heading).padStart(3, '0');
+  const cardinalLabels = ['N', 'E', 'S', 'W'];
+  if (heading % 90 === 0) return cardinalLabels[(heading / 90) % cardinalLabels.length];
+  return heading % 10 === 0 ? String(heading).padStart(3, '0') : '';
 }
 
 function renderHeadingTape(yaw) {
@@ -494,20 +494,22 @@ function renderHeadingTape(yaw) {
   }
 
   const heading = normalizedHeading(yaw);
-  const tickInterval = 15;
+  const tickInterval = 5;
   const nearestTick = Math.round(heading / tickInterval) * tickInterval;
   const fractionalOffset = (heading - nearestTick) / tickInterval;
   const fragment = document.createDocumentFragment();
-  for (let index = -4; index <= 4; index += 1) {
+  for (let index = -10; index <= 10; index += 1) {
     const tickHeading = normalizedHeading(nearestTick + index * tickInterval);
     const tick = document.createElement('span');
-    tick.className = `heading-tick${tickHeading % 45 === 0 ? ' major' : ''}`;
-    tick.style.left = `${50 + (index - fractionalOffset) * 15}%`;
+    const labeledClass = tickHeading % 10 === 0 ? ' labeled' : '';
+    const majorClass = tickHeading % 90 === 0 ? ' major' : '';
+    tick.className = `heading-tick${labeledClass}${majorClass}`;
+    tick.style.left = `${50 + (index - fractionalOffset) * 7}%`;
     tick.textContent = headingTickLabel(tickHeading);
     fragment.appendChild(tick);
   }
   gyroHeadingTape.replaceChildren(fragment);
-  gyroHeadingValue.textContent = `${String(Math.round(heading) % 360).padStart(3, '0')}°`;
+  gyroHeadingValue.textContent = String(Math.round(heading) % 360).padStart(3, '0');
 }
 
 function updateGyroPreview(message) {
