@@ -132,9 +132,15 @@ public enum RosbridgeIncoming: Equatable, Sendable {
 }
 
 /// The topics this app subscribes to, with the settings each one needs.
+///
+/// Depth comes straight from the camera driver, not from the thermal cropper's
+/// `cropped` republished topics. The app never wanted the thermal image itself,
+/// but subscribing to the cropped depth still put the thermal sensor in the
+/// path: no hot region meant no depth frame, and the crop moved the window
+/// around under whatever the thermal camera happened to see.
 public enum RobotTopic: String, CaseIterable, Identifiable, Sendable {
-    case depthImage = "/camera/depth/cropped/image_raw"
-    case depthCameraInfo = "/camera/depth/cropped/camera_info"
+    case depthImage = "/camera/depth/image_raw"
+    case depthCameraInfo = "/camera/depth/camera_info"
     case odometry = "/odom"
     case odomCalibrated = "/odom/calibrated"
     case imu = "/imu/data_calibrated"
@@ -174,8 +180,8 @@ public enum RobotTopic: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// The depth topic is throttled hard by default. The phone cannot usefully
-    /// display more than ~15 fps of a cropped depth frame, and anything the
-    /// robot does not send is bandwidth and memory the app never has to manage.
+    /// display more than ~15 fps of a depth frame, and anything the robot does
+    /// not send is bandwidth and memory the app never has to manage.
     public var defaultThrottleMilliseconds: Int {
         switch self {
         case .depthImage: return 66                     // ~15 Hz ceiling

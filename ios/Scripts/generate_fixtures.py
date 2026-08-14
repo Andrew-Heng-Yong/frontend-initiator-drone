@@ -59,7 +59,7 @@ for big_endian, name in ((False, "depth_16uc1.json"), (True, "depth_16uc1_bigend
     write(
         name,
         publish(
-            "/camera/depth/cropped/image_raw",
+            "/camera/depth/image_raw",
             {
                 "header": header(1717430000, 250000000, "camera_depth_optical_frame"),
                 "height": len(DEPTH_MM),
@@ -82,7 +82,7 @@ for row in DEPTH_M:
 write(
     "depth_32fc1.json",
     publish(
-        "/camera/depth/cropped/image_raw",
+        "/camera/depth/image_raw",
         {
             "header": header(1717430001, 0, "camera_depth_optical_frame"),
             "height": 2,
@@ -101,7 +101,7 @@ RGB = bytes([255, 0, 0, 0, 255, 0]) + b"\x99\x99"
 write(
     "color_rgb8.json",
     publish(
-        "/camera/depth/cropped/image_raw",
+        "/camera/depth/image_raw",
         {
             "header": header(1717430003, 0, "camera_color_optical_frame"),
             "height": 1,
@@ -119,7 +119,7 @@ BGR = bytes([0, 0, 255, 0, 255, 0])
 write(
     "color_bgr8.json",
     publish(
-        "/camera/depth/cropped/image_raw",
+        "/camera/depth/image_raw",
         {
             "header": header(1717430003, 0, "camera_color_optical_frame"),
             "height": 1,
@@ -136,7 +136,7 @@ write(
 write(
     "camera_info.json",
     publish(
-        "/camera/depth/cropped/camera_info",
+        "/camera/depth/camera_info",
         {
             "header": header(1717430000, 250000000, "camera_depth_optical_frame"),
             "height": 360,

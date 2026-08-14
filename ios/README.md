@@ -1,7 +1,7 @@
 # Initiator — iPhone / iPad app
 
 A native SwiftUI + ARKit app for watching the Initiator drone from a phone: the
-robot's cropped depth stream, its odometry node status and pose, and a marker
+robot's depth stream, its odometry node status and pose, and a marker
 drawn
 into the live camera view where the robot actually is in the room.
 
@@ -194,8 +194,8 @@ Subscriptions:
 
 | Topic | Type |
 | --- | --- |
-| `/camera/depth/cropped/image_raw` | `sensor_msgs/msg/Image` |
-| `/camera/depth/cropped/camera_info` | `sensor_msgs/msg/CameraInfo` |
+| `/camera/depth/image_raw` | `sensor_msgs/msg/Image` |
+| `/camera/depth/camera_info` | `sensor_msgs/msg/CameraInfo` |
 | `/odom` | `nav_msgs/msg/Odometry` |
 | `/odom/calibrated` | `std_msgs/msg/Bool` |
 | `/imu/data_calibrated` | `sensor_msgs/msg/Imu` |
@@ -205,26 +205,23 @@ Dashboard API: `GET /api/state`, `POST /api/start`, `POST /api/stop`,
 phone updated ahead of the robot's dashboard still works).
 
 All of these exist on this branch. `server.js` implements the four endpoints,
-and `drone_launch.py` starts `odom_node`, the Orbbec depth camera, the thermal
-cropper that produces the `cropped` topics, and `rosbridge_websocket` on 9090.
-Bring them all up with:
+and `drone_launch.py` starts `odom_node`, the Orbbec depth camera, and
+`rosbridge_websocket` on 9090. Bring them all up with:
 
 ```bash
 ros2 launch drone_control drone_launch.py \
   start_rosbridge:=true start_depth_camera:=true start_imu:=true \
-  start_odom:=true start_thermal_cropper:=true thermal_cropper_enabled:=true
+  start_odom:=true
 ```
 
 or just press **Start** in the app, which asks the dashboard to run its
-configured launch command.
-
-The cropped depth topics come from the thermal cropper, which uses hot regions
-in the thermal image to decide *where* to crop. The thermal image itself is
-never sent to the phone — the app subscribes to the depth output only.
+configured launch command. That command may still start the thermal cropper for
+the browser dashboard's benefit; the app is unaffected either way, because it
+subscribes to the camera driver's own depth topics.
 
 ## Screens
 
-**Live** — the camera view with the robot drawn into it, plus the cropped depth
+**Live** — the camera view with the robot drawn into it, plus the depth
 stream, Start, Stop, Calibrate, and Align. Status pills across the top cover the
 link, the odometry node, robot tracking, phone AR tracking, and alignment. The
 metric strip shows depth fps, odometry rate, odometry node state, and the
@@ -261,18 +258,22 @@ image throttle, odometry staleness and extrapolation, and AR scene options.
 ## Depth only
 
 Earlier versions of this app offered depth / thermal / blend / picture-in-picture
-view modes. It now shows the cropped depth stream and nothing else: the thermal
+view modes. It now shows the depth stream and nothing else: the thermal
 subscription, the blend slider, the PiP inset, the thermal colour map and the
 `mono16` scale and offset settings are all gone.
 
-That is one subscription removed rather than one view hidden — the app no longer
-asks rosbridge for `/thermal/cropped/image_raw` at all, so the robot never
-serialises or sends those frames. `RosbridgeTests` pins this down: no topic in
-`RobotTopic.allCases` may contain "thermal", and `.depthImage` must be the only
-image topic.
+The thermal camera is out of the app's path entirely. It never asked rosbridge
+for `/thermal/cropped/image_raw`, and it no longer takes the *cropped* depth
+topics either — those are republished by the thermal cropper, so subscribing to
+one made the depth view depend on the thermal sensor finding a hot region, and
+made the visible window jump around with whatever the thermal camera saw. The
+app now takes `/camera/depth/image_raw` straight from the camera driver.
 
-The thermal sensor is still doing its job on the robot. It drives the cropper,
-which is what makes the depth frames the app receives small and targeted.
+`RosbridgeTests` pins this down: no topic in `RobotTopic.allCases` may contain
+"thermal" or "cropped", and `.depthImage` must be the only image topic.
+
+Frames are correspondingly larger than a crop, which is what the throttle and
+the `queue_length: 1` backlog controls are for.
 
 ## What odom_node can and cannot tell you
 

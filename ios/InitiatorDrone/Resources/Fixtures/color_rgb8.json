@@ -1,6 +1,6 @@
 {
   "op": "publish",
-  "topic": "/camera/depth/cropped/image_raw",
+  "topic": "/camera/depth/image_raw",
   "msg": {
     "header": {
       "stamp": {

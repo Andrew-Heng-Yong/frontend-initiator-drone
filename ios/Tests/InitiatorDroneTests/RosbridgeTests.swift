@@ -213,7 +213,7 @@ final class RosbridgeTests: XCTestCase {
 
     func testSubscribeCommandCarriesTheBacklogControls() throws {
         let command = RosbridgeCommand.subscribe(.init(
-            topic: "/camera/depth/cropped/image_raw",
+            topic: "/camera/depth/image_raw",
             messageType: "sensor_msgs/msg/Image",
             id: "sub-1",
             throttleMilliseconds: 66,
@@ -223,7 +223,7 @@ final class RosbridgeTests: XCTestCase {
         let payload = command.payload
 
         XCTAssertEqual(payload["op"] as? String, "subscribe")
-        XCTAssertEqual(payload["topic"] as? String, "/camera/depth/cropped/image_raw")
+        XCTAssertEqual(payload["topic"] as? String, "/camera/depth/image_raw")
         XCTAssertEqual(payload["type"] as? String, "sensor_msgs/msg/Image")
         XCTAssertEqual(payload["throttle_rate"] as? Int, 66)
         // queue_length 1 is what stops rosbridge itself from queueing frames.
@@ -259,8 +259,14 @@ final class RosbridgeTests: XCTestCase {
 
     /// The app is depth-only: subscribing to a thermal topic would cost
     /// bandwidth on the robot for a stream nothing renders.
+    ///
+    /// The `cropped` topics are barred for the same reason even though their
+    /// names say nothing about thermal: they are republished by the thermal
+    /// cropper, so subscribing to one makes the app's depth view depend on the
+    /// thermal sensor finding a hot region.
     func testNoThermalTopicIsSubscribed() {
         XCTAssertFalse(RobotTopic.allCases.contains { $0.topicName.contains("thermal") })
+        XCTAssertFalse(RobotTopic.allCases.contains { $0.topicName.contains("cropped") })
         XCTAssertEqual(RobotTopic.allCases.filter(\.isImageTopic), [.depthImage])
     }
 

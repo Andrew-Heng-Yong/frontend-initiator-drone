@@ -131,13 +131,16 @@ Use `DRONE_MASTER_PARAMS=/path/to/master_params.yaml` to load a different master
 
 `ios/` holds a native SwiftUI + ARKit app that talks to the same two ports as
 this dashboard: `GET/POST http://<robot-ip>:4173/api/…` for Start, Stop and
-Calibrate, and `ws://<robot-ip>:9090` for the streams. It shows the cropped
-depth image, the VIO node status, and a marker drawn into the phone's camera
+Calibrate, and `ws://<robot-ip>:9090` for the streams. It shows the depth
+image, the VIO node status, and a marker drawn into the phone's camera
 view where the robot is in the room. It sends no flight-control commands.
 
-Unlike the browser dashboard it is depth-only — it never subscribes to
-`/thermal/cropped/image_raw`, so the thermal sensor's role is limited to driving
-the cropper that decides which part of the depth frame is worth sending.
+Unlike the browser dashboard the app has no thermal camera in its path at all.
+It subscribes to `/camera/depth/image_raw` and `/camera/depth/camera_info`
+straight from the camera driver — not to `/thermal/cropped/image_raw`, and not
+to the `cropped` depth topics either, since those are republished by the thermal
+cropper and would make the app's depth view depend on the thermal sensor finding
+a hot region.
 
 See `ios/README.md` for building, signing and installing it, and for the topic
 and endpoint contract it expects.
