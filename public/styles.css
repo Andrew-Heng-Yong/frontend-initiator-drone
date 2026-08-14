@@ -38,9 +38,14 @@ button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; f
 .pitch-line b { position: absolute; right: calc(100% + .3rem); top: -.35rem; color: rgba(255,255,255,.8); font: 700 .5rem/1 ui-monospace, Consolas, monospace; }
 .pitch-up-30 { top: 38%; }.pitch-up-15 { top: 44%; width: 16%; left: 42%; }.pitch-zero { top: 50%; left: 31%; width: 38%; height: 2px; }.pitch-down-15 { top: 56%; width: 16%; left: 42%; }.pitch-down-30 { top: 62%; }
 .roll-pointer { position: absolute; z-index: 5; left: 50%; top: .28rem; width: 0; height: 0; transform: translateX(-50%); border-left: .32rem solid transparent; border-right: .32rem solid transparent; border-top: .48rem solid #f9ce62; }
-.aircraft-symbol { position: absolute; z-index: 5; left: 50%; top: 50%; width: 58%; display: grid; grid-template-columns: 1fr .85rem 1fr; align-items: center; gap: .1rem; transform: translate(-50%, -50%); }
-.aircraft-symbol span { height: .18rem; background: #f9ce62; box-shadow: 0 1px 1px rgba(0,0,0,.8); }.aircraft-symbol span:first-child { transform: rotate(8deg); transform-origin: right; }.aircraft-symbol span:last-child { transform: rotate(-8deg); transform-origin: left; }
-.aircraft-symbol i { width: .72rem; height: .45rem; border: .16rem solid #f9ce62; border-top: 0; border-radius: 0 0 .35rem .35rem; }
+.heading-display { position: absolute; z-index: 6; right: 0; bottom: 0; left: 0; height: 2rem; overflow: hidden; border-top: 1px solid rgba(174,205,232,.42); background: linear-gradient(to bottom, rgba(4,13,24,.6), rgba(4,13,24,.94)); box-shadow: 0 -.3rem .8rem rgba(0,0,0,.22); }
+.heading-tape { position: absolute; inset: 0; overflow: hidden; }
+.heading-tick { position: absolute; top: .25rem; width: 2.2rem; transform: translateX(-50%); color: #afc4db; font: 750 .5rem/1 ui-monospace, Consolas, monospace; text-align: center; white-space: nowrap; }
+.heading-tick::before { content: ""; display: block; width: 1px; height: .28rem; margin: 0 auto .18rem; background: rgba(202,222,240,.72); }
+.heading-tick.major { color: #edf7ff; font-size: .58rem; font-weight: 900; }
+.heading-tick.major::before { height: .42rem; margin-bottom: .08rem; background: #edf7ff; }
+.heading-value { position: absolute; z-index: 2; left: 50%; bottom: .12rem; min-width: 2.65rem; transform: translateX(-50%); border: 1px solid #f9ce62; border-radius: .2rem; background: #071322; color: #fff3c4; padding: .14rem .28rem; font: 900 .58rem/1 ui-monospace, Consolas, monospace; text-align: center; }
+.heading-value::before { content: ""; position: absolute; left: 50%; bottom: calc(100% + 1px); width: 0; height: 0; transform: translateX(-50%); border-right: .22rem solid transparent; border-bottom: .3rem solid #f9ce62; border-left: .22rem solid transparent; }
 .preview-values { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; margin-top: .55rem; }
 .preview-values span { min-width: 0; color: #7f93ad; font-size: .58rem; text-transform: uppercase; }
 .preview-values strong { display: block; overflow: hidden; color: #e9f3ff; font: 800 .7rem/1.35 ui-monospace, Consolas, monospace; text-overflow: ellipsis; text-transform: none; }
