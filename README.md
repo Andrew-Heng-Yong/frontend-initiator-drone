@@ -96,10 +96,10 @@ published position covariance to look observed. This makes the iPhone show **Rob
 Tracking** even though translation remains fixed and unmeasured. It is a presentation/quality
 override only and takes effect on restart.
 
-The main web viewer has two live cards beside the depth/thermal display. **Gyro horizon** turns
-`/imu/data_calibrated` orientation into a square artificial horizon with roll and pitch motion, a
-top roll-angle scale, a scrolling bottom-edge compass notch tape, a fixed outlined aircraft
-reference with an orange center dot, and numeric roll, pitch, and yaw readouts.
+The main web viewer has two live cards beside the depth/thermal display. **Gyro navball** turns
+`/imu/data_calibrated` orientation into a circular cyan-sky/orange-ground attitude ball with
+spherical degree markings and a fixed gold/cyan vessel reticle. Roll, pitch, and yaw rotate the
+ball itself; there are no separate heading or speed panels.
 **Odometry** subscribes to `/odom` and `/odom/calibrated`, draws an isometric XYZ trail, and rotates
 a forward vector from the full pose quaternion to show where the robot's body +X axis faces. It
 also shows pose, received rate, message age, calibration/tracking state, position variance, and

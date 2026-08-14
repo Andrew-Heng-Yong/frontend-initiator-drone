@@ -11,11 +11,8 @@ const odomQualityOverrideInput = document.querySelector('#odom-quality-override'
 const odomQualityOverrideLabel = document.querySelector('#odom-quality-override-label');
 const cpuMini = document.querySelector('#cpu-mini');
 const imuMini = document.querySelector('#imu-mini');
-const gyroHorizon = document.querySelector('#gyro-horizon');
-const horizonWorld = document.querySelector('#horizon-world');
-const gyroHeadingTape = document.querySelector('#gyro-heading-tape');
-const gyroHeadingValue = document.querySelector('#gyro-heading-value');
-const gyroRollPointer = document.querySelector('#gyro-roll-pointer');
+const gyroNavball = document.querySelector('#gyro-navball');
+const gyroNavballContext = gyroNavball ? gyroNavball.getContext('2d') : null;
 const gyroPreviewState = document.querySelector('#gyro-preview-state');
 const gyroRoll = document.querySelector('#gyro-roll');
 const gyroPitch = document.querySelector('#gyro-pitch');
@@ -479,38 +476,209 @@ function normalizedHeading(value) {
   return ((value % 360) + 360) % 360;
 }
 
-function headingTickLabel(value) {
-  const heading = normalizedHeading(value);
-  const cardinalLabels = ['N', 'E', 'S', 'W'];
-  if (heading % 90 === 0) return cardinalLabels[(heading / 90) % cardinalLabels.length];
-  return heading % 10 === 0 ? String(heading).padStart(3, '0') : '';
+function signedHeadingDifference(value, reference) {
+  return ((value - reference + 540) % 360) - 180;
 }
 
-function renderHeadingTape(yaw) {
-  if (!gyroHeadingTape || !gyroHeadingValue) return;
-  if (!Number.isFinite(yaw)) {
-    gyroHeadingTape.replaceChildren();
-    gyroHeadingValue.textContent = '---';
-    return;
+function navballHeadingLabel(value) {
+  const cardinalLabels = ['N', 'E', 'S', 'W'];
+  return value % 90 === 0
+    ? cardinalLabels[(value / 90) % cardinalLabels.length]
+    : String(value).padStart(3, '0');
+}
+
+function drawNavball(euler) {
+  if (!gyroNavball || !gyroNavballContext) return;
+  const context = gyroNavballContext;
+  const width = gyroNavball.width;
+  const height = gyroNavball.height;
+  const logicalSize = 480;
+  const scale = Math.min(width, height) / logicalSize;
+  const offsetX = (width - logicalSize * scale) / 2;
+  const offsetY = (height - logicalSize * scale) / 2;
+  const center = logicalSize / 2;
+  const outerRadius = 228;
+  const ballRadius = 207;
+  const hasPose = Boolean(euler);
+  const attitude = euler || { roll: 0, pitch: 0, yaw: 0 };
+  const rollRadians = -attitude.roll * Math.PI / 180;
+  const pitch = Math.max(-90, Math.min(90, attitude.pitch));
+  const yaw = normalizedHeading(attitude.yaw);
+
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.clearRect(0, 0, width, height);
+  context.save();
+  context.translate(offsetX, offsetY);
+  context.scale(scale, scale);
+
+  const rim = context.createRadialGradient(185, 165, 20, center, center, outerRadius);
+  rim.addColorStop(0, '#90999a');
+  rim.addColorStop(0.68, '#50595d');
+  rim.addColorStop(0.9, '#242b2f');
+  rim.addColorStop(1, '#111619');
+  context.beginPath();
+  context.arc(center, center, outerRadius, 0, Math.PI * 2);
+  context.fillStyle = rim;
+  context.fill();
+  context.lineWidth = 6;
+  context.strokeStyle = '#11171a';
+  context.stroke();
+
+  context.save();
+  context.beginPath();
+  context.arc(center, center, ballRadius, 0, Math.PI * 2);
+  context.clip();
+  context.translate(center, center);
+  context.rotate(rollRadians);
+  const pitchOffset = pitch * ballRadius / 90;
+  context.translate(0, pitchOffset);
+
+  context.fillStyle = '#159fc3';
+  context.fillRect(-ballRadius * 3, -ballRadius * 3, ballRadius * 6, ballRadius * 3);
+  context.fillStyle = '#a85218';
+  context.fillRect(-ballRadius * 3, 0, ballRadius * 6, ballRadius * 3);
+
+  const sectorWidth = ballRadius * 0.88;
+  const sectorOffset = -(yaw % 90) * sectorWidth / 90;
+  for (let index = -4; index <= 4; index += 1) {
+    if (Math.abs(index) % 2 !== 0) continue;
+    const x = sectorOffset + index * sectorWidth;
+    context.fillStyle = 'rgba(1, 69, 91, .19)';
+    context.fillRect(x, -ballRadius * 3, sectorWidth, ballRadius * 3);
+    context.fillStyle = 'rgba(91, 31, 6, .2)';
+    context.fillRect(x, 0, sectorWidth, ballRadius * 3);
   }
 
-  const heading = normalizedHeading(yaw);
-  const tickInterval = 5;
-  const nearestTick = Math.round(heading / tickInterval) * tickInterval;
-  const fractionalOffset = (heading - nearestTick) / tickInterval;
-  const fragment = document.createDocumentFragment();
-  for (let index = -10; index <= 10; index += 1) {
-    const tickHeading = normalizedHeading(nearestTick + index * tickInterval);
-    const tick = document.createElement('span');
-    const labeledClass = tickHeading % 10 === 0 ? ' labeled' : '';
-    const majorClass = tickHeading % 90 === 0 ? ' major' : '';
-    tick.className = `heading-tick${labeledClass}${majorClass}`;
-    tick.style.left = `${50 + (index - fractionalOffset) * 7}%`;
-    tick.textContent = headingTickLabel(tickHeading);
-    fragment.appendChild(tick);
+  context.font = '800 12px ui-monospace, Consolas, monospace';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  for (let heading = 0; heading < 360; heading += 15) {
+    const relativeHeading = signedHeadingDifference(heading, yaw);
+    if (Math.abs(relativeHeading) > 92) continue;
+    const relativeRadians = relativeHeading * Math.PI / 180;
+    const x = Math.sin(relativeRadians) * ballRadius;
+    context.beginPath();
+    context.moveTo(x * .7, -ballRadius * 2.4);
+    context.quadraticCurveTo(x * 1.12, 0, x * .7, ballRadius * 2.4);
+    context.setLineDash(heading % 30 === 0 ? [8, 8] : [3, 11]);
+    context.lineWidth = heading % 30 === 0 ? 1.6 : 1;
+    context.strokeStyle = heading % 90 === 0 ? 'rgba(246, 238, 207, .9)' :
+      'rgba(218, 238, 229, .62)';
+    context.stroke();
+    if (heading % 30 === 0) {
+      context.setLineDash([]);
+      context.fillStyle = '#f4ecd0';
+      context.fillText(navballHeadingLabel(heading), x, -13);
+    }
   }
-  gyroHeadingTape.replaceChildren(fragment);
-  gyroHeadingValue.textContent = String(Math.round(heading) % 360).padStart(3, '0');
+
+  const pitchScale = ballRadius / 90;
+  context.setLineDash([]);
+  for (let angle = -85; angle <= 85; angle += 5) {
+    if (angle === 0) continue;
+    const y = -angle * pitchScale;
+    const minor = Math.abs(angle) % 10 !== 0;
+    const halfWidth = minor ? 25 : (Math.abs(angle) % 30 === 0 ? 79 : 58);
+    const centerGap = minor ? 14 : 23;
+    context.beginPath();
+    context.moveTo(-halfWidth, y);
+    context.lineTo(-centerGap, y);
+    context.moveTo(centerGap, y);
+    context.lineTo(halfWidth, y);
+    context.lineWidth = minor ? 1.2 : 2.2;
+    context.strokeStyle = minor ? 'rgba(246, 238, 207, .6)' : '#f4ecd0';
+    context.stroke();
+    if (!minor) {
+      context.fillStyle = '#f4ecd0';
+      context.fillText(String(Math.abs(angle)), -halfWidth - 18, y);
+      context.fillText(String(Math.abs(angle)), halfWidth + 18, y);
+    }
+  }
+
+  context.beginPath();
+  context.moveTo(-ballRadius * 2, 0);
+  context.lineTo(ballRadius * 2, 0);
+  context.lineWidth = 7;
+  context.strokeStyle = '#47260b';
+  context.stroke();
+  context.lineWidth = 3.5;
+  context.strokeStyle = '#f0bd1c';
+  context.stroke();
+  context.restore();
+
+  context.save();
+  context.beginPath();
+  context.arc(center, center, ballRadius, 0, Math.PI * 2);
+  context.clip();
+  const sphereShade = context.createRadialGradient(
+    center - 68, center - 74, 18, center, center, ballRadius,
+  );
+  sphereShade.addColorStop(0, 'rgba(255,255,255,.1)');
+  sphereShade.addColorStop(.52, 'rgba(255,255,255,0)');
+  sphereShade.addColorStop(.78, 'rgba(0,0,0,.12)');
+  sphereShade.addColorStop(1, 'rgba(0,0,0,.62)');
+  context.fillStyle = sphereShade;
+  context.fillRect(center - ballRadius, center - ballRadius, ballRadius * 2, ballRadius * 2);
+  if (!hasPose) {
+    context.fillStyle = 'rgba(3, 12, 17, .52)';
+    context.fillRect(center - ballRadius, center - ballRadius, ballRadius * 2, ballRadius * 2);
+  }
+  context.restore();
+
+  context.beginPath();
+  context.arc(center, center, ballRadius, 0, Math.PI * 2);
+  context.lineWidth = 7;
+  context.strokeStyle = '#131a1d';
+  context.stroke();
+  context.beginPath();
+  context.arc(center, center, ballRadius - 4, 0, Math.PI * 2);
+  context.lineWidth = 3;
+  context.strokeStyle = '#a4ada9';
+  context.stroke();
+
+  for (let index = 0; index < 36; index += 1) {
+    const angle = index * Math.PI * 2 / 36;
+    const inner = outerRadius - (index % 3 === 0 ? 14 : 9);
+    context.beginPath();
+    context.moveTo(center + Math.sin(angle) * inner, center - Math.cos(angle) * inner);
+    context.lineTo(
+      center + Math.sin(angle) * (outerRadius - 4),
+      center - Math.cos(angle) * (outerRadius - 4),
+    );
+    context.lineWidth = index % 3 === 0 ? 3 : 1.5;
+    context.strokeStyle = '#c0c5c1';
+    context.stroke();
+  }
+
+  context.beginPath();
+  context.moveTo(center - 56, center);
+  context.lineTo(center - 22, center);
+  context.lineTo(center, center + 21);
+  context.lineTo(center + 22, center);
+  context.lineTo(center + 56, center);
+  context.lineJoin = 'miter';
+  context.lineCap = 'square';
+  context.lineWidth = 12;
+  context.strokeStyle = '#101719';
+  context.stroke();
+  context.lineWidth = 7;
+  context.strokeStyle = '#00bdd2';
+  context.stroke();
+  context.lineWidth = 3.2;
+  context.strokeStyle = '#f4bd00';
+  context.stroke();
+  context.beginPath();
+  context.moveTo(center - 8, center - 3);
+  context.lineTo(center + 8, center - 3);
+  context.lineTo(center, center + 10);
+  context.closePath();
+  context.fillStyle = '#f4bd00';
+  context.fill();
+  context.lineWidth = 2;
+  context.strokeStyle = '#101719';
+  context.stroke();
+
+  context.restore();
 }
 
 function updateGyroPreview(message) {
@@ -529,13 +697,11 @@ function updateGyroPreview(message) {
 function renderGyroPreview() {
   if (!latestGyroEuler) {
     setPreviewState(gyroPreviewState, lastGyroMessageAt ? 'No pose' : 'Waiting', lastGyroMessageAt ? 'bad' : '');
-    if (horizonWorld) horizonWorld.style.transform = '';
     if (gyroRoll) gyroRoll.textContent = '--';
     if (gyroPitch) gyroPitch.textContent = '--';
     if (gyroYaw) gyroYaw.textContent = '--';
-    if (gyroRollPointer) gyroRollPointer.removeAttribute('transform');
-    renderHeadingTape(null);
-    if (gyroHorizon) gyroHorizon.setAttribute('aria-label', 'Artificial horizon has no valid IMU orientation');
+    drawNavball(null);
+    if (gyroNavball) gyroNavball.setAttribute('aria-label', 'Navball has no valid IMU orientation');
     return;
   }
   const age = (Date.now() - lastGyroMessageAt) / 1000;
@@ -544,21 +710,11 @@ function renderGyroPreview() {
   if (gyroRoll) gyroRoll.textContent = formatPreviewAngle(latestGyroEuler.roll);
   if (gyroPitch) gyroPitch.textContent = formatPreviewAngle(latestGyroEuler.pitch);
   if (gyroYaw) gyroYaw.textContent = formatPreviewAngle(latestGyroEuler.yaw);
-  renderHeadingTape(latestGyroEuler.yaw);
-  if (gyroRollPointer) {
-    const displayedRoll = Math.max(-60, Math.min(60, latestGyroEuler.roll));
-    gyroRollPointer.setAttribute('transform', `rotate(${displayedRoll.toFixed(2)} 90 70)`);
-  }
-  if (horizonWorld && gyroHorizon) {
-    const displayedPitch = Math.max(-45, Math.min(45, latestGyroEuler.pitch));
-    const pitchOffset = displayedPitch * gyroHorizon.clientHeight / 90;
-    horizonWorld.style.transform =
-      `translateY(${pitchOffset.toFixed(2)}px) rotate(${-latestGyroEuler.roll.toFixed(2)}deg)`;
-  }
-  if (gyroHorizon) {
-    gyroHorizon.setAttribute(
+  drawNavball(latestGyroEuler);
+  if (gyroNavball) {
+    gyroNavball.setAttribute(
       'aria-label',
-      `Artificial horizon: roll ${latestGyroEuler.roll.toFixed(1)} degrees, pitch ${latestGyroEuler.pitch.toFixed(1)} degrees, yaw ${latestGyroEuler.yaw.toFixed(1)} degrees`,
+      `Navball: roll ${latestGyroEuler.roll.toFixed(1)} degrees, pitch ${latestGyroEuler.pitch.toFixed(1)} degrees, yaw ${latestGyroEuler.yaw.toFixed(1)} degrees`,
     );
   }
 }
@@ -908,7 +1064,6 @@ function resetTelemetryPreviews() {
   odomArrivalTimes = [];
   odomTrailPoints = [];
   telemetryDrawScheduled = false;
-  if (horizonWorld) horizonWorld.style.transform = '';
   if (gyroRoll) gyroRoll.textContent = '--';
   if (gyroPitch) gyroPitch.textContent = '--';
   if (gyroYaw) gyroYaw.textContent = '--';

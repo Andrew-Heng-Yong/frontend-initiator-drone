@@ -47,47 +47,13 @@
           <aside class="telemetry-panel" aria-label="Odometry node previews">
             <article class="preview-card gyro-preview">
               <div class="preview-heading">
-                <h2>Gyro horizon</h2>
+                <h2>Gyro navball</h2>
                 <span id="gyro-preview-state" class="preview-state">Waiting</span>
               </div>
-              <div id="gyro-horizon" class="artificial-horizon" role="img" aria-label="Artificial horizon waiting for calibrated IMU orientation">
-                <div id="horizon-world" class="horizon-world">
-                  <span class="pitch-line pitch-up-30"><b>30</b></span>
-                  <span class="pitch-line pitch-up-15"><b>15</b></span>
-                  <span class="pitch-line pitch-zero"></span>
-                  <span class="pitch-line pitch-down-15"><b>15</b></span>
-                  <span class="pitch-line pitch-down-30"><b>30</b></span>
-                </div>
-                <div class="heading-display" aria-hidden="true">
-                  <div id="gyro-heading-tape" class="heading-tape"></div>
-                  <output id="gyro-heading-value" class="heading-value">---</output>
-                </div>
-                <svg class="roll-angle-scale" viewBox="0 0 180 58" aria-hidden="true" focusable="false">
-                  <path class="roll-scale-arc" d="M43.2 43 A54 54 0 0 1 136.8 43" />
-                  <g class="roll-scale-ticks">
-                    <path d="M43.2 43 L49.3 39.5 M51.8 31.8 L58.2 38.2 M63 23.2 L67.5 31" />
-                    <path d="M71.5 19.3 L73.9 26.8 M80.6 16.8 L82 24.7 M90 16 L90 27" />
-                    <path d="M99.4 16.8 L98 24.7 M108.5 19.3 L106.1 26.8 M117 23.2 L112.5 31" />
-                    <path d="M128.2 31.8 L121.8 38.2 M136.8 43 L130.7 39.5" />
-                  </g>
-                  <g id="gyro-roll-pointer" class="roll-scale-pointer">
-                    <path d="M90 18 L85.5 8.5 H94.5 Z" />
-                  </g>
-                </svg>
-                <svg class="horizon-aircraft-reference" viewBox="0 0 180 40" aria-hidden="true" focusable="false">
-                  <g class="aircraft-reference-shadow">
-                    <path d="M8 15 H58 V25 H77 V19 H84" />
-                    <rect x="84" y="13" width="12" height="14" />
-                    <path d="M96 19 H103 V25 H122 V15 H172" />
-                  </g>
-                  <g class="aircraft-reference-outline">
-                    <path d="M8 15 H58 V25 H77 V19 H84" />
-                    <rect x="84" y="13" width="12" height="14" />
-                    <path d="M96 19 H103 V25 H122 V15 H172" />
-                  </g>
-                  <circle class="aircraft-reference-dot-ring" cx="90" cy="20" r="4.2" />
-                  <circle class="aircraft-reference-dot" cx="90" cy="20" r="2" />
-                </svg>
+              <div class="navball-shell">
+                <canvas id="gyro-navball" class="navball-canvas" width="480" height="480" role="img" aria-label="Navball waiting for calibrated IMU orientation">
+                  Gyro attitude navball showing roll, pitch, and yaw.
+                </canvas>
               </div>
               <div class="preview-values">
                 <span>Roll <strong id="gyro-roll">--</strong></span>
