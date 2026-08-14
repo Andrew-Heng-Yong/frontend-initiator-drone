@@ -46,6 +46,11 @@ button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; f
 .heading-tick.major::after { width: 2px; height: .55rem; background: #fff; }
 .heading-value { position: absolute; z-index: 2; top: .1rem; left: 50%; min-width: 2.55rem; transform: translateX(-50%); border: 1px solid #edf7ff; border-radius: .15rem; background: rgba(3,10,18,.94); color: #fff; padding: .14rem .3rem; font: 950 .62rem/1 ui-monospace, Consolas, monospace; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.55); }
 .heading-value::after { content: ""; position: absolute; top: calc(100% + 1px); left: 50%; width: 0; height: 0; transform: translateX(-50%); border-top: .34rem solid #edf7ff; border-right: .24rem solid transparent; border-left: .24rem solid transparent; }
+.horizon-aircraft-reference { position: absolute; z-index: 6; top: 50%; left: 50%; width: 76%; overflow: visible; transform: translate(-50%, -50%); filter: drop-shadow(0 1px 1px rgba(0,0,0,.65)); }
+.aircraft-reference-shadow path, .aircraft-reference-shadow rect { fill: none; stroke: #02060b; stroke-width: 7; stroke-linecap: square; stroke-linejoin: miter; }
+.aircraft-reference-outline path, .aircraft-reference-outline rect { fill: none; stroke: #f7fbff; stroke-width: 3; stroke-linecap: square; stroke-linejoin: miter; }
+.aircraft-reference-dot-ring { fill: #02060b; stroke: #f7fbff; stroke-width: 2; }
+.aircraft-reference-dot { fill: #f59e0b; stroke: #02060b; stroke-width: 1; }
 .preview-values { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; margin-top: .55rem; }
 .preview-values span { min-width: 0; color: #7f93ad; font-size: .58rem; text-transform: uppercase; }
 .preview-values strong { display: block; overflow: hidden; color: #e9f3ff; font: 800 .7rem/1.35 ui-monospace, Consolas, monospace; text-overflow: ellipsis; text-transform: none; }
