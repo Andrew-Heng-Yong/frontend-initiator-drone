@@ -32,6 +32,18 @@ const odomRate = document.querySelector('#odom-rate');
 const odomAge = document.querySelector('#odom-age');
 const odomForward = document.querySelector('#odom-forward');
 const odomQuality = document.querySelector('#odom-quality');
+const flowRangeState = document.querySelector('#flow-range-state');
+const flowMotion = document.querySelector('#flow-motion');
+const flowDx = document.querySelector('#flow-dx');
+const flowDy = document.querySelector('#flow-dy');
+const flowQuality = document.querySelector('#flow-quality');
+const flowShutter = document.querySelector('#flow-shutter');
+const flowPeriod = document.querySelector('#flow-period');
+const flowRate = document.querySelector('#flow-rate');
+const rangeValidity = document.querySelector('#range-validity');
+const rangeDistance = document.querySelector('#range-distance');
+const rangeRate = document.querySelector('#range-rate');
+const rangeAge = document.querySelector('#range-age');
 const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
 const zoomBufferCanvas = document.createElement('canvas');
@@ -70,6 +82,8 @@ let imageTopics = {
   rawImu: '/imu/data_raw',
   odom: '/odom',
   odomCalibrated: '/odom/calibrated',
+  flow: '/optical_flow/raw',
+  range: '/range/down',
 };
 let frontendMode = 'full';
 const SIMPLE_DISPLAY_SIZE = { width: 1024, height: 768 };
@@ -130,6 +144,10 @@ let lastOdometryAt = 0;
 let odomCalibrated = null;
 let odomArrivalTimes = [];
 let odomTrailPoints = [];
+let latestFlowReading = null;
+let latestRangeReading = null;
+let flowArrivalTimes = [];
+let rangeArrivalTimes = [];
 let telemetryDrawScheduled = false;
 const messageFragments = new Map();
 
@@ -227,6 +245,7 @@ function connectRosbridge() {
     subscribeImageTopic(imageTopics.color);
     subscribeImuTopics();
     subscribeOdomTopics();
+    subscribeFlowRangeTopics();
     if (frontendMode !== 'simple') subscribeCameraInfo();
   };
   rosSocket.onmessage = (event) => {
@@ -254,6 +273,8 @@ function connectRosbridge() {
     if (message.topic === imageTopics.imu) updateImu(message.msg);
     if (message.topic === imageTopics.rawImu) updateRawAcceleration(message.msg);
     if (message.topic === imageTopics.odom) updateOdometry(message.msg);
+    if (message.topic === imageTopics.flow) updateFlowReading(message.msg);
+    if (message.topic === imageTopics.range) updateRangeReading(message.msg);
     if (message.topic === imageTopics.odomCalibrated) {
       odomCalibrated = message.msg && message.msg.data === true;
       scheduleTelemetryRender();
@@ -409,6 +430,21 @@ function updateImu(message) {
     : 'accel unavailable';
   imuStatus = `${gyroText} | ${accelerationText}`;
   renderImuStatus();
+}
+
+function subscribeFlowRangeTopics() {
+  if (imageTopics.flow) {
+    subscribeRosTopic(imageTopics.flow, 'flow_range_sensor_node/msg/OpticalFlow', {
+      throttle_rate: 50,
+      queue_length: 1,
+    });
+  }
+  if (imageTopics.range) {
+    subscribeRosTopic(imageTopics.range, 'sensor_msgs/msg/Range', {
+      throttle_rate: 50,
+      queue_length: 1,
+    });
+  }
 }
 
 function updateRawAcceleration(message) {
@@ -823,6 +859,102 @@ function updateOdometry(message) {
   scheduleTelemetryRender();
 }
 
+function updateFlowReading(message) {
+  const now = Date.now();
+  latestFlowReading = {
+    receivedAt: now,
+    motionDetected: message && message.motion_detected === true,
+    deltaX: finiteNumberOrNull(message && message.delta_x),
+    deltaY: finiteNumberOrNull(message && message.delta_y),
+    quality: finiteNumberOrNull(message && message.quality),
+    shutter: finiteNumberOrNull(message && message.shutter),
+    integrationTime: finiteNumberOrNull(message && message.integration_time),
+  };
+  flowArrivalTimes.push(now);
+  flowArrivalTimes = flowArrivalTimes.filter((arrival) => now - arrival <= 3000);
+  scheduleTelemetryRender();
+}
+
+function updateRangeReading(message) {
+  const now = Date.now();
+  const distance = finiteNumberOrNull(message && message.range);
+  const minimum = finiteNumberOrNull(message && message.min_range);
+  const maximum = finiteNumberOrNull(message && message.max_range);
+  latestRangeReading = {
+    receivedAt: now,
+    distance,
+    valid: distance !== null
+      && (minimum === null || distance >= minimum)
+      && (maximum === null || distance <= maximum),
+  };
+  rangeArrivalTimes.push(now);
+  rangeArrivalTimes = rangeArrivalTimes.filter((arrival) => now - arrival <= 3000);
+  scheduleTelemetryRender();
+}
+
+function arrivalRate(arrivals, now) {
+  const recent = arrivals.filter((arrival) => now - arrival <= 3000);
+  if (recent.length < 2) return null;
+  const duration = recent[recent.length - 1] - recent[0];
+  return duration > 0 ? (recent.length - 1) * 1000 / duration : null;
+}
+
+function renderFlowRangePreview() {
+  const now = Date.now();
+  const flowAge = latestFlowReading ? (now - latestFlowReading.receivedAt) / 1000 : null;
+  const measuredRangeAge = latestRangeReading ? (now - latestRangeReading.receivedAt) / 1000 : null;
+  const flowStale = flowAge === null || flowAge > 1;
+  const rangeStale = measuredRangeAge === null || measuredRangeAge > 1;
+  const lowLight = latestFlowReading && latestFlowReading.shutter !== null
+    && latestFlowReading.shutter >= 8000;
+  const lowQuality = latestFlowReading && latestFlowReading.quality !== null
+    && latestFlowReading.quality < 25;
+  const rangeInvalid = latestRangeReading && !latestRangeReading.valid;
+
+  let state = 'Live';
+  let tone = 'live';
+  if (!latestFlowReading && !latestRangeReading) {
+    state = 'Waiting';
+    tone = '';
+  } else if (flowStale && rangeStale) {
+    state = 'Stale';
+    tone = 'bad';
+  } else if (flowStale || rangeStale || lowLight || lowQuality || rangeInvalid) {
+    state = 'Degraded';
+    tone = 'warn';
+  }
+  setPreviewState(flowRangeState, state, tone);
+
+  if (latestFlowReading) {
+    if (flowMotion) flowMotion.textContent = latestFlowReading.motionDetected ? 'Motion' : 'Still';
+    if (flowDx) flowDx.textContent = latestFlowReading.deltaX === null ? '--' : latestFlowReading.deltaX.toFixed(0);
+    if (flowDy) flowDy.textContent = latestFlowReading.deltaY === null ? '--' : latestFlowReading.deltaY.toFixed(0);
+    if (flowQuality) flowQuality.textContent = latestFlowReading.quality === null ? '--' : latestFlowReading.quality.toFixed(0);
+    if (flowShutter) flowShutter.textContent = latestFlowReading.shutter === null ? '--' : latestFlowReading.shutter.toFixed(0);
+    if (flowPeriod) {
+      flowPeriod.textContent = latestFlowReading.integrationTime === null
+        ? '--'
+        : `${(latestFlowReading.integrationTime * 1000).toFixed(1)} ms`;
+    }
+  }
+  const measuredFlowRate = arrivalRate(flowArrivalTimes, now);
+  if (flowRate) flowRate.textContent = measuredFlowRate === null ? '--' : `${measuredFlowRate.toFixed(1)} Hz`;
+
+  if (rangeValidity) {
+    rangeValidity.textContent = !latestRangeReading
+      ? '--'
+      : latestRangeReading.valid ? 'Valid' : 'Invalid';
+  }
+  if (rangeDistance) {
+    rangeDistance.textContent = latestRangeReading && latestRangeReading.valid
+      ? `${latestRangeReading.distance.toFixed(3)} m`
+      : '-- m';
+  }
+  const measuredRangeRate = arrivalRate(rangeArrivalTimes, now);
+  if (rangeRate) rangeRate.textContent = measuredRangeRate === null ? '-- Hz' : `${measuredRangeRate.toFixed(1)} Hz`;
+  if (rangeAge) rangeAge.textContent = measuredRangeAge === null ? '-- s' : `${measuredRangeAge.toFixed(1)} s`;
+}
+
 function prepareOdomCanvas() {
   if (!odomCanvas || !odomContext) return null;
   const cssWidth = Math.max(1, odomCanvas.clientWidth || 240);
@@ -1105,6 +1237,7 @@ function renderOdomPreview() {
 function renderTelemetryPreviews() {
   renderGyroPreview();
   renderOdomPreview();
+  renderFlowRangePreview();
 }
 
 function scheduleTelemetryRender() {
@@ -1124,6 +1257,10 @@ function resetTelemetryPreviews() {
   odomCalibrated = null;
   odomArrivalTimes = [];
   odomTrailPoints = [];
+  latestFlowReading = null;
+  latestRangeReading = null;
+  flowArrivalTimes = [];
+  rangeArrivalTimes = [];
   telemetryDrawScheduled = false;
   if (gyroRoll) gyroRoll.textContent = '--';
   if (gyroPitch) gyroPitch.textContent = '--';
@@ -1138,6 +1275,17 @@ function resetTelemetryPreviews() {
   if (odomRate) odomRate.textContent = '--';
   if (odomAge) odomAge.textContent = '--';
   if (odomForward) odomForward.textContent = 'Forward +X: --';
+  if (flowMotion) flowMotion.textContent = '--';
+  if (flowDx) flowDx.textContent = '--';
+  if (flowDy) flowDy.textContent = '--';
+  if (flowQuality) flowQuality.textContent = '--';
+  if (flowShutter) flowShutter.textContent = '--';
+  if (flowPeriod) flowPeriod.textContent = '--';
+  if (flowRate) flowRate.textContent = '--';
+  if (rangeValidity) rangeValidity.textContent = '--';
+  if (rangeDistance) rangeDistance.textContent = '-- m';
+  if (rangeRate) rangeRate.textContent = '-- Hz';
+  if (rangeAge) rangeAge.textContent = '-- s';
   if (odomScale) odomScale.textContent = '±1.0 m';
   renderTelemetryPreviews();
 }
@@ -1588,6 +1736,8 @@ function applyStreamConfig(stream) {
     rawImu: stream.rawImuTopic || imageTopics.rawImu,
     odom: stream.odomTopic || imageTopics.odom,
     odomCalibrated: stream.odomCalibratedTopic || imageTopics.odomCalibrated,
+    flow: stream.flowTopic || imageTopics.flow,
+    range: stream.rangeTopic || imageTopics.range,
   };
   const topicsChanged = nextTopics.color !== imageTopics.color
     || nextTopics.cameraInfo !== imageTopics.cameraInfo
@@ -1595,7 +1745,9 @@ function applyStreamConfig(stream) {
     || nextTopics.imu !== imageTopics.imu
     || nextTopics.rawImu !== imageTopics.rawImu
     || nextTopics.odom !== imageTopics.odom
-    || nextTopics.odomCalibrated !== imageTopics.odomCalibrated;
+    || nextTopics.odomCalibrated !== imageTopics.odomCalibrated
+    || nextTopics.flow !== imageTopics.flow
+    || nextTopics.range !== imageTopics.range;
   if (topicsChanged) cameraInfoFov = null;
   imageTopics = nextTopics;
   thermalFov = finiteFov(stream.thermalFov, thermalFov);

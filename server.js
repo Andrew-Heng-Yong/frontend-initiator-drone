@@ -36,7 +36,7 @@ const ALIGNMENT_FILE = resolveLocalPath(process.env.THERMAL_ALIGNMENT_FILE || SY
 const CROPPER_SETTINGS_FILE = resolveLocalPath(process.env.THERMAL_CROPPER_SETTINGS_FILE || SYSTEM_PARAMS.cropper_settings_file || path.join(__dirname, '.thermal-cropper.json'));
 const FRONTEND_MODE = process.env.FRONTEND_MODE || STREAM_PARAMS.frontend_mode || 'full';
 const BASE_LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND || DRONE_PARAMS.launch_command
-  || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_odom:=true color_fps:=5 start_thermal_cropper:=true thermal_cropper_enabled:=false start_thermal_overlay:=false';
+  || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_odom:=true start_flow_range:=true color_fps:=5 start_thermal_cropper:=true thermal_cropper_enabled:=false start_thermal_overlay:=false';
 const STREAM_CONFIG = {
   frontendMode: FRONTEND_MODE,
   colorTopic: process.env.DEPTH_IMAGE_TOPIC || process.env.COLOR_IMAGE_TOPIC || STREAM_PARAMS.depth_image_topic || STREAM_PARAMS.color_image_topic || '/camera/depth/cropped/image_raw',
@@ -49,6 +49,8 @@ const STREAM_CONFIG = {
   rawImuTopic: process.env.RAW_IMU_TOPIC || STREAM_PARAMS.raw_imu_topic || '/imu/data_raw',
   odomTopic: process.env.ODOM_TOPIC || STREAM_PARAMS.odom_topic || '/odom',
   odomCalibratedTopic: process.env.ODOM_CALIBRATED_TOPIC || STREAM_PARAMS.odom_calibrated_topic || '/odom/calibrated',
+  flowTopic: process.env.OPTICAL_FLOW_TOPIC || STREAM_PARAMS.optical_flow_topic || '/optical_flow/raw',
+  rangeTopic: process.env.RANGE_TOPIC || STREAM_PARAMS.range_topic || '/range/down',
   baseViewMode: process.env.BASE_VIEW_MODE || STREAM_PARAMS.base_view_mode || 'full-depth',
   thermalFov: {
     horizontal: Number(process.env.THERMAL_FOV_HORIZONTAL || STREAM_PARAMS.thermal_fov_horizontal || 90),
@@ -837,7 +839,7 @@ function startLaunch() {
   addLog(`Params: master=${MASTER_PARAMS_FILE}; camera_calibrations=${CAMERA_CALIBRATIONS_PARAMS_FILE}`);
   addLog(`Frontend mode: ${STREAM_CONFIG.frontendMode}`);
   const stream = activeStreamConfig();
-  addLog(`Stream topics: base=${stream.colorTopic}; thermal=${stream.thermalTopic}; imu=${stream.imuTopic}; raw_imu=${stream.rawImuTopic}; odom=${stream.odomTopic}`);
+  addLog(`Stream topics: base=${stream.colorTopic}; thermal=${stream.thermalTopic}; imu=${stream.imuTopic}; raw_imu=${stream.rawImuTopic}; odom=${stream.odomTopic}; flow=${stream.flowTopic}; range=${stream.rangeTopic}`);
   addLog(`Base view mode: ${STREAM_CONFIG.baseViewMode}`);
   launchProcess.stdout.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));
