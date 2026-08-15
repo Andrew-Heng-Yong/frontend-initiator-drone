@@ -121,6 +121,19 @@ rate, and age. The dashboard launch starts the combined flow/range driver whenev
 started. Static and forced-quality odometry overrides default to off so these measurements can aid
 the estimator; the existing header checkboxes can still restore either bench override.
 
+The **Start blackbox** control in the Odometry card records one CSV file on the robot. It
+captures the estimator's raw inputs (`/imu/data_raw`, `/optical_flow/raw`, and `/range/down`)
+together with its calculated outputs (`/imu/data_calibrated`, `/odom`, and `/odom/calibrated`).
+Stopping the ROS graph also stops the recorder and flushes the file. Each recording is saved under
+`recordings/odom-blackbox/odom-<UTC timestamp>/odom_blackbox.csv`. It is an event log with one row
+per received ROS message; `category`, `topic`, and `message_type` identify the stream. A union
+schema keeps every raw and calculated field in named columns and leaves columns for other message
+types blank. It includes callback, middleware source/receipt, and ROS header timestamps when the
+message type provides them, plus complete IMU and odometry covariance arrays. The session's
+`manifest.json` describes the topic groups, ROS workspace, launch command, parameter-file paths,
+and active odometry overrides. Set `ODOM_BLACKBOX_DIRECTORY` or
+`system.ros__parameters.odom_blackbox_directory` to store recordings elsewhere.
+
 If the thermal image is visible but does not line up with depth, use a small hot target such as a candle or warm hand and tune the dashboard `X`, `Y`, `Scale`, `Barrel`, `H`, and `V` controls until the thermal hot spot lands on the same depth object. `Barrel` applies signed radial distortion to the thermal overlay in Full mode: `0` disables it, positive values contract the image near the edges, and negative values expand it while leaving the center fixed. Edits are a browser preview only. **Save to parameter file** commits the transform to `.thermal-alignment.json` and `master_params.yaml`; it is applied immediately when the ROS cropper is running, or passed to the cropper on its next start. Values can also be seeded with `THERMAL_OFFSET_X`, `THERMAL_OFFSET_Y`, `THERMAL_SCALE`, `THERMAL_BARREL_DISTORTION`, `THERMAL_STRETCH_X`, and `THERMAL_STRETCH_Y`.
 
 The ROS cropper node uses highlighted thermal pixels to publish `/camera/depth/cropped/image_raw` and `/thermal/cropped/image_raw`. In simple mode it does not publish uncropped fallback frames while no thermal region is present. Valid regions publish rectangular crops around the selected thermal cluster and the frontend scales the crop into its fixed display. Each crop unit covers `crop_unit_thermal_pixels` square thermal pixels, clusters count diagonal neighbors, `min_region_size` rejects small clusters, and `inflation_radius_thermal_pixels` expands the crop region. Cropper tuning values live in the `thermal_cropper` block in `config/master_params.yaml` and are passed to `thermal_cropper_node` at launch.

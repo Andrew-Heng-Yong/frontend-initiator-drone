@@ -32,6 +32,9 @@ const odomRate = document.querySelector('#odom-rate');
 const odomAge = document.querySelector('#odom-age');
 const odomForward = document.querySelector('#odom-forward');
 const odomQuality = document.querySelector('#odom-quality');
+const blackboxToggle = document.querySelector('#blackbox-toggle');
+const blackboxStateLabel = document.querySelector('#blackbox-state');
+const blackboxPath = document.querySelector('#blackbox-path');
 const flowRangeState = document.querySelector('#flow-range-state');
 const flowMotion = document.querySelector('#flow-motion');
 const flowDx = document.querySelector('#flow-dx');
@@ -142,6 +145,9 @@ let odomStaticOverrideRestartRequired = false;
 let odomQualityOverride = false;
 let odomQualityOverrideActive = false;
 let odomQualityOverrideRestartRequired = false;
+let blackboxRecording = false;
+let blackboxStopping = false;
+let blackboxRequestActive = false;
 let latestGyroEuler = null;
 let lastGyroMessageAt = 0;
 let latestOdometry = null;
@@ -165,6 +171,36 @@ function setRunning(running) {
   if (startToggle) startToggle.textContent = running ? 'Stop node' : 'Start node';
   if (calibrateOdomButton) {
     calibrateOdomButton.disabled = !running || calibrationRequestActive || odomStaticOverrideActive;
+  }
+  if (blackboxToggle) {
+    blackboxToggle.disabled = blackboxRequestActive || blackboxStopping || (!running && !blackboxRecording);
+  }
+}
+
+function applyBlackboxState(blackbox, running) {
+  const state = blackbox || {};
+  const session = state.session || null;
+  blackboxRecording = state.recording === true;
+  blackboxStopping = state.stopping === true;
+
+  if (blackboxToggle) {
+    blackboxToggle.textContent = blackboxStopping
+      ? 'Saving...'
+      : blackboxRecording ? 'Stop blackbox' : 'Start blackbox';
+    blackboxToggle.classList.toggle('recording', blackboxRecording);
+    blackboxToggle.disabled = blackboxRequestActive || blackboxStopping || (!running && !blackboxRecording);
+  }
+  if (blackboxStateLabel) {
+    blackboxStateLabel.textContent = blackboxStopping
+      ? 'Saving'
+      : blackboxRecording ? 'Recording' : session && session.error ? 'Error' : session ? 'Saved' : 'Ready';
+    blackboxStateLabel.classList.toggle('live', blackboxRecording && !blackboxStopping);
+    blackboxStateLabel.classList.toggle('bad', Boolean(!blackboxRecording && session && session.error));
+  }
+  if (blackboxPath) {
+    const outputPath = session && (session.csvPath || session.outputPath);
+    blackboxPath.textContent = outputPath || `Recordings will be stored in ${state.directory || 'the configured directory'}.`;
+    blackboxPath.title = outputPath || '';
   }
 }
 
@@ -2133,6 +2169,7 @@ async function refresh() {
     applyStreamConfig(state.stream);
     applyOdomState(state.odom);
     setRunning(state.running);
+    applyBlackboxState(state.blackbox, state.running);
     renderCpu(state.cpu, state.cpuTemp);
     if (typeof state.overlayAlpha === 'number' && document.activeElement !== overlayAlphaInput) {
       setOverlayAlphaUi(state.overlayAlpha);
@@ -2277,6 +2314,32 @@ if (calibrateOdomButton) {
       calibrateOdomButton.textContent = 'Calibrate gyro';
       calibrateOdomButton.disabled =
         !statusDot.classList.contains('running') || odomStaticOverrideActive;
+      await refresh();
+    }
+  });
+}
+
+if (blackboxToggle) {
+  blackboxToggle.addEventListener('click', async () => {
+    blackboxRequestActive = true;
+    blackboxToggle.disabled = true;
+    try {
+      const endpoint = blackboxRecording
+        ? '/api/odom/blackbox/stop'
+        : '/api/odom/blackbox/start';
+      const response = await request(endpoint);
+      applyBlackboxState(response.blackbox, statusDot.classList.contains('running'));
+      connection.textContent = response.blackbox.recording
+        ? response.blackbox.stopping
+          ? 'Saving odometry blackbox CSV to disk...'
+          : `Recording odometry blackbox to ${response.blackbox.session.csvPath || response.blackbox.session.outputPath}`
+        : response.blackbox.session
+          ? `Odometry blackbox saved to ${response.blackbox.session.csvPath || response.blackbox.session.outputPath}`
+          : 'Odometry blackbox stopped.';
+    } catch (error) {
+      connection.textContent = `Blackbox recorder failed: ${error.message}`;
+    } finally {
+      blackboxRequestActive = false;
       await refresh();
     }
   });

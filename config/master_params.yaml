@@ -14,6 +14,7 @@ system:
     max_log_lines: 160
     alignment_file: .thermal-alignment.json
     cropper_settings_file: .thermal-cropper.json
+    odom_blackbox_directory: recordings/odom-blackbox
 
 drone_control:
   ros__parameters:

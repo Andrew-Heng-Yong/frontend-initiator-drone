@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Thermal Node</title>
-    <link rel="stylesheet" href="/styles.css?v=20260814-2" />
+    <link rel="stylesheet" href="/styles.css?v=20260815-1" />
   </head>
   <body>
     <main>
@@ -106,6 +106,14 @@
               </div>
               <p id="odom-forward" class="odom-vector-readout">Forward +X: --</p>
               <p id="odom-quality" class="odom-quality-readout">No odometry received</p>
+              <div class="blackbox-control">
+                <div class="blackbox-heading">
+                  <button id="blackbox-toggle" class="blackbox-button" type="button" disabled>Start blackbox</button>
+                  <span id="blackbox-state" class="preview-state">Ready</span>
+                </div>
+                <p>One CSV: raw IMU, flow, and range + calculated IMU and odometry.</p>
+                <p id="blackbox-path" class="blackbox-path">No recording saved this session.</p>
+              </div>
             </article>
 
             <article class="preview-card flow-range-preview">
@@ -231,6 +239,6 @@
         <pre id="logs">No launch output yet.</pre>
       </section>
     </main>
-    <script src="/app.js?v=20260814-2"></script>
+    <script src="/app.js?v=20260815-1"></script>
   </body>
 </html>

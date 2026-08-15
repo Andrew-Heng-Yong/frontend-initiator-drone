@@ -34,6 +34,12 @@ const ORBBEC_SETUP = resolveLocalPath(
 );
 const ALIGNMENT_FILE = resolveLocalPath(process.env.THERMAL_ALIGNMENT_FILE || SYSTEM_PARAMS.alignment_file || path.join(__dirname, '.thermal-alignment.json'));
 const CROPPER_SETTINGS_FILE = resolveLocalPath(process.env.THERMAL_CROPPER_SETTINGS_FILE || SYSTEM_PARAMS.cropper_settings_file || path.join(__dirname, '.thermal-cropper.json'));
+const BLACKBOX_DIRECTORY = resolveLocalPath(
+  process.env.ODOM_BLACKBOX_DIRECTORY
+    || SYSTEM_PARAMS.odom_blackbox_directory
+    || path.join(__dirname, 'recordings', 'odom-blackbox'),
+);
+const BLACKBOX_CSV_RECORDER = path.join(__dirname, 'scripts', 'odom_blackbox_csv.py');
 const FRONTEND_MODE = process.env.FRONTEND_MODE || STREAM_PARAMS.frontend_mode || 'full';
 const BASE_LAUNCH_COMMAND = process.env.DRONE_LAUNCH_COMMAND || DRONE_PARAMS.launch_command
   || 'ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_odom:=true start_flow_range:=true color_fps:=5 start_thermal_cropper:=true thermal_cropper_enabled:=false start_thermal_overlay:=false';
@@ -94,6 +100,8 @@ let activeCropperSettings = null;
 let activeThermalAlignment = null;
 let activeOdomStaticOverride = null;
 let activeOdomQualityOverride = null;
+let blackboxProcess = null;
+let blackboxSession = null;
 let logs = [];
 let previousCpuStats = null;
 let overlayAlpha = Number(process.env.THERMAL_OVERLAY_ALPHA || DASHBOARD_PARAMS.overlay_alpha || 0.5);
@@ -456,6 +464,7 @@ function state() {
     rgbOverlayEnabled: true,
     stream: { ...activeStreamConfig(), alignment: thermalAlignment, cropper },
     odom: odomState(),
+    blackbox: blackboxState(),
     launchCommand: activeLaunchCommand || launchCommandFor(thermalCropper),
     params: {
       master: MASTER_PARAMS_FILE,
@@ -463,6 +472,212 @@ function state() {
       cameraCalibrationsLoaded: Boolean(CAMERA_CALIBRATIONS_PARAMS.camera_calibrations),
     },
   };
+}
+
+function odomBlackboxTopics() {
+  const rawInputs = [STREAM_CONFIG.rawImuTopic, STREAM_CONFIG.flowTopic, STREAM_CONFIG.rangeTopic]
+    .filter(Boolean);
+  const calculatedOutputs = [
+    STREAM_CONFIG.imuTopic,
+    STREAM_CONFIG.odomTopic,
+    STREAM_CONFIG.odomCalibratedTopic,
+  ].filter(Boolean);
+  return {
+    rawInputs: [...new Set(rawInputs)],
+    calculatedOutputs: [...new Set(calculatedOutputs)],
+    all: [...new Set([...rawInputs, ...calculatedOutputs])],
+  };
+}
+
+function publicBlackboxSession(session) {
+  if (!session) return null;
+  const {
+    manifestPath: _manifestPath,
+    context: _context,
+    ...publicSession
+  } = session;
+  return publicSession;
+}
+
+function blackboxState() {
+  return {
+    recording: blackboxProcess !== null,
+    stopping: Boolean(blackboxProcess && blackboxSession && blackboxSession.stopping),
+    directory: BLACKBOX_DIRECTORY,
+    session: publicBlackboxSession(blackboxSession),
+    topics: odomBlackboxTopics(),
+  };
+}
+
+function writeBlackboxManifest(session) {
+  const context = session.context || {};
+  const manifest = {
+    format: 'initiator-drone-odom-blackbox-csv-v1',
+    session: path.basename(session.outputPath),
+    startedAt: session.startedAt,
+    stoppedAt: session.stoppedAt || null,
+    status: session.error ? 'error' : session.stoppedAt ? 'saved' : session.stopping ? 'stopping' : 'recording',
+    error: session.error || null,
+    exitCode: session.exitCode ?? null,
+    signal: session.signal || null,
+    ros: {
+      distro: ROS_DISTRO,
+      workspace: ROS_WORKSPACE,
+      topics: session.topics,
+    },
+    csvFile: session.csvFile,
+    odometry: {
+      staticOverride: Boolean(context.staticOverride),
+      qualityOverride: Boolean(context.qualityOverride),
+    },
+    launchCommand: context.launchCommand || null,
+    parameterFiles: {
+      master: MASTER_PARAMS_FILE,
+      cameraCalibrations: CAMERA_CALIBRATIONS_PARAMS_FILE,
+    },
+  };
+  fs.writeFileSync(session.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+function blackboxSessionName(date = new Date()) {
+  return `odom-${date.toISOString().replace(/[-:]/g, '').replace(/\./g, '-')}`;
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+
+function startBlackbox() {
+  if (!launchProcess) {
+    throw new Error('Start the drone nodes before recording an odometry blackbox.');
+  }
+  if (blackboxProcess) {
+    return { ok: true, alreadyRecording: true, blackbox: blackboxState() };
+  }
+  if (!fs.existsSync(BLACKBOX_CSV_RECORDER)) {
+    throw new Error(`Odometry CSV recorder is missing: ${BLACKBOX_CSV_RECORDER}`);
+  }
+
+  const topics = odomBlackboxTopics();
+  if (!topics.all.length || topics.all.some((topic) => !/^\/[A-Za-z0-9_~/]+$/.test(topic))) {
+    throw new Error('Odometry blackbox topics are missing or invalid.');
+  }
+
+  fs.mkdirSync(BLACKBOX_DIRECTORY, { recursive: true });
+  let outputPath = path.join(BLACKBOX_DIRECTORY, blackboxSessionName());
+  let suffix = 1;
+  while (fs.existsSync(outputPath)) {
+    outputPath = path.join(BLACKBOX_DIRECTORY, `${blackboxSessionName()}-${suffix}`);
+    suffix += 1;
+  }
+  fs.mkdirSync(outputPath);
+
+  const manifestPath = path.join(outputPath, 'manifest.json');
+  const csvFile = 'odom_blackbox.csv';
+  blackboxSession = {
+    outputPath,
+    csvPath: path.join(outputPath, csvFile),
+    startedAt: new Date().toISOString(),
+    topics,
+    stopping: false,
+    manifestPath,
+    csvFile,
+    context: {
+      launchCommand: activeLaunchCommand,
+      staticOverride: activeOdomStaticOverride,
+      qualityOverride: activeOdomQualityOverride,
+    },
+  };
+  writeBlackboxManifest(blackboxSession);
+
+  const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
+  const installSetup = path.join(ROS_WORKSPACE, 'install', 'setup.bash');
+  const command = [
+    `source ${shellQuote(setupFile)}`,
+    `source ${shellQuote(installSetup)}`,
+    [
+      'exec python3',
+      shellQuote(BLACKBOX_CSV_RECORDER),
+      '--output-directory', shellQuote(outputPath),
+      '--raw-imu-topic', shellQuote(STREAM_CONFIG.rawImuTopic),
+      '--flow-topic', shellQuote(STREAM_CONFIG.flowTopic),
+      '--range-topic', shellQuote(STREAM_CONFIG.rangeTopic),
+      '--calculated-imu-topic', shellQuote(STREAM_CONFIG.imuTopic),
+      '--odom-topic', shellQuote(STREAM_CONFIG.odomTopic),
+      '--calibrated-topic', shellQuote(STREAM_CONFIG.odomCalibratedTopic),
+    ].join(' '),
+  ].join(' && ');
+  const child = spawn('bash', ['-lc', command], {
+    cwd: ROS_WORKSPACE,
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  blackboxProcess = child;
+  addLog(`Odometry blackbox recording started (PID ${child.pid}): ${outputPath}`);
+  addLog(`Blackbox raw inputs: ${topics.rawInputs.join(', ')}`);
+  addLog(`Blackbox calculated outputs: ${topics.calculatedOutputs.join(', ')}`);
+  child.stdout.on('data', (data) => addLog(`[blackbox] ${data.toString().trim()}`));
+  child.stderr.on('data', (data) => addLog(`[blackbox] ${data.toString().trim()}`));
+  child.on('error', (error) => {
+    if (blackboxProcess !== child) return;
+    blackboxProcess = null;
+    blackboxSession = {
+      ...blackboxSession,
+      stopping: false,
+      stoppedAt: new Date().toISOString(),
+      error: error.message,
+    };
+    writeBlackboxManifest(blackboxSession);
+    addLog(`Odometry blackbox error: ${error.message}`);
+  });
+  child.on('exit', (code, signal) => {
+    if (blackboxProcess !== child) return;
+    const stoppedCleanly = code === 0 || (blackboxSession.stopping && signal === 'SIGINT');
+    blackboxProcess = null;
+    blackboxSession = {
+      ...blackboxSession,
+      stopping: false,
+      stoppedAt: new Date().toISOString(),
+      exitCode: code,
+      signal: signal || null,
+      error: stoppedCleanly
+        ? null
+        : `Recorder exited unexpectedly (code ${code}, signal ${signal || 'none'}).`,
+    };
+    writeBlackboxManifest(blackboxSession);
+    addLog(stoppedCleanly
+      ? `Odometry blackbox saved to ${outputPath} (code ${code}, signal ${signal || 'none'}).`
+      : `Odometry blackbox failed: ${blackboxSession.error}`);
+  });
+
+  return { ok: true, alreadyRecording: false, blackbox: blackboxState() };
+}
+
+function stopBlackbox() {
+  if (!blackboxProcess) {
+    return { ok: true, alreadyStopped: true, blackbox: blackboxState() };
+  }
+  if (blackboxSession && blackboxSession.stopping) {
+    return { ok: true, alreadyStopping: true, blackbox: blackboxState() };
+  }
+  const { pid } = blackboxProcess;
+  blackboxSession.stopping = true;
+  writeBlackboxManifest(blackboxSession);
+  try {
+    process.kill(-pid, 'SIGINT');
+    addLog('Stop requested for odometry blackbox; flushing CSV to disk.');
+  } catch (error) {
+    if (error.code !== 'ESRCH') throw error;
+    blackboxProcess = null;
+    blackboxSession = {
+      ...blackboxSession,
+      stopping: false,
+      stoppedAt: new Date().toISOString(),
+      error: 'Recorder process was no longer running.',
+    };
+    writeBlackboxManifest(blackboxSession);
+  }
+  return { ok: true, alreadyStopped: false, blackbox: blackboxState() };
 }
 
 function odomState() {
@@ -845,6 +1060,7 @@ function startLaunch() {
   launchProcess.stderr.on('data', (data) => addLog(data.toString().trim()));
   launchProcess.on('error', (error) => {
     addLog(`Launch error: ${error.message}`);
+    if (blackboxProcess) stopBlackbox();
     launchProcess = null;
     activeLaunchCommand = null;
     activeCropperEnabled = null;
@@ -855,6 +1071,7 @@ function startLaunch() {
   });
   launchProcess.on('exit', (code, signal) => {
     addLog(`Camera launch exited (code ${code}, signal ${signal || 'none'}).`);
+    if (blackboxProcess) stopBlackbox();
     launchProcess = null;
     activeLaunchCommand = null;
     activeCropperEnabled = null;
@@ -867,6 +1084,7 @@ function startLaunch() {
 }
 
 function stopLaunch() {
+  if (blackboxProcess) stopBlackbox();
   if (!launchProcess) return { ok: true, alreadyStopped: true };
   const { pid } = launchProcess;
   try {
@@ -897,6 +1115,12 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/start') return sendJson(response, 200, startLaunch());
     if (request.method === 'POST' && url.pathname === '/api/stop') return sendJson(response, 200, stopLaunch());
     if (request.method === 'POST' && url.pathname === '/api/logs/clear') return sendJson(response, 200, clearLogs());
+    if (request.method === 'POST' && url.pathname === '/api/odom/blackbox/start') {
+      return sendJson(response, 200, startBlackbox());
+    }
+    if (request.method === 'POST' && url.pathname === '/api/odom/blackbox/stop') {
+      return sendJson(response, 200, stopBlackbox());
+    }
     // /api/vio/calibrate stays as an alias: the phone app and this dashboard
     // are deployed separately, so a robot updated first still has to answer the
     // path an older build asks for.
@@ -939,4 +1163,28 @@ server.listen(PORT, () => {
   addLog(`Loaded params: ${MASTER_PARAMS_FILE}`);
   addLog(`Loaded camera calibrations: ${CAMERA_CALIBRATIONS_PARAMS_FILE}`);
 });
-process.on('SIGINT', () => { try { stopLaunch(); } finally { server.close(() => process.exit(0)); } });
+
+let shutdownStarted = false;
+function shutdown() {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  try {
+    stopLaunch();
+  } finally {
+    server.close();
+  }
+
+  const forceExit = setTimeout(() => process.exit(0), 10000);
+  const finishWhenFlushed = () => {
+    if (!launchProcess && !blackboxProcess) {
+      clearTimeout(forceExit);
+      process.exit(0);
+      return;
+    }
+    setTimeout(finishWhenFlushed, 100);
+  };
+  finishWhenFlushed();
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

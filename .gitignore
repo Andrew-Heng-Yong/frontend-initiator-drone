@@ -1,3 +1,4 @@
 .DS_Store
 .thermal-alignment.json
 ios/Scripts/signing.local
+recordings/
