@@ -57,6 +57,8 @@ The dashboard also subscribes to `/camera/depth/camera_info` by default and disp
 
 By default `BASE_VIEW_MODE=full-depth`: the depth image is the main viewport and thermal is blended into the configured thermal FOV area. The Cropper checkbox controls the next ROS launch and never changes the running graph. When selected, the next Start launches the cropper and subscribes to `/camera/depth/cropped/image_raw`, `/camera/depth/cropped/camera_info`, and `/thermal/cropped/image_raw`. When cleared, the next Start omits the cropper node and subscribes directly to the corresponding raw topics.
 
+The separate **Uncropped thermal** window always subscribes to `raw_thermal_image_topic` (default `/thermal/image_raw`). It displays the complete thermal sensor frame with its live minimum and maximum values, even when the main depth overlay uses `/thermal/cropped/image_raw`.
+
 The thermal overlay defaults are `Blend=50`, `X=0`, `Y=0`, `Scale=100`, `Barrel=0`, `H=80`, and `V=90`. Its base size comes from the configured FOVs: depth is `79° x 62°`, and thermal is `90° x 68°`.
 
 Full mode also provides a display-only `View > Zoom` control from `30%` to `100%`, defaulting to `75%`. It keeps the canvas viewport fixed, fills the uncovered area with black, and scales the completed depth-and-thermal image around the center. The setting is stored in the browser and never changes thermal alignment or ROS cropper parameters.

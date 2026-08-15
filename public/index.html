@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Thermal Node</title>
-    <link rel="stylesheet" href="/styles.css?v=20260814-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260814-2" />
   </head>
   <body>
     <main>
@@ -43,6 +43,21 @@
           <div class="canvas-panel">
             <div id="range">--</div>
             <canvas id="thermal-canvas" width="32" height="24" aria-label="Thermal-guided cropped depth stream"></canvas>
+            <article class="raw-thermal-window" aria-label="Uncropped thermal stream">
+              <div class="raw-thermal-heading">
+                <h2>Uncropped thermal</h2>
+                <span id="raw-thermal-state" class="preview-state">Waiting</span>
+              </div>
+              <canvas
+                id="raw-thermal-canvas"
+                class="raw-thermal-canvas"
+                width="80"
+                height="62"
+                role="img"
+                aria-label="Uncropped thermal image waiting for data"
+              >Uncropped thermal heat map.</canvas>
+              <div id="raw-thermal-range" class="raw-thermal-range">Waiting for /thermal/image_raw</div>
+            </article>
           </div>
           <aside class="telemetry-panel" aria-label="Odometry node previews">
             <article class="preview-card gyro-preview">
@@ -216,6 +231,6 @@
         <pre id="logs">No launch output yet.</pre>
       </section>
     </main>
-    <script src="/app.js?v=20260814-1"></script>
+    <script src="/app.js?v=20260814-2"></script>
   </body>
 </html>

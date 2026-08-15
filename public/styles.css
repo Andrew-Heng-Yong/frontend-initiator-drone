@@ -25,6 +25,11 @@ button { border: 0; border-radius: .6rem; padding: .82rem 1.2rem; color: #fff; f
 .viewer, .cpu-panel, .log-panel { background: rgba(11, 26, 46, .78); border: 1px solid #264463; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 1.5rem 4rem rgba(0,0,0,.22); }.viewer-heading { align-items: flex-start; }.viewer-heading #range, .canvas-panel #range { color: #f9ce62; font-variant-numeric: tabular-nums; font-weight: 700; font-size: .82rem; line-height: 1.25; }
 .viewer-layout { display: grid; grid-template-columns: minmax(0, 1fr) 15rem 17rem; align-items: start; gap: 1rem; }
 .canvas-panel { min-width: 0; }
+.raw-thermal-window { width: min(100%, 32rem); margin: 1rem auto 0; overflow: hidden; border: 1px solid rgba(56,81,108,.85); border-radius: .75rem; background: rgba(2,10,18,.5); padding: .7rem; }
+.raw-thermal-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.raw-thermal-heading h2 { color: #dfeaff; font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; }
+.raw-thermal-canvas { width: 100%; max-width: none; height: auto; margin: .55rem 0 0; border: 1px solid #38516c; border-radius: .55rem; background: #06111e; image-rendering: pixelated; image-rendering: crisp-edges; }
+.raw-thermal-range { margin-top: .45rem; color: #f9ce62; font: 700 .65rem/1.3 ui-monospace, Consolas, monospace; text-align: center; }
 .telemetry-panel { display: grid; gap: .8rem; min-width: 0; }
 .preview-card { min-width: 0; overflow: hidden; border: 1px solid rgba(56,81,108,.85); border-radius: .75rem; background: rgba(2,10,18,.34); padding: .7rem; }
 .preview-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .55rem; }
@@ -95,6 +100,7 @@ html[data-frontend-mode="simple"] .viewer { width: min(100%, 82rem); margin: 0 a
 html[data-frontend-mode="simple"] .viewer-layout { grid-template-columns: minmax(0, 1fr) 15rem; }
 html[data-frontend-mode="simple"] .tuning-panel { display: none; }
 html[data-frontend-mode="simple"] canvas { width: min(100%, 1024px); height: auto; max-width: 1024px; aspect-ratio: 4 / 3; }
+html[data-frontend-mode="simple"] .raw-thermal-canvas { width: 100%; max-width: none; aspect-ratio: auto; }
 html[data-frontend-mode="simple"] .navball-canvas { width: 100%; max-width: none; aspect-ratio: 1 / 1; }
 html[data-frontend-mode="simple"] canvas[data-stream="waiting"] { image-rendering: auto; }
 #empty-state { color: #9fb0c9; text-align: center; margin-top: 1rem; }

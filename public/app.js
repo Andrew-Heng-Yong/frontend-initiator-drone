@@ -46,6 +46,10 @@ const rangeRate = document.querySelector('#range-rate');
 const rangeAge = document.querySelector('#range-age');
 const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
+const rawThermalCanvas = document.querySelector('#raw-thermal-canvas');
+const rawThermalContext = rawThermalCanvas ? rawThermalCanvas.getContext('2d') : null;
+const rawThermalState = document.querySelector('#raw-thermal-state');
+const rawThermalRange = document.querySelector('#raw-thermal-range');
 const zoomBufferCanvas = document.createElement('canvas');
 const zoomBufferContext = zoomBufferCanvas.getContext('2d');
 const range = document.querySelector('#range');
@@ -78,6 +82,7 @@ let imageTopics = {
   color: '/camera/depth/image_raw',
   cameraInfo: '/camera/depth/camera_info',
   thermal: '/thermal/image_raw',
+  rawThermal: '/thermal/image_raw',
   imu: '/imu/data_calibrated',
   rawImu: '/imu/data_raw',
   odom: '/odom',
@@ -223,6 +228,7 @@ function closeRosbridge() {
   activeImageTopic = null;
   latestColor = null;
   latestThermal = null;
+  resetRawThermalWindow();
   thermalStatus = 'thermal waiting';
   imuStatus = 'IMU waiting';
   renderImuStatus();
@@ -243,6 +249,7 @@ function connectRosbridge() {
       ? `Waiting for thermal crop: ${imageTopics.color}`
       : `Waiting for depth frames: ${imageTopics.color}`;
     subscribeImageTopic(imageTopics.color);
+    subscribeImageTopic(imageTopics.rawThermal);
     subscribeImuTopics();
     subscribeOdomTopics();
     subscribeFlowRangeTopics();
@@ -259,10 +266,14 @@ function connectRosbridge() {
       return;
     }
 
-    if (message.topic === imageTopics.thermal) {
-      if (frontendMode === 'simple') return;
-      updateThermalFrame(message.msg);
-      if (activeImageTopic === imageTopics.color) scheduleDraw();
+    if (message.topic === imageTopics.thermal || message.topic === imageTopics.rawThermal) {
+      const frame = analyzeThermalFrame(message.msg);
+      if (message.topic === imageTopics.rawThermal) renderRawThermalFrame(frame, message.msg);
+      if (message.topic === imageTopics.thermal && frontendMode !== 'simple') {
+        updateThermalFrame(frame, message.msg);
+        if (activeImageTopic === imageTopics.color) scheduleDraw();
+      }
+      return;
     }
 
     if (message.topic === imageTopics.cameraInfo) {
@@ -1391,19 +1402,83 @@ async function drawCompressedCameraFrame(image) {
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
-function updateThermalFrame(image) {
+function analyzeThermalFrame(image) {
   const frame = decodeThermalFrame(image);
-  if (!frame) return;
-  const values = [...frame.values].filter(Number.isFinite);
-  if (!values.length) {
+  if (!frame) return null;
+  let low = Infinity;
+  let high = -Infinity;
+  for (const value of frame.values) {
+    if (!Number.isFinite(value)) continue;
+    low = Math.min(low, value);
+    high = Math.max(high, value);
+  }
+  return Number.isFinite(low) && Number.isFinite(high) ? { ...frame, low, high } : null;
+}
+
+function updateThermalFrame(frame, image) {
+  if (!frame) {
     thermalStatus = 'thermal empty';
+    if (image && image.encoding) thermalStatus = `unsupported or empty thermal: ${image.encoding}`;
+    return;
+  }
+  latestThermal = frame;
+  thermalStatus = `thermal ${frame.width}x${frame.height} ${formatRange(frame.low, frame.high, frame.units)}`;
+}
+
+function renderRawThermalFrame(frame, image) {
+  if (!rawThermalCanvas || !rawThermalContext) return;
+  if (!frame) {
+    rawThermalState.textContent = 'No data';
+    rawThermalState.className = 'preview-state warn';
+    rawThermalRange.textContent = `Unsupported or empty thermal frame: ${(image && image.encoding) || 'unknown'}`;
     return;
   }
 
-  const low = Math.min(...values);
-  const high = Math.max(...values);
-  latestThermal = { ...frame, low, high };
-  thermalStatus = `thermal ${frame.width}x${frame.height} ${formatRange(low, high, frame.units)}`;
+  const { values, width, height, low, high, units } = frame;
+  if (rawThermalCanvas.width !== width || rawThermalCanvas.height !== height) {
+    rawThermalCanvas.width = width;
+    rawThermalCanvas.height = height;
+  }
+  const output = rawThermalContext.createImageData(width, height);
+  const span = Math.max(high - low, units === 'raw' ? 1 : 0.5);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const sourceX = flipThermalX ? width - 1 - x : x;
+      const sourceY = flipThermalY ? height - 1 - y : y;
+      const temperature = values[sourceY * width + sourceX];
+      const target = (y * width + x) * 4;
+      const [red, green, blue] = Number.isFinite(temperature)
+        ? heatColor((temperature - low) / span)
+        : [6, 12, 20];
+      output.data[target] = red;
+      output.data[target + 1] = green;
+      output.data[target + 2] = blue;
+      output.data[target + 3] = 255;
+    }
+  }
+  rawThermalContext.putImageData(output, 0, 0);
+  rawThermalCanvas.dataset.stream = 'thermal';
+  rawThermalCanvas.setAttribute(
+    'aria-label',
+    `Uncropped thermal image, ${width} by ${height}, ${formatRange(low, high, units)}`,
+  );
+  rawThermalState.textContent = 'Live';
+  rawThermalState.className = 'preview-state live';
+  const unitLabel = units === 'temperature' ? ' °C' : ' raw';
+  rawThermalRange.textContent = `${width}x${height} | ${formatRange(low, high, units)}${unitLabel} | ${imageTopics.rawThermal}`;
+}
+
+function resetRawThermalWindow() {
+  if (rawThermalCanvas && rawThermalContext) {
+    rawThermalContext.fillStyle = '#06111e';
+    rawThermalContext.fillRect(0, 0, rawThermalCanvas.width, rawThermalCanvas.height);
+    rawThermalCanvas.dataset.stream = 'waiting';
+  }
+  if (rawThermalState) {
+    rawThermalState.textContent = 'Waiting';
+    rawThermalState.className = 'preview-state';
+  }
+  if (rawThermalRange) rawThermalRange.textContent = `Waiting for ${imageTopics.rawThermal}`;
 }
 
 function drawDepthCameraFrame(image, encoding) {
@@ -1485,7 +1560,6 @@ function decodeThermalFrame(image) {
     return { values, width, height, units: 'raw' };
   }
 
-  thermalStatus = `unsupported thermal: ${image.encoding || 'unknown'}`;
   return null;
 }
 
@@ -1732,6 +1806,7 @@ function applyStreamConfig(stream) {
     color: stream.colorTopic || imageTopics.color,
     cameraInfo: stream.cameraInfoTopic || imageTopics.cameraInfo,
     thermal: stream.thermalTopic || imageTopics.thermal,
+    rawThermal: stream.rawThermalTopic || imageTopics.rawThermal,
     imu: stream.imuTopic || imageTopics.imu,
     rawImu: stream.rawImuTopic || imageTopics.rawImu,
     odom: stream.odomTopic || imageTopics.odom,
@@ -1742,6 +1817,7 @@ function applyStreamConfig(stream) {
   const topicsChanged = nextTopics.color !== imageTopics.color
     || nextTopics.cameraInfo !== imageTopics.cameraInfo
     || nextTopics.thermal !== imageTopics.thermal
+    || nextTopics.rawThermal !== imageTopics.rawThermal
     || nextTopics.imu !== imageTopics.imu
     || nextTopics.rawImu !== imageTopics.rawImu
     || nextTopics.odom !== imageTopics.odom
