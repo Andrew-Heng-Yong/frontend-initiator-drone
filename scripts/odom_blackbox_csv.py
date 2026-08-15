@@ -71,11 +71,11 @@ class OdomBlackboxCsvRecorder(Node):
         output = Path(args.output_directory)
         output.mkdir(parents=True, exist_ok=True)
         self.output_path = output / 'odom_blackbox.csv'
-        self.handle = self.output_path.open(
+        self.csv_handle = self.output_path.open(
             'x', encoding='utf-8', newline='', buffering=1,
         )
         self.writer = csv.DictWriter(
-            self.handle, fieldnames=CSV_COLUMNS, extrasaction='raise', restval='',
+            self.csv_handle, fieldnames=CSV_COLUMNS, extrasaction='raise', restval='',
         )
         self.writer.writeheader()
         self.counts = Counter()
@@ -240,8 +240,8 @@ class OdomBlackboxCsvRecorder(Node):
         self.write(row)
 
     def close(self):
-        self.handle.flush()
-        self.handle.close()
+        self.csv_handle.flush()
+        self.csv_handle.close()
         counts = ', '.join(f'{topic}={count}' for topic, count in self.counts.items())
         self.get_logger().info(f'Closed odometry CSV: {counts}')
 

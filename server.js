@@ -94,6 +94,7 @@ const DEFAULT_THERMAL_CROPPER = {
 };
 
 let launchProcess = null;
+let launchStopping = false;
 let activeLaunchCommand = null;
 let activeCropperEnabled = null;
 let activeCropperSettings = null;
@@ -501,6 +502,7 @@ function publicBlackboxSession(session) {
 
 function blackboxState() {
   return {
+    available: Boolean(launchProcess && !launchStopping),
     recording: blackboxProcess !== null,
     stopping: Boolean(blackboxProcess && blackboxSession && blackboxSession.stopping),
     directory: BLACKBOX_DIRECTORY,
@@ -516,7 +518,13 @@ function writeBlackboxManifest(session) {
     session: path.basename(session.outputPath),
     startedAt: session.startedAt,
     stoppedAt: session.stoppedAt || null,
-    status: session.error ? 'error' : session.stoppedAt ? 'saved' : session.stopping ? 'stopping' : 'recording',
+    status: session.error
+      ? 'error'
+      : session.stoppedAt
+        ? 'saved'
+        : session.stopping
+          ? 'stopping'
+          : session.ready ? 'recording' : 'starting',
     error: session.error || null,
     exitCode: session.exitCode ?? null,
     signal: session.signal || null,
@@ -548,7 +556,7 @@ function shellQuote(value) {
 }
 
 function startBlackbox() {
-  if (!launchProcess) {
+  if (!launchProcess || launchStopping) {
     throw new Error('Start the drone nodes before recording an odometry blackbox.');
   }
   if (blackboxProcess) {
@@ -580,6 +588,7 @@ function startBlackbox() {
     startedAt: new Date().toISOString(),
     topics,
     stopping: false,
+    ready: false,
     manifestPath,
     csvFile,
     context: {
@@ -616,7 +625,14 @@ function startBlackbox() {
   addLog(`Odometry blackbox recording started (PID ${child.pid}): ${outputPath}`);
   addLog(`Blackbox raw inputs: ${topics.rawInputs.join(', ')}`);
   addLog(`Blackbox calculated outputs: ${topics.calculatedOutputs.join(', ')}`);
-  child.stdout.on('data', (data) => addLog(`[blackbox] ${data.toString().trim()}`));
+  child.stdout.on('data', (data) => {
+    const output = data.toString().trim();
+    if (output.includes('Recording odometry CSV in') && blackboxProcess === child) {
+      blackboxSession.ready = true;
+      writeBlackboxManifest(blackboxSession);
+    }
+    if (output) addLog(`[blackbox] ${output}`);
+  });
   child.stderr.on('data', (data) => addLog(`[blackbox] ${data.toString().trim()}`));
   child.on('error', (error) => {
     if (blackboxProcess !== child) return;
@@ -632,7 +648,10 @@ function startBlackbox() {
   });
   child.on('exit', (code, signal) => {
     if (blackboxProcess !== child) return;
-    const stoppedCleanly = code === 0 || (blackboxSession.stopping && signal === 'SIGINT');
+    const csvCreated = fs.existsSync(blackboxSession.csvPath)
+      && fs.statSync(blackboxSession.csvPath).size > 0;
+    const stoppedCleanly = csvCreated
+      && (code === 0 || (blackboxSession.stopping && signal === 'SIGINT'));
     blackboxProcess = null;
     blackboxSession = {
       ...blackboxSession,
@@ -642,7 +661,9 @@ function startBlackbox() {
       signal: signal || null,
       error: stoppedCleanly
         ? null
-        : `Recorder exited unexpectedly (code ${code}, signal ${signal || 'none'}).`,
+        : csvCreated
+          ? `Recorder exited unexpectedly (code ${code}, signal ${signal || 'none'}).`
+          : 'Recorder stopped before odom_blackbox.csv was created.',
     };
     writeBlackboxManifest(blackboxSession);
     addLog(stoppedCleanly
@@ -1022,6 +1043,8 @@ async function saveFullModeParams(request) {
 function startLaunch() {
   if (launchProcess) return { ok: true, alreadyRunning: true };
 
+  launchStopping = false;
+
   const launchCropper = { ...thermalCropper };
   const launchCommand = launchCommandFor(launchCropper);
   const setupFile = `/opt/ros/${ROS_DISTRO}/setup.bash`;
@@ -1062,6 +1085,7 @@ function startLaunch() {
     addLog(`Launch error: ${error.message}`);
     if (blackboxProcess) stopBlackbox();
     launchProcess = null;
+    launchStopping = false;
     activeLaunchCommand = null;
     activeCropperEnabled = null;
     activeCropperSettings = null;
@@ -1073,6 +1097,7 @@ function startLaunch() {
     addLog(`Camera launch exited (code ${code}, signal ${signal || 'none'}).`);
     if (blackboxProcess) stopBlackbox();
     launchProcess = null;
+    launchStopping = false;
     activeLaunchCommand = null;
     activeCropperEnabled = null;
     activeCropperSettings = null;
@@ -1085,14 +1110,20 @@ function startLaunch() {
 
 function stopLaunch() {
   if (blackboxProcess) stopBlackbox();
-  if (!launchProcess) return { ok: true, alreadyStopped: true };
+  if (!launchProcess) {
+    launchStopping = false;
+    return { ok: true, alreadyStopped: true };
+  }
+  if (launchStopping) return { ok: true, alreadyStopping: true };
   const { pid } = launchProcess;
+  launchStopping = true;
   try {
     process.kill(-pid, 'SIGINT');
     addLog('Stop requested for camera launch.');
   } catch (error) {
     if (error.code !== 'ESRCH') throw error;
     launchProcess = null;
+    launchStopping = false;
     activeLaunchCommand = null;
     activeCropperEnabled = null;
     activeCropperSettings = null;

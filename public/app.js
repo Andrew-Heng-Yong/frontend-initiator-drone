@@ -147,6 +147,7 @@ let odomQualityOverrideActive = false;
 let odomQualityOverrideRestartRequired = false;
 let blackboxRecording = false;
 let blackboxStopping = false;
+let blackboxAvailable = false;
 let blackboxRequestActive = false;
 let latestGyroEuler = null;
 let lastGyroMessageAt = 0;
@@ -173,13 +174,15 @@ function setRunning(running) {
     calibrateOdomButton.disabled = !running || calibrationRequestActive || odomStaticOverrideActive;
   }
   if (blackboxToggle) {
-    blackboxToggle.disabled = blackboxRequestActive || blackboxStopping || (!running && !blackboxRecording);
+    blackboxToggle.disabled =
+      blackboxRequestActive || blackboxStopping || (!blackboxAvailable && !blackboxRecording);
   }
 }
 
 function applyBlackboxState(blackbox, running) {
   const state = blackbox || {};
   const session = state.session || null;
+  blackboxAvailable = state.available === true;
   blackboxRecording = state.recording === true;
   blackboxStopping = state.stopping === true;
 
@@ -188,13 +191,21 @@ function applyBlackboxState(blackbox, running) {
       ? 'Saving...'
       : blackboxRecording ? 'Stop blackbox' : 'Start blackbox';
     blackboxToggle.classList.toggle('recording', blackboxRecording);
-    blackboxToggle.disabled = blackboxRequestActive || blackboxStopping || (!running && !blackboxRecording);
+    blackboxToggle.disabled =
+      blackboxRequestActive || blackboxStopping || (!blackboxAvailable && !blackboxRecording);
   }
   if (blackboxStateLabel) {
     blackboxStateLabel.textContent = blackboxStopping
       ? 'Saving'
-      : blackboxRecording ? 'Recording' : session && session.error ? 'Error' : session ? 'Saved' : 'Ready';
-    blackboxStateLabel.classList.toggle('live', blackboxRecording && !blackboxStopping);
+      : blackboxRecording
+        ? session && session.ready ? 'Recording' : 'Starting'
+        : session && session.error ? 'Error' : session ? 'Saved' : 'Ready';
+    blackboxStateLabel.classList.toggle(
+      'live', blackboxRecording && !blackboxStopping && Boolean(session && session.ready),
+    );
+    blackboxStateLabel.classList.toggle(
+      'warn', blackboxRecording && !blackboxStopping && !Boolean(session && session.ready),
+    );
     blackboxStateLabel.classList.toggle('bad', Boolean(!blackboxRecording && session && session.error));
   }
   if (blackboxPath) {
