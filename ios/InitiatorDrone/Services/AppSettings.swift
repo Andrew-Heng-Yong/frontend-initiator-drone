@@ -24,6 +24,12 @@ public struct AppSettings: Equatable, Codable, Sendable {
     /// Where the depth camera is mounted relative to `base_link`. Drives both
     /// the point cloud and the frustum.
     public var cameraExtrinsics: CameraExtrinsics
+    /// AprilTags mounted on the robot, with their sizes and offsets. Empty
+    /// until the operator measures them, which is why tag relocalisation
+    /// reports "no tags configured" rather than silently doing nothing.
+    public var aprilTags: [AprilTagMount]
+    /// How willing the app is to move the robot on a tag sighting.
+    public var tagLocalization: TagLocalizationSettings
     /// In fixtures mode, hold the robot completely still instead of letting it
     /// turn on the spot.
     public var fixtureRobotIsStatic: Bool
@@ -38,6 +44,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
         showsRobotTrail: Bool = true,
         pointCloud: PointCloudSettings = .default,
         cameraExtrinsics: CameraExtrinsics = .identity,
+        aprilTags: [AprilTagMount] = [],
+        tagLocalization: TagLocalizationSettings = .default,
         fixtureRobotIsStatic: Bool = false
     ) {
         self.depthColorMap = depthColorMap
@@ -49,11 +57,31 @@ public struct AppSettings: Equatable, Codable, Sendable {
         self.showsRobotTrail = showsRobotTrail
         self.pointCloud = pointCloud
         self.cameraExtrinsics = cameraExtrinsics
+        self.aprilTags = aprilTags
+        self.tagLocalization = tagLocalization
         self.fixtureRobotIsStatic = fixtureRobotIsStatic
     }
 
     public func depthInterpretation(for encoding: ROSImageEncoding) -> ScalarInterpretation {
         .depthDefault(for: encoding)
+    }
+
+    /// Sizes of every usable tag, keyed by ID — what the detector needs.
+    ///
+    /// Invalid and switched-off mounts are filtered out here rather than in the
+    /// detector, so a tag that is not configured to be looked for is never even
+    /// decoded, let alone posed.
+    public var tagSizesByID: [Int: Double] {
+        var sizes: [Int: Double] = [:]
+        for mount in aprilTags where mount.isEnabled && mount.isValid {
+            sizes[mount.tagID] = mount.sizeMetres
+        }
+        return sizes
+    }
+
+    /// Whether tag relocalisation can do anything at all right now.
+    public var isTagLocalizationUsable: Bool {
+        tagLocalization.isEnabled && !tagSizesByID.isEmpty
     }
 }
 
@@ -73,8 +101,9 @@ public final class SettingsStore: ObservableObject {
     /// an add. The preference has since been removed altogether. `v4` adds the
     /// point-cloud settings and the fixtures static-robot flag — both genuine
     /// adds, so a `v3` blob would throw on decode and has to be abandoned.
-    /// `v5` adds the camera mount extrinsics.
-    private static let storageKey = "com.initiatordrone.settings.v5"
+    /// `v5` adds the camera mount extrinsics; `v6` adds the AprilTag mounts and
+    /// the tag relocalisation policy.
+    private static let storageKey = "com.initiatordrone.settings.v6"
 
     @Published public var settings: AppSettings {
         didSet { persist() }

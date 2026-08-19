@@ -13,6 +13,8 @@ struct InitiatorDroneApp: App {
                 .environmentObject(model.settings)
                 .environmentObject(model.arSession)
                 .environmentObject(model.alignment)
+                .environmentObject(model.tagDetection)
+                .environmentObject(model.recording)
                 // The live view is a camera view; a dark chrome keeps the
                 // instrument overlays readable against it.
                 .preferredColorScheme(.dark)

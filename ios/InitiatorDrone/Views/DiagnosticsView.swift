@@ -11,7 +11,9 @@ struct DiagnosticsView: View {
     #if canImport(ARKit)
     @EnvironmentObject private var arSession: ARSessionController
     @EnvironmentObject private var alignment: AlignmentController
+    @EnvironmentObject private var tagDetection: TagDetectionController
     #endif
+    @EnvironmentObject private var settings: SettingsStore
 
     @State private var logFilter: LogFilter = .all
 
@@ -28,6 +30,9 @@ struct DiagnosticsView: View {
                 topicSection
                 odomNodeSection
                 odometrySection
+                #if canImport(ARKit)
+                tagSection
+                #endif
                 imuSection
                 #if canImport(ARKit)
                 phoneSection
@@ -245,6 +250,70 @@ struct DiagnosticsView: View {
         guard let value else { return "no message yet" }
         return value ? "true" : "false"
     }
+
+    // MARK: - AprilTags
+
+    #if canImport(ARKit)
+    private var tagSection: some View {
+        Section {
+            LabeledContent("Status", value: tagDetection.status.shortLabel)
+            Text(tagDetection.status.detailLabel)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            LabeledContent("Configured tags", value: configuredTagsLabel)
+            LabeledContent("Detector rate") {
+                Text(String(format: "%.1f Hz", tagDetection.detectionRateHz))
+                    .font(.system(.caption, design: .monospaced))
+            }
+            LabeledContent("Frames") {
+                Text("\(tagDetection.framesProcessed) done, \(tagDetection.framesDropped) skipped")
+                    .font(.system(.caption, design: .monospaced))
+            }
+
+            if let tagID = tagDetection.lastFixTagID, let age = tagDetection.secondsSinceFix {
+                LabeledContent("Last fix") {
+                    Text(String(
+                        format: "tag %d at %.2f m, %.0f s ago",
+                        tagID, tagDetection.lastFixRange ?? 0, age
+                    ))
+                    .font(.system(.caption, design: .monospaced))
+                }
+                if let pose = tagDetection.lastRobotPoseInAR {
+                    LabeledContent("Robot (world)") {
+                        Text(String(
+                            format: "%.3f  %.3f  %.3f",
+                            pose.position.x, pose.position.y, pose.position.z
+                        ))
+                        .font(.system(.caption, design: .monospaced))
+                    }
+                }
+                LabeledContent(
+                    "Fix age",
+                    value: tagDetection.hasRecentFix ? "current" : "stale — coasting on odometry"
+                )
+            } else {
+                Text("No tag fix yet this session.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("AprilTag relocalisation")
+        } footer: {
+            Text("""
+            Frames are taken latest-only: one arriving while the detector is busy replaces the \
+            pending one rather than queueing. Skipped frames are expected and healthy — a queued \
+            frame would be paired with a stale phone pose, which is worse than no fix at all.
+            """)
+        }
+    }
+
+    private var configuredTagsLabel: String {
+        let usable = settings.settings.tagSizesByID.keys.sorted()
+        guard !usable.isEmpty else { return "none" }
+        return usable.map(String.init).joined(separator: ", ")
+    }
+    #endif
 
     // MARK: - IMU
 

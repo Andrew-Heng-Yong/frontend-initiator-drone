@@ -52,6 +52,9 @@ results.append(runSuite("ConnectionTests", ConnectionTests.allTests))
 results.append(runSuite("ImageStreamSoakTests", ImageStreamSoakTests.allTests))
 results.append(runSuite("DepthPointCloudTests", DepthPointCloudTests.allTests))
 results.append(runSuite("CameraExtrinsicsTests", CameraExtrinsicsTests.allTests))
+results.append(runSuite("AprilTagTests", AprilTagTests.allTests))
+results.append(runSuite("TagLocalizationTests", TagLocalizationTests.allTests))
+results.append(runSuite("LocalizationRecorderTests", LocalizationRecorderTests.allTests))
 
 let totalPassed = results.reduce(0) { $0 + $1.passed }
 let totalFailed = results.reduce(0) { $0 + $1.failed }

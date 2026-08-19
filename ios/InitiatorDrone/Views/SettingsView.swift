@@ -3,6 +3,7 @@ import SwiftUI
 /// Depth colour map, stream throttling and pose handling.
 struct SettingsView: View {
     @EnvironmentObject private var settings: SettingsStore
+    @EnvironmentObject private var recording: LocalizationRecordingService
 
     var body: some View {
         NavigationStack {
@@ -13,6 +14,9 @@ struct SettingsView: View {
                 sceneSection
                 pointCloudSection
                 cameraMountSection
+                aprilTagSection
+                tagLocalizationSection
+                recordingSection
                 fixturesSection
                 aboutSection
             }
@@ -189,7 +193,7 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            Text("Camera mount")
+            Text("Offsets · Camera mount")
         } footer: {
             Text("""
             Measured from base_link to the depth camera. Both the point cloud and the frustum use \
@@ -286,6 +290,138 @@ struct SettingsView: View {
             Text("Visualisation and diagnostics only. This app sends no flight-control commands.")
         }
         .font(.footnote)
+    }
+
+    // MARK: - AprilTags
+
+    private var aprilTagSection: some View {
+        Section {
+            ForEach($settings.settings.aprilTags) { $mount in
+                AprilTagMountRow(mount: $mount)
+            }
+            .onDelete { offsets in
+                settings.settings.aprilTags.remove(atOffsets: offsets)
+            }
+
+            Button {
+                settings.settings.aprilTags.append(nextTagMount())
+            } label: {
+                Label("Add tag", systemImage: "plus.circle")
+            }
+
+            if settings.settings.aprilTags.isEmpty {
+                Text("No tags configured. Tag relocalisation does nothing until at least one is added.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Offsets · AprilTags")
+        } footer: {
+            Text("""
+            Family is always tag16h5, so IDs run 0–29. Size is the edge of the outer black border,             not the paper and not the payload inside it — range scales directly with it, so a tag             entered 20% too big puts the robot 20% too far away with no other symptom.
+
+            The offset is where the tag sits on the robot, in the same frame as the camera mount:             stand behind it looking the way it faces, and +X is out, +Y is your left, +Z is up. A             tag on the nose is all zeros; one on the tail is yaw 180°; one facing the sky is             pitch −90°. Yaw matters here, unlike the camera: it is what decides which way the app             thinks the robot is pointing.
+            """)
+        }
+    }
+
+    /// Picks an ID not already in use, so adding several tags in a row does not
+    /// silently create duplicates that shadow one another.
+    private func nextTagMount() -> AprilTagMount {
+        let used = Set(settings.settings.aprilTags.map(\.tagID))
+        let free = AprilTagFamily.validIDs.first { !used.contains($0) } ?? 0
+        return AprilTagMount(tagID: free, sizeMetres: 0.10)
+    }
+
+    private var tagLocalizationSection: some View {
+        Section {
+            Toggle("Relocalise from tags", isOn: binding(\.tagLocalization.isEnabled))
+
+            if settings.settings.tagLocalization.isEnabled {
+                rangeRow(
+                    title: "Maximum range",
+                    value: binding(\.tagLocalization.maximumRange),
+                    range: 0.5...10.0, step: 0.5, unit: "m", format: "%.1f"
+                )
+                Stepper(
+                    "Confirm over \(settings.settings.tagLocalization.requiredConsecutiveSightings) frames",
+                    value: binding(\.tagLocalization.requiredConsecutiveSightings),
+                    in: 1...10
+                )
+                rangeRow(
+                    title: "Largest correction",
+                    value: binding(\.tagLocalization.maximumCorrection),
+                    range: 0.0...10.0, step: 0.5, unit: "m", format: "%.1f"
+                )
+            }
+        } header: {
+            Text("Tag relocalisation")
+        } footer: {
+            Text("""
+            When a configured tag is in view the robot is placed from it. When none is, the marker             holds its last fix and follows odometry — which for odom_node means heading only.
+
+            tag16h5 has just 30 codes, so roughly one random square in 550 decodes as a valid tag.             Requiring the same tag on several consecutive frames is the guard that matters: false             positives do not repeat, a real tag does. Largest correction refuses a sighting that             would jump the robot further than this; set it to 0 to allow any jump.
+            """)
+        }
+    }
+
+    // MARK: - Recording
+
+    private var recordingSection: some View {
+        Section {
+            Button {
+                if recording.isRecording { recording.stop() } else { recording.start() }
+            } label: {
+                Label(
+                    recording.isRecording ? "Stop recording" : "Record localisation",
+                    systemImage: recording.isRecording ? "stop.circle.fill" : "record.circle"
+                )
+                .foregroundStyle(recording.isRecording ? Color.red : Color.accentColor)
+            }
+
+            Text(recording.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+
+            if let error = recording.lastError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(Color.red)
+            }
+
+            ForEach(recording.recordings, id: \.self) { url in
+                ShareLink(item: url) {
+                    HStack {
+                        Image(systemName: "square.and.arrow.up")
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(url.lastPathComponent)
+                                .font(.caption)
+                            Text(fileSizeLabel(url))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .onDelete { offsets in
+                for index in offsets { recording.deleteRecording(at: recording.recordings[index]) }
+            }
+        } header: {
+            Text("Localisation log")
+        } footer: {
+            Text("""
+            Writes a CSV with one row per estimate: every accepted tag fix, and the odometry             estimate a few times a second. Both are the robot's pose in the AR world frame, which             is what makes them comparable — differencing them at the same instant is the drift.
+
+            Tag rows also carry the odometry reading from that moment, so a fix can be compared             without interpolating between neighbouring rows. Tap a file to share it; swipe to             delete. Files also appear in the Files app under Initiator ▸ Localization.
+            """)
+        }
+    }
+
+    private func fileSizeLabel(_ url: URL) -> String {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let bytes = (attributes?[.size] as? NSNumber)?.intValue ?? 0
+        return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
     // MARK: - Helpers

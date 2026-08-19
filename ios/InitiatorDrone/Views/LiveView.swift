@@ -16,6 +16,7 @@ struct LiveView: View {
     #if canImport(ARKit)
     @EnvironmentObject private var arSession: ARSessionController
     @EnvironmentObject private var alignment: AlignmentController
+    @EnvironmentObject private var tagDetection: TagDetectionController
     #endif
 
     @State private var showsSensorPanel = true
@@ -229,6 +230,14 @@ struct LiveView: View {
                     value: connection.trackingStatus.shortLabel,
                     level: connection.trackingStatus.pillLevel
                 )
+
+                #if canImport(ARKit)
+                StatusPill(
+                    title: "Tag",
+                    value: tagDetection.status.shortLabel,
+                    level: tagDetection.status.pillLevel
+                )
+                #endif
 
                 #if canImport(ARKit)
                 StatusPill(
@@ -476,6 +485,16 @@ struct LiveView: View {
         if case .stale = connection.trackingStatus {
             return connection.trackingStatus.detailLabel
         }
+        #if canImport(ARKit)
+        // Only the states the operator can do something about. "Searching" and
+        // "Fixed" are both normal and would make this banner permanent.
+        switch tagDetection.status {
+        case .noTagsConfigured, .rejected:
+            return tagDetection.status.detailLabel
+        default:
+            break
+        }
+        #endif
         return nil
     }
 

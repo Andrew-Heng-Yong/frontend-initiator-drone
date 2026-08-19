@@ -19,9 +19,14 @@ import SwiftUI
 /// - **"Place on surface"** — the operator aims a crosshair at the floor where
 ///   the robot started, taps to drop the origin, then dials in the heading.
 ///
-/// AprilTag or another automatic method would remove the human from this loop
-/// and is the obvious next step; the transform it produces would slot into
-/// exactly the same `RobotAlignment`.
+/// - **AprilTag** — a tag on the robot, seen by the phone, produces the same
+///   transform with nobody standing anywhere. This was designed for from the
+///   start: `TagLocalization` solves for a `RobotAlignment`, so an automatic fix
+///   and a manual placement are the same object and share every downstream path.
+///
+/// Once tags are configured and in view they take over, and a manual alignment
+/// becomes the fallback for when they are not. Manual placement is never
+/// disabled, because the tag can be obscured, unlit, or simply not fitted.
 @MainActor
 public final class AlignmentController: ObservableObject {
 
@@ -122,6 +127,33 @@ public final class AlignmentController: ObservableObject {
         statusMessage = "Alignment cleared. The robot marker is hidden until you align again."
     }
 
+    /// Installs an alignment derived from an AprilTag sighting.
+    ///
+    /// Kept separate from `commit` for two reasons that both matter in the
+    /// field. It must not disturb a manual placement in progress — a fix
+    /// arriving while the operator is dialling in a heading would yank the
+    /// origin out from under them mid-gesture. And it must not spam
+    /// `statusMessage`, which is a banner meant for things the operator did;
+    /// tag fixes arrive several times a second and have their own status pill.
+    public func applyTagFix(_ value: RobotAlignment, tagID: Int) {
+        guard phase == .idle else { return }
+        alignment = value
+        lastTagFixID = tagID
+        lastTagFixAt = value.capturedAt
+    }
+
+    /// The tag behind the newest automatic fix, for the alignment sheet.
+    @Published public private(set) var lastTagFixID: Int?
+    @Published public private(set) var lastTagFixAt: Date?
+
+    /// Whether the alignment currently in force came from a tag rather than a
+    /// person. Reset by any manual placement, so the sheet never claims a fix
+    /// the operator has since overridden.
+    public var isTagDerived: Bool {
+        guard let lastTagFixAt, let alignment else { return false }
+        return abs(alignment.capturedAt.timeIntervalSince(lastTagFixAt)) < 0.001
+    }
+
     /// Restores a saved alignment. Only meaningful when the AR session has not
     /// been reset since it was captured, which is why the UI asks first.
     public func restore(_ alignment: RobotAlignment) {
@@ -147,6 +179,10 @@ public final class AlignmentController: ObservableObject {
         phase = .idle
         previewPosition = nil
         statusMessage = message
+        // A manual placement is the operator overruling the tag; the app must
+        // stop describing the alignment as tag-derived the moment they do.
+        lastTagFixID = nil
+        lastTagFixAt = nil
     }
 
     /// A short human-readable description of the current alignment.

@@ -30,6 +30,11 @@ public final class ARSessionController: NSObject, ObservableObject {
         .supportedVideoFormats
         .map(ARSessionController.summarise)
 
+    /// Called on the main actor for every ARKit frame. The tag detector takes
+    /// it from here; it copies what it needs and returns, because the frame is
+    /// recycled as soon as this returns.
+    public var onFrame: ((ARFrame) -> Void)?
+
     /// Phone pose in ARKit world coordinates, republished a few times a second
     /// for the numeric readouts. The scene renderer reads `currentPose`
     /// directly at render time instead, so nothing is throttled that matters.
@@ -167,6 +172,11 @@ extension ARSessionController: ARSessionDelegate {
 
         Task { @MainActor [weak self] in
             guard let self else { return }
+            // Offered synchronously with the pose update so the tag detector
+            // sees the frame and the phone pose it was taken at as one thing.
+            // Composing a tag sighting with a phone pose from a different
+            // instant is exactly the error that puts a robot in the wrong place.
+            self.onFrame?(frame)
             self.currentPose = pose
             self.currentFrameTime = timestamp
 

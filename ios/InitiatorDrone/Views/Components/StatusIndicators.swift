@@ -108,6 +108,22 @@ extension RobotTrackingStatus {
     }
 }
 
+#if canImport(ARKit)
+extension TagDetectionController.Status {
+    var pillLevel: StatusPill.Level {
+        switch self {
+        case .fixed: return .good
+        // Searching is the resting state whenever the robot is not in shot,
+        // which is most of the time. Amber for that would be permanent noise;
+        // confirming is genuinely transient, so it reads as progress.
+        case .confirming: return .warning
+        case .searching, .disabled: return .neutral
+        case .rejected, .noTagsConfigured: return .bad
+        }
+    }
+}
+#endif
+
 extension OdomNodeStatus {
     var pillLevel: StatusPill.Level {
         switch self {

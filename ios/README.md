@@ -223,9 +223,9 @@ subscribes to the camera driver's own depth topics.
 
 **Live** — the camera view with the robot drawn into it, plus the depth
 stream, Start, Stop, Calibrate, and Align. Status pills across the top cover the
-link, the odometry node, robot tracking, phone AR tracking, and alignment. The
-metric strip shows depth fps, odometry rate, odometry node state, and the
-robot's position and orientation.
+link, the odometry node, robot tracking, the AprilTag fix, phone AR tracking,
+and alignment. The metric strip shows depth fps, odometry rate, odometry node
+state, and the robot's position and orientation.
 
 Two levels of hiding, because they answer different questions. **Hide depth**
 folds away the depth panel while the pills, metrics and controls stay up — for
@@ -244,8 +244,9 @@ and swallow the taps that place the alignment origin.
 
 **Diagnostics** — per-topic rate and last-message age, odometry node status
 including whether position is measured and its published variance, the full pose
-and twist, IMU values, phone AR pose, every ARKit video format the device offers,
-stream statistics including dropped frames, and the raw rosbridge log.
+and twist, AprilTag relocalisation state, IMU values, phone AR pose, every ARKit
+video format the device offers, stream statistics including dropped frames, and
+the raw rosbridge log.
 
 The IMU rows adapt to what the publisher claims: `odom_node` marks linear
 acceleration unavailable with `covariance[0] = -1`, so the acceleration and
@@ -457,6 +458,147 @@ URDF, which is also where all of this properly belongs — the honest long-term
 fix is to subscribe to `/tf_static` and read the real extrinsic instead of
 asking a person to type it.
 
+## AprilTag relocalisation
+
+`odom_node` does not estimate position, so until now the robot marker sat
+wherever a person put it with **Align robot** and drifted from that moment on.
+A tag on the robot fixes that: whenever the phone can see one, it knows where
+the robot actually is, in its own world frame.
+
+### Setting it up
+
+**Settings ▸ Offsets ▸ AprilTags**. Add a tag and give it three things:
+
+| Field | Notes |
+| --- | --- |
+| **ID** | 0–29. The family is always `tag16h5`; the row draws the actual tag so you can check it against the marker on the robot. |
+| **Size** | The edge of the **outer black border**, in millimetres. Not the paper, not the payload inside the border. |
+| **Offset** | Where the tag sits on the robot, in the same frame as the camera mount. |
+
+Size is the one that bites. Range scales directly with it, so a tag entered 20%
+too large puts the robot 20% too far away — and nothing else looks wrong.
+
+The offset frame is the camera mount's, so there is one idea to hold: stand
+behind the thing looking the way it faces, `+X` is out, `+Y` is your left, `+Z`
+is up. A tag on the nose is all zeros; the tail is `yaw 180°`; facing the sky is
+`pitch −90°`. **Yaw is present here and matters**, unlike the camera mount: it is
+what decides which way the app thinks the robot is pointing.
+
+Print tags with a white margin around the black border. The detector finds tags
+by tracing the outline of dark blobs, so a tag butted against a dark background
+merges into it and is never found.
+
+### What happens then
+
+A sighting is converted straight into a `RobotAlignment` — the same object
+**Align robot** produces — so an automatic fix and a manual placement are
+interchangeable and share every downstream path. When a tag is in view the robot
+is placed from it; when none is, the marker holds its last fix and follows
+odometry, which for `odom_node` means heading only.
+
+Roll and pitch from the sighting are discarded. Both `odom` and the ARKit world
+are gravity-aligned, so tilt between them is error by definition — and tilt is
+exactly where a monocular tag pose is weakest. Throwing it away keeps the scene
+level and drops the noisiest part of the measurement.
+
+Manual alignment is never disabled: the tag can be obscured, unlit, or not
+fitted. A manual placement also stops the app describing the alignment as
+tag-derived, because the operator has overruled it.
+
+### Why the app is so cautious about it
+
+`tag16h5` has 30 codes in a 65,536-value space, and every code has four
+rotations. Roughly one random 16-bit pattern in 550 decodes to *something*, and
+a cluttered room offers the detector many quadrilaterals per frame. A false
+positive here does not nudge the marker — it teleports the robot somewhere else,
+and there is no way to tell a wrong relocalisation from a right one by looking
+at it.
+
+So there are five guards, and they are cheap in the order they run:
+
+1. **Exact-match decoding.** No error correction by default. The family's
+   distance of 5 makes correcting two bits sound safe, but every forgiven bit
+   multiplies the space of random patterns that decode to a valid ID.
+2. **The border check.** All twenty black-border cells must read black, before
+   anything is decoded. This throws away almost every non-tag quad in a scene
+   for the cost of twenty samples.
+3. **Decision margin.** The gap between the darkest cell read as white and the
+   brightest read as black. A coin-toss decode is refused.
+4. **Reprojection.** The homography solve is exact, so it cannot check itself;
+   reprojecting the *rigid pose* extracted from it can. A quad that is not
+   really a square in the world fails here.
+5. **Consecutive agreement.** The one that matters most. The same tag must be
+   seen on several frames in a row (three by default). False positives are
+   uncorrelated frame to frame, so agreement squares an already small
+   probability, while a real tag in view satisfies it in a fraction of a second.
+
+Plus a plausibility limit: a sighting that would jump the robot further than
+**Largest correction** is ignored. The first fix of a session is exempt, because
+there is nothing to disagree with yet.
+
+**Diagnostics ▸ AprilTag relocalisation** shows which tags are configured, the
+detector rate, how many frames were skipped, and how old the last fix is.
+Skipped frames are expected and healthy: frames are taken latest-only, and a
+queued frame would be paired with a stale phone pose — worse than no fix at all.
+
+### The detector
+
+Written in Swift rather than vendored, so the whole pipeline runs on the
+headless test runner. `AprilTagTests` synthesises a tag at a known pose,
+projects it with known intrinsics, puts it through the real pipeline, and
+compares the recovered pose against the one it was drawn from — at several
+ranges, tilts and all four quarter turns.
+
+The stages: downscale, adaptive threshold, connected components, boundary
+trace, polygon simplification, sub-pixel corner refinement, decode, pose from
+homography. Two of those exist because of measurements rather than theory:
+
+- **Sub-pixel refinement.** Douglas-Peucker can only return points that lie on
+  the contour, so its corners are pixel-quantised. On a tag filling 50 pixels
+  that is a two-to-three pixel error, and a border cell centre sits only four
+  pixels inside the edge — so the decoder samples a payload cell where it
+  expects black border and rejects the tag. Fitting lines to the traced edges
+  and intersecting them fixes it. Before this, tags at a 20–30° tilt failed.
+- **Half-pixel dilation.** The tracer returns the centres of the outermost dark
+  pixels, but the tag's edge is half a pixel further out on every side.
+  Uncorrected, a 27-pixel tag at 1.8 m reported 1.93 m — an error invisible up
+  close that grows with distance, which is the worst shape an error can have.
+
+## The localisation log
+
+**Settings ▸ Localisation log ▸ Record localisation** writes a CSV with one row
+per estimate: every accepted tag fix, and the odometry estimate a few times a
+second.
+
+Both are the robot's pose **in the AR world frame**. That is the point — the tag
+pose starts out relative to the phone, and logging it that way would produce a
+file measuring how the operator walked around the room. Differencing the two
+sources at the same instant is the drift.
+
+Tag rows also carry the odometry reading from that same moment, so a fix can be
+compared against odometry without interpolating between the rows on either side
+of it.
+
+| Column group | Contents |
+| --- | --- |
+| `sequence`, `wall_time_iso`, `session_seconds`, `source` | `source` is `apriltag` or `odom` |
+| `robot_*` | robot pose in the AR world frame, position + quaternion + yaw |
+| `tag_*` | ID, range, decision margin, reprojection error (tag rows only) |
+| `odom_*` | the raw `/odom` reading in the ROS `odom` frame |
+| `phone_*` | the phone's own AR pose |
+| `align_*` | the alignment transform in force |
+
+Absent values are blank rather than zero, so a reader can tell "no tag on this
+row" from "a tag exactly at the origin" — pandas reads a blank as `NaN`, which
+is what it is. Headings are in degrees, and `odom_yaw_deg` is measured about ROS
+`+Z` while `robot_yaw_deg` is about the AR up axis, because those are the frames
+they live in.
+
+Files are listed newest first with a share button, and also appear in the Files
+app under **Initiator ▸ Localization**. Numbers are written with a full stop
+whatever the phone's region is set to; a locale-aware formatter would write
+`1,25` and silently shift every column one to the right.
+
 ## How the robot ends up in the right place
 
 Three transforms, kept separate on purpose so a bug in one is visible.
@@ -494,7 +636,11 @@ gravity-aligned, and allowing them would let a sloppy placement tilt the whole
 scene. Nudge controls and a height offset are there for touching up a placement
 that is close but visibly off.
 
-AprilTag or another automatic method is the obvious next step. It would produce
+AprilTag relocalisation now does this automatically when a configured tag is in
+view — see above. What follows is the manual path, which is still the fallback
+whenever no tag is visible.
+
+Another automatic method would produce
 exactly the same `RobotAlignment` and nothing downstream would change.
 
 **3. Time.** The odometry buffer is keyed to the robot's ROS clock; rendering
@@ -616,6 +762,25 @@ Coverage of the things most likely to be silently wrong:
 - **Position observability** — that a 1e6 m² variance reads as unobserved, that
   an all-zero covariance means "not filled in" rather than "perfectly known",
   and that a missing covariance is trusted rather than second-guessed.
+- **The AprilTag detector, end to end on synthesised frames** — a tag rendered
+  at a known pose and recovered through the real pipeline, at several ranges,
+  at tilt, and at all four quarter turns. Plus the rejections: a blank dark
+  rectangle, a tag with no configured size, unusable intrinsics. The family's
+  minimum Hamming distance of 5 is recomputed over every code and rotation,
+  which is really a checksum on the transcribed code table.
+- **Tag localisation conventions** — scenarios that derive the detector's tag
+  frame from where a reader would have to stand, never from the constant being
+  checked, so a wrong axis convention cannot pass. Plus that an alignment
+  reproduces its robot pose through the existing render path, and that roll and
+  pitch are dropped from a noisy sighting.
+- **The fix gate** — that several consecutive frames are required, that a
+  different tag restarts the count rather than adding to it, that the first fix
+  of a session is never blocked as implausible, and that a refused jump keeps
+  the streak alive so a genuinely large correction stays possible.
+- **The CSV log** — schema width, blank-not-zero for absent values, a full stop
+  as the decimal separator, contiguous sequence numbers, that a flush makes rows
+  readable without stopping, and that the memory ceiling can never starve the
+  file.
 - **AR video format choice** — that the tallest frame wins over any 16:9 crop of
   it, and that equal aspect ratios fall back to ARKit's ordering rather than to
   resolution.
@@ -651,11 +816,19 @@ frames stop arriving after changing it.
 - Subscribing to a `PointCloud2` topic. The cloud is deprojected on the phone
   from the depth image instead (see below), which needs no extra bandwidth and
   no extra node on the robot.
-- AprilTag or automatic alignment.
 - An authoritative node list. Adding `rosapi_node` to `drone_launch.py` would
   let `OdomNodeStatus` confirm what it currently infers.
-- **Reading the camera extrinsic from `/tf_static`** instead of asking the
-  operator to measure it into Settings ▸ Camera mount.
+- **Reading the camera and tag extrinsics from `/tf_static`** instead of asking
+  the operator to measure them into Settings ▸ Offsets. The offsets already live
+  in the robot's URDF; the app simply does not subscribe to the topic that
+  carries them.
+- Fusing tag fixes rather than replacing with them. Each accepted sighting
+  overwrites the alignment outright, so the marker steps when a fix arrives
+  instead of easing onto it. A filter over recent fixes would smooth that and
+  reject outliers on more evidence than a single frame.
+- Tags fixed in the room rather than on the robot. The same detector would give
+  the phone an absolute pose against a surveyed tag, which is the other half of
+  the problem when the robot itself is out of sight.
 - A camera view wider than ARKit's wide lens. It would need `AVCaptureSession`
   on the ultra-wide camera plus pose estimation of our own, since ARKit will not
   give world tracking and that lens at the same time — a large piece of work to
