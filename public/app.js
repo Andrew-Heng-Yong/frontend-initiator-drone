@@ -32,8 +32,27 @@ const odomRate = document.querySelector('#odom-rate');
 const odomAge = document.querySelector('#odom-age');
 const odomForward = document.querySelector('#odom-forward');
 const odomQuality = document.querySelector('#odom-quality');
+const blackboxToggle = document.querySelector('#blackbox-toggle');
+const blackboxStateLabel = document.querySelector('#blackbox-state');
+const blackboxPath = document.querySelector('#blackbox-path');
+const flowRangeState = document.querySelector('#flow-range-state');
+const flowMotion = document.querySelector('#flow-motion');
+const flowDx = document.querySelector('#flow-dx');
+const flowDy = document.querySelector('#flow-dy');
+const flowQuality = document.querySelector('#flow-quality');
+const flowShutter = document.querySelector('#flow-shutter');
+const flowPeriod = document.querySelector('#flow-period');
+const flowRate = document.querySelector('#flow-rate');
+const rangeValidity = document.querySelector('#range-validity');
+const rangeDistance = document.querySelector('#range-distance');
+const rangeRate = document.querySelector('#range-rate');
+const rangeAge = document.querySelector('#range-age');
 const canvas = document.querySelector('#thermal-canvas');
 const context = canvas.getContext('2d');
+const rawThermalCanvas = document.querySelector('#raw-thermal-canvas');
+const rawThermalContext = rawThermalCanvas ? rawThermalCanvas.getContext('2d') : null;
+const rawThermalState = document.querySelector('#raw-thermal-state');
+const rawThermalRange = document.querySelector('#raw-thermal-range');
 const zoomBufferCanvas = document.createElement('canvas');
 const zoomBufferContext = zoomBufferCanvas.getContext('2d');
 const range = document.querySelector('#range');
@@ -66,10 +85,13 @@ let imageTopics = {
   color: '/camera/depth/image_raw',
   cameraInfo: '/camera/depth/camera_info',
   thermal: '/thermal/image_raw',
+  rawThermal: '/thermal/image_raw',
   imu: '/imu/data_calibrated',
   rawImu: '/imu/data_raw',
   odom: '/odom',
   odomCalibrated: '/odom/calibrated',
+  flow: '/optical_flow/raw',
+  range: '/range/down',
 };
 let frontendMode = 'full';
 const SIMPLE_DISPLAY_SIZE = { width: 1024, height: 768 };
@@ -123,6 +145,10 @@ let odomStaticOverrideRestartRequired = false;
 let odomQualityOverride = false;
 let odomQualityOverrideActive = false;
 let odomQualityOverrideRestartRequired = false;
+let blackboxRecording = false;
+let blackboxStopping = false;
+let blackboxAvailable = false;
+let blackboxRequestActive = false;
 let latestGyroEuler = null;
 let lastGyroMessageAt = 0;
 let latestOdometry = null;
@@ -130,6 +156,10 @@ let lastOdometryAt = 0;
 let odomCalibrated = null;
 let odomArrivalTimes = [];
 let odomTrailPoints = [];
+let latestFlowReading = null;
+let latestRangeReading = null;
+let flowArrivalTimes = [];
+let rangeArrivalTimes = [];
 let telemetryDrawScheduled = false;
 const messageFragments = new Map();
 
@@ -142,6 +172,46 @@ function setRunning(running) {
   if (startToggle) startToggle.textContent = running ? 'Stop node' : 'Start node';
   if (calibrateOdomButton) {
     calibrateOdomButton.disabled = !running || calibrationRequestActive || odomStaticOverrideActive;
+  }
+  if (blackboxToggle) {
+    blackboxToggle.disabled =
+      blackboxRequestActive || blackboxStopping || (!blackboxAvailable && !blackboxRecording);
+  }
+}
+
+function applyBlackboxState(blackbox, running) {
+  const state = blackbox || {};
+  const session = state.session || null;
+  blackboxAvailable = state.available === true;
+  blackboxRecording = state.recording === true;
+  blackboxStopping = state.stopping === true;
+
+  if (blackboxToggle) {
+    blackboxToggle.textContent = blackboxStopping
+      ? 'Saving...'
+      : blackboxRecording ? 'Stop blackbox' : 'Start blackbox';
+    blackboxToggle.classList.toggle('recording', blackboxRecording);
+    blackboxToggle.disabled =
+      blackboxRequestActive || blackboxStopping || (!blackboxAvailable && !blackboxRecording);
+  }
+  if (blackboxStateLabel) {
+    blackboxStateLabel.textContent = blackboxStopping
+      ? 'Saving'
+      : blackboxRecording
+        ? session && session.ready ? 'Recording' : 'Starting'
+        : session && session.error ? 'Error' : session ? 'Saved' : 'Ready';
+    blackboxStateLabel.classList.toggle(
+      'live', blackboxRecording && !blackboxStopping && Boolean(session && session.ready),
+    );
+    blackboxStateLabel.classList.toggle(
+      'warn', blackboxRecording && !blackboxStopping && !Boolean(session && session.ready),
+    );
+    blackboxStateLabel.classList.toggle('bad', Boolean(!blackboxRecording && session && session.error));
+  }
+  if (blackboxPath) {
+    const outputPath = session && (session.csvPath || session.outputPath);
+    blackboxPath.textContent = outputPath || `Recordings will be stored in ${state.directory || 'the configured directory'}.`;
+    blackboxPath.title = outputPath || '';
   }
 }
 
@@ -205,6 +275,7 @@ function closeRosbridge() {
   activeImageTopic = null;
   latestColor = null;
   latestThermal = null;
+  resetRawThermalWindow();
   thermalStatus = 'thermal waiting';
   imuStatus = 'IMU waiting';
   renderImuStatus();
@@ -225,8 +296,10 @@ function connectRosbridge() {
       ? `Waiting for thermal crop: ${imageTopics.color}`
       : `Waiting for depth frames: ${imageTopics.color}`;
     subscribeImageTopic(imageTopics.color);
+    subscribeImageTopic(imageTopics.rawThermal);
     subscribeImuTopics();
     subscribeOdomTopics();
+    subscribeFlowRangeTopics();
     if (frontendMode !== 'simple') subscribeCameraInfo();
   };
   rosSocket.onmessage = (event) => {
@@ -240,10 +313,14 @@ function connectRosbridge() {
       return;
     }
 
-    if (message.topic === imageTopics.thermal) {
-      if (frontendMode === 'simple') return;
-      updateThermalFrame(message.msg);
-      if (activeImageTopic === imageTopics.color) scheduleDraw();
+    if (message.topic === imageTopics.thermal || message.topic === imageTopics.rawThermal) {
+      const frame = analyzeThermalFrame(message.msg);
+      if (message.topic === imageTopics.rawThermal) renderRawThermalFrame(frame, message.msg);
+      if (message.topic === imageTopics.thermal && frontendMode !== 'simple') {
+        updateThermalFrame(frame, message.msg);
+        if (activeImageTopic === imageTopics.color) scheduleDraw();
+      }
+      return;
     }
 
     if (message.topic === imageTopics.cameraInfo) {
@@ -254,6 +331,8 @@ function connectRosbridge() {
     if (message.topic === imageTopics.imu) updateImu(message.msg);
     if (message.topic === imageTopics.rawImu) updateRawAcceleration(message.msg);
     if (message.topic === imageTopics.odom) updateOdometry(message.msg);
+    if (message.topic === imageTopics.flow) updateFlowReading(message.msg);
+    if (message.topic === imageTopics.range) updateRangeReading(message.msg);
     if (message.topic === imageTopics.odomCalibrated) {
       odomCalibrated = message.msg && message.msg.data === true;
       scheduleTelemetryRender();
@@ -409,6 +488,21 @@ function updateImu(message) {
     : 'accel unavailable';
   imuStatus = `${gyroText} | ${accelerationText}`;
   renderImuStatus();
+}
+
+function subscribeFlowRangeTopics() {
+  if (imageTopics.flow) {
+    subscribeRosTopic(imageTopics.flow, 'flow_range_sensor_node/msg/OpticalFlow', {
+      throttle_rate: 50,
+      queue_length: 1,
+    });
+  }
+  if (imageTopics.range) {
+    subscribeRosTopic(imageTopics.range, 'sensor_msgs/msg/Range', {
+      throttle_rate: 50,
+      queue_length: 1,
+    });
+  }
 }
 
 function updateRawAcceleration(message) {
@@ -823,6 +917,102 @@ function updateOdometry(message) {
   scheduleTelemetryRender();
 }
 
+function updateFlowReading(message) {
+  const now = Date.now();
+  latestFlowReading = {
+    receivedAt: now,
+    motionDetected: message && message.motion_detected === true,
+    deltaX: finiteNumberOrNull(message && message.delta_x),
+    deltaY: finiteNumberOrNull(message && message.delta_y),
+    quality: finiteNumberOrNull(message && message.quality),
+    shutter: finiteNumberOrNull(message && message.shutter),
+    integrationTime: finiteNumberOrNull(message && message.integration_time),
+  };
+  flowArrivalTimes.push(now);
+  flowArrivalTimes = flowArrivalTimes.filter((arrival) => now - arrival <= 3000);
+  scheduleTelemetryRender();
+}
+
+function updateRangeReading(message) {
+  const now = Date.now();
+  const distance = finiteNumberOrNull(message && message.range);
+  const minimum = finiteNumberOrNull(message && message.min_range);
+  const maximum = finiteNumberOrNull(message && message.max_range);
+  latestRangeReading = {
+    receivedAt: now,
+    distance,
+    valid: distance !== null
+      && (minimum === null || distance >= minimum)
+      && (maximum === null || distance <= maximum),
+  };
+  rangeArrivalTimes.push(now);
+  rangeArrivalTimes = rangeArrivalTimes.filter((arrival) => now - arrival <= 3000);
+  scheduleTelemetryRender();
+}
+
+function arrivalRate(arrivals, now) {
+  const recent = arrivals.filter((arrival) => now - arrival <= 3000);
+  if (recent.length < 2) return null;
+  const duration = recent[recent.length - 1] - recent[0];
+  return duration > 0 ? (recent.length - 1) * 1000 / duration : null;
+}
+
+function renderFlowRangePreview() {
+  const now = Date.now();
+  const flowAge = latestFlowReading ? (now - latestFlowReading.receivedAt) / 1000 : null;
+  const measuredRangeAge = latestRangeReading ? (now - latestRangeReading.receivedAt) / 1000 : null;
+  const flowStale = flowAge === null || flowAge > 1;
+  const rangeStale = measuredRangeAge === null || measuredRangeAge > 1;
+  const lowLight = latestFlowReading && latestFlowReading.shutter !== null
+    && latestFlowReading.shutter >= 8000;
+  const lowQuality = latestFlowReading && latestFlowReading.quality !== null
+    && latestFlowReading.quality < 25;
+  const rangeInvalid = latestRangeReading && !latestRangeReading.valid;
+
+  let state = 'Live';
+  let tone = 'live';
+  if (!latestFlowReading && !latestRangeReading) {
+    state = 'Waiting';
+    tone = '';
+  } else if (flowStale && rangeStale) {
+    state = 'Stale';
+    tone = 'bad';
+  } else if (flowStale || rangeStale || lowLight || lowQuality || rangeInvalid) {
+    state = 'Degraded';
+    tone = 'warn';
+  }
+  setPreviewState(flowRangeState, state, tone);
+
+  if (latestFlowReading) {
+    if (flowMotion) flowMotion.textContent = latestFlowReading.motionDetected ? 'Motion' : 'Still';
+    if (flowDx) flowDx.textContent = latestFlowReading.deltaX === null ? '--' : latestFlowReading.deltaX.toFixed(0);
+    if (flowDy) flowDy.textContent = latestFlowReading.deltaY === null ? '--' : latestFlowReading.deltaY.toFixed(0);
+    if (flowQuality) flowQuality.textContent = latestFlowReading.quality === null ? '--' : latestFlowReading.quality.toFixed(0);
+    if (flowShutter) flowShutter.textContent = latestFlowReading.shutter === null ? '--' : latestFlowReading.shutter.toFixed(0);
+    if (flowPeriod) {
+      flowPeriod.textContent = latestFlowReading.integrationTime === null
+        ? '--'
+        : `${(latestFlowReading.integrationTime * 1000).toFixed(1)} ms`;
+    }
+  }
+  const measuredFlowRate = arrivalRate(flowArrivalTimes, now);
+  if (flowRate) flowRate.textContent = measuredFlowRate === null ? '--' : `${measuredFlowRate.toFixed(1)} Hz`;
+
+  if (rangeValidity) {
+    rangeValidity.textContent = !latestRangeReading
+      ? '--'
+      : latestRangeReading.valid ? 'Valid' : 'Invalid';
+  }
+  if (rangeDistance) {
+    rangeDistance.textContent = latestRangeReading && latestRangeReading.valid
+      ? `${latestRangeReading.distance.toFixed(3)} m`
+      : '-- m';
+  }
+  const measuredRangeRate = arrivalRate(rangeArrivalTimes, now);
+  if (rangeRate) rangeRate.textContent = measuredRangeRate === null ? '-- Hz' : `${measuredRangeRate.toFixed(1)} Hz`;
+  if (rangeAge) rangeAge.textContent = measuredRangeAge === null ? '-- s' : `${measuredRangeAge.toFixed(1)} s`;
+}
+
 function prepareOdomCanvas() {
   if (!odomCanvas || !odomContext) return null;
   const cssWidth = Math.max(1, odomCanvas.clientWidth || 240);
@@ -1105,6 +1295,7 @@ function renderOdomPreview() {
 function renderTelemetryPreviews() {
   renderGyroPreview();
   renderOdomPreview();
+  renderFlowRangePreview();
 }
 
 function scheduleTelemetryRender() {
@@ -1124,6 +1315,10 @@ function resetTelemetryPreviews() {
   odomCalibrated = null;
   odomArrivalTimes = [];
   odomTrailPoints = [];
+  latestFlowReading = null;
+  latestRangeReading = null;
+  flowArrivalTimes = [];
+  rangeArrivalTimes = [];
   telemetryDrawScheduled = false;
   if (gyroRoll) gyroRoll.textContent = '--';
   if (gyroPitch) gyroPitch.textContent = '--';
@@ -1138,6 +1333,17 @@ function resetTelemetryPreviews() {
   if (odomRate) odomRate.textContent = '--';
   if (odomAge) odomAge.textContent = '--';
   if (odomForward) odomForward.textContent = 'Forward +X: --';
+  if (flowMotion) flowMotion.textContent = '--';
+  if (flowDx) flowDx.textContent = '--';
+  if (flowDy) flowDy.textContent = '--';
+  if (flowQuality) flowQuality.textContent = '--';
+  if (flowShutter) flowShutter.textContent = '--';
+  if (flowPeriod) flowPeriod.textContent = '--';
+  if (flowRate) flowRate.textContent = '--';
+  if (rangeValidity) rangeValidity.textContent = '--';
+  if (rangeDistance) rangeDistance.textContent = '-- m';
+  if (rangeRate) rangeRate.textContent = '-- Hz';
+  if (rangeAge) rangeAge.textContent = '-- s';
   if (odomScale) odomScale.textContent = '±1.0 m';
   renderTelemetryPreviews();
 }
@@ -1243,19 +1449,83 @@ async function drawCompressedCameraFrame(image) {
   if (emptyState && 'hidden' in emptyState) emptyState.hidden = true;
 }
 
-function updateThermalFrame(image) {
+function analyzeThermalFrame(image) {
   const frame = decodeThermalFrame(image);
-  if (!frame) return;
-  const values = [...frame.values].filter(Number.isFinite);
-  if (!values.length) {
+  if (!frame) return null;
+  let low = Infinity;
+  let high = -Infinity;
+  for (const value of frame.values) {
+    if (!Number.isFinite(value)) continue;
+    low = Math.min(low, value);
+    high = Math.max(high, value);
+  }
+  return Number.isFinite(low) && Number.isFinite(high) ? { ...frame, low, high } : null;
+}
+
+function updateThermalFrame(frame, image) {
+  if (!frame) {
     thermalStatus = 'thermal empty';
+    if (image && image.encoding) thermalStatus = `unsupported or empty thermal: ${image.encoding}`;
+    return;
+  }
+  latestThermal = frame;
+  thermalStatus = `thermal ${frame.width}x${frame.height} ${formatRange(frame.low, frame.high, frame.units)}`;
+}
+
+function renderRawThermalFrame(frame, image) {
+  if (!rawThermalCanvas || !rawThermalContext) return;
+  if (!frame) {
+    rawThermalState.textContent = 'No data';
+    rawThermalState.className = 'preview-state warn';
+    rawThermalRange.textContent = `Unsupported or empty thermal frame: ${(image && image.encoding) || 'unknown'}`;
     return;
   }
 
-  const low = Math.min(...values);
-  const high = Math.max(...values);
-  latestThermal = { ...frame, low, high };
-  thermalStatus = `thermal ${frame.width}x${frame.height} ${formatRange(low, high, frame.units)}`;
+  const { values, width, height, low, high, units } = frame;
+  if (rawThermalCanvas.width !== width || rawThermalCanvas.height !== height) {
+    rawThermalCanvas.width = width;
+    rawThermalCanvas.height = height;
+  }
+  const output = rawThermalContext.createImageData(width, height);
+  const span = Math.max(high - low, units === 'raw' ? 1 : 0.5);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const sourceX = flipThermalX ? width - 1 - x : x;
+      const sourceY = flipThermalY ? height - 1 - y : y;
+      const temperature = values[sourceY * width + sourceX];
+      const target = (y * width + x) * 4;
+      const [red, green, blue] = Number.isFinite(temperature)
+        ? heatColor((temperature - low) / span)
+        : [6, 12, 20];
+      output.data[target] = red;
+      output.data[target + 1] = green;
+      output.data[target + 2] = blue;
+      output.data[target + 3] = 255;
+    }
+  }
+  rawThermalContext.putImageData(output, 0, 0);
+  rawThermalCanvas.dataset.stream = 'thermal';
+  rawThermalCanvas.setAttribute(
+    'aria-label',
+    `Uncropped thermal image, ${width} by ${height}, ${formatRange(low, high, units)}`,
+  );
+  rawThermalState.textContent = 'Live';
+  rawThermalState.className = 'preview-state live';
+  const unitLabel = units === 'temperature' ? ' °C' : ' raw';
+  rawThermalRange.textContent = `${width}x${height} | ${formatRange(low, high, units)}${unitLabel} | ${imageTopics.rawThermal}`;
+}
+
+function resetRawThermalWindow() {
+  if (rawThermalCanvas && rawThermalContext) {
+    rawThermalContext.fillStyle = '#06111e';
+    rawThermalContext.fillRect(0, 0, rawThermalCanvas.width, rawThermalCanvas.height);
+    rawThermalCanvas.dataset.stream = 'waiting';
+  }
+  if (rawThermalState) {
+    rawThermalState.textContent = 'Waiting';
+    rawThermalState.className = 'preview-state';
+  }
+  if (rawThermalRange) rawThermalRange.textContent = `Waiting for ${imageTopics.rawThermal}`;
 }
 
 function drawDepthCameraFrame(image, encoding) {
@@ -1337,7 +1607,6 @@ function decodeThermalFrame(image) {
     return { values, width, height, units: 'raw' };
   }
 
-  thermalStatus = `unsupported thermal: ${image.encoding || 'unknown'}`;
   return null;
 }
 
@@ -1584,18 +1853,24 @@ function applyStreamConfig(stream) {
     color: stream.colorTopic || imageTopics.color,
     cameraInfo: stream.cameraInfoTopic || imageTopics.cameraInfo,
     thermal: stream.thermalTopic || imageTopics.thermal,
+    rawThermal: stream.rawThermalTopic || imageTopics.rawThermal,
     imu: stream.imuTopic || imageTopics.imu,
     rawImu: stream.rawImuTopic || imageTopics.rawImu,
     odom: stream.odomTopic || imageTopics.odom,
     odomCalibrated: stream.odomCalibratedTopic || imageTopics.odomCalibrated,
+    flow: stream.flowTopic || imageTopics.flow,
+    range: stream.rangeTopic || imageTopics.range,
   };
   const topicsChanged = nextTopics.color !== imageTopics.color
     || nextTopics.cameraInfo !== imageTopics.cameraInfo
     || nextTopics.thermal !== imageTopics.thermal
+    || nextTopics.rawThermal !== imageTopics.rawThermal
     || nextTopics.imu !== imageTopics.imu
     || nextTopics.rawImu !== imageTopics.rawImu
     || nextTopics.odom !== imageTopics.odom
-    || nextTopics.odomCalibrated !== imageTopics.odomCalibrated;
+    || nextTopics.odomCalibrated !== imageTopics.odomCalibrated
+    || nextTopics.flow !== imageTopics.flow
+    || nextTopics.range !== imageTopics.range;
   if (topicsChanged) cameraInfoFov = null;
   imageTopics = nextTopics;
   thermalFov = finiteFov(stream.thermalFov, thermalFov);
@@ -1905,6 +2180,7 @@ async function refresh() {
     applyStreamConfig(state.stream);
     applyOdomState(state.odom);
     setRunning(state.running);
+    applyBlackboxState(state.blackbox, state.running);
     renderCpu(state.cpu, state.cpuTemp);
     if (typeof state.overlayAlpha === 'number' && document.activeElement !== overlayAlphaInput) {
       setOverlayAlphaUi(state.overlayAlpha);
@@ -2049,6 +2325,32 @@ if (calibrateOdomButton) {
       calibrateOdomButton.textContent = 'Calibrate gyro';
       calibrateOdomButton.disabled =
         !statusDot.classList.contains('running') || odomStaticOverrideActive;
+      await refresh();
+    }
+  });
+}
+
+if (blackboxToggle) {
+  blackboxToggle.addEventListener('click', async () => {
+    blackboxRequestActive = true;
+    blackboxToggle.disabled = true;
+    try {
+      const endpoint = blackboxRecording
+        ? '/api/odom/blackbox/stop'
+        : '/api/odom/blackbox/start';
+      const response = await request(endpoint);
+      applyBlackboxState(response.blackbox, statusDot.classList.contains('running'));
+      connection.textContent = response.blackbox.recording
+        ? response.blackbox.stopping
+          ? 'Saving odometry blackbox CSV to disk...'
+          : `Recording odometry blackbox to ${response.blackbox.session.csvPath || response.blackbox.session.outputPath}`
+        : response.blackbox.session
+          ? `Odometry blackbox saved to ${response.blackbox.session.csvPath || response.blackbox.session.outputPath}`
+          : 'Odometry blackbox stopped.';
+    } catch (error) {
+      connection.textContent = `Blackbox recorder failed: ${error.message}`;
+    } finally {
+      blackboxRequestActive = false;
       await refresh();
     }
   });

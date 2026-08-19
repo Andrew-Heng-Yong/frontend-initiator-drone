@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Thermal Node</title>
-    <link rel="stylesheet" href="/styles.css?v=20260810-2" />
+    <link rel="stylesheet" href="/styles.css?v=20260815-3" />
   </head>
   <body>
     <main>
@@ -24,7 +24,7 @@
           <input id="odom-static-override" type="checkbox" />
           <span id="odom-static-override-label">Static odom</span>
         </label>
-        <label class="odom-quality" title="Reports odom position quality as good even though gyro-only translation is not measured. Takes effect after restart.">
+        <label class="odom-quality" title="Forces odom position quality to good regardless of estimator inputs. Takes effect after restart.">
           <input id="odom-quality-override" type="checkbox" />
           <span id="odom-quality-override-label">Force good odom</span>
         </label>
@@ -43,6 +43,21 @@
           <div class="canvas-panel">
             <div id="range">--</div>
             <canvas id="thermal-canvas" width="32" height="24" aria-label="Thermal-guided cropped depth stream"></canvas>
+            <article class="raw-thermal-window" aria-label="Uncropped thermal stream">
+              <div class="raw-thermal-heading">
+                <h2>Uncropped thermal</h2>
+                <span id="raw-thermal-state" class="preview-state">Waiting</span>
+              </div>
+              <canvas
+                id="raw-thermal-canvas"
+                class="raw-thermal-canvas"
+                width="80"
+                height="62"
+                role="img"
+                aria-label="Uncropped thermal image waiting for data"
+              >Uncropped thermal heat map.</canvas>
+              <div id="raw-thermal-range" class="raw-thermal-range">Waiting for /thermal/image_raw</div>
+            </article>
           </div>
           <aside class="telemetry-panel" aria-label="Odometry node previews">
             <article class="preview-card gyro-preview">
@@ -91,6 +106,39 @@
               </div>
               <p id="odom-forward" class="odom-vector-readout">Forward +X: --</p>
               <p id="odom-quality" class="odom-quality-readout">No odometry received</p>
+              <div class="blackbox-control">
+                <div class="blackbox-heading">
+                  <button id="blackbox-toggle" class="blackbox-button" type="button" disabled>Start blackbox</button>
+                  <span id="blackbox-state" class="preview-state">Ready</span>
+                </div>
+                <p>One CSV: raw IMU, flow, and range + calculated IMU and odometry.</p>
+                <p id="blackbox-path" class="blackbox-path">No recording saved this session.</p>
+              </div>
+            </article>
+
+            <article class="preview-card flow-range-preview">
+              <div class="preview-heading">
+                <h2>Flow + range</h2>
+                <span id="flow-range-state" class="preview-state">Waiting</span>
+              </div>
+              <div class="sensor-section">
+                <div class="sensor-section-heading"><span>PMW3901</span><strong id="flow-motion">--</strong></div>
+                <div class="preview-values sensor-values">
+                  <span>Delta X <strong id="flow-dx">--</strong></span>
+                  <span>Delta Y <strong id="flow-dy">--</strong></span>
+                  <span>Quality <strong id="flow-quality">--</strong></span>
+                  <span>Shutter <strong id="flow-shutter">--</strong></span>
+                  <span>Period <strong id="flow-period">--</strong></span>
+                  <span>Rate <strong id="flow-rate">--</strong></span>
+                </div>
+              </div>
+              <div class="sensor-section range-section">
+                <div class="sensor-section-heading"><span>VL53L1X</span><strong id="range-validity">--</strong></div>
+                <div class="range-sensor-reading" id="range-distance">-- m</div>
+                <div class="sensor-footnote">
+                  <span id="range-rate">-- Hz</span><span id="range-age">-- s</span>
+                </div>
+              </div>
             </article>
           </aside>
           <div class="tuning-panel" aria-label="Thermal tuning parameters">
@@ -191,6 +239,6 @@
         <pre id="logs">No launch output yet.</pre>
       </section>
     </main>
-    <script src="/app.js?v=20260813-1"></script>
+    <script src="/app.js?v=20260815-3"></script>
   </body>
 </html>
