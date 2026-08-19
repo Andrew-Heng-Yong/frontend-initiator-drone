@@ -66,12 +66,6 @@ struct SettingsView: View {
             )
         } header: {
             Text("Depth colour map")
-        } footer: {
-            Text("""
-            16UC1 and mono16 depth frames are read as millimetres and 32FC1 as metres, following ROS \
-            convention. Samples of zero mean "no return" and are drawn transparent rather than as a \
-            surface at the lens.
-            """)
         }
     }
 
@@ -102,13 +96,6 @@ struct SettingsView: View {
             }
         } header: {
             Text("Image stream")
-        } footer: {
-            Text("""
-            The throttle is enforced on the robot, so frames above the limit are never sent at all — \
-            the cheapest possible way to keep a backlog from forming. CBOR sends image bytes raw \
-            instead of base64 and needs rosbridge_suite 0.11 or newer; switch to JSON if frames stop \
-            arriving after changing it.
-            """)
         }
     }
 
@@ -133,13 +120,6 @@ struct SettingsView: View {
             )
         } header: {
             Text("Odometry")
-        } footer: {
-            Text("""
-            Poses are interpolated between buffered samples at the exact instant each frame is drawn. \
-            Past the newest sample the marker holds still by default; allowing extrapolation \
-            integrates the reported twist forward instead, which looks smoother but invents motion \
-            that was never measured.
-            """)
         }
     }
 
@@ -194,14 +174,6 @@ struct SettingsView: View {
             }
         } header: {
             Text("Offsets · Camera mount")
-        } footer: {
-            Text("""
-            Measured from base_link to the depth camera. Both the point cloud and the frustum use \
-            it, so a wrong value tilts the whole cloud rather than shifting it slightly — a 15° \
-            pitch error lifts a wall 2 m away by about half a metre. Yaw is deliberately absent: a \
-            camera rotated about the vertical looks exactly like a robot pointing elsewhere, and \
-            entering it here would hide real heading errors.
-            """)
         }
     }
 
@@ -250,12 +222,6 @@ struct SettingsView: View {
             }
         } header: {
             Text("Point cloud")
-        } footer: {
-            Text("""
-            The depth frame is deprojected with the CameraInfo intrinsics and drawn at the robot's \
-            pose, so it needs both a depth stream and an alignment before anything appears. Where \
-            it lands relative to the robot comes from the camera mount below.
-            """)
         }
     }
 
@@ -264,14 +230,6 @@ struct SettingsView: View {
             Toggle("Hold the robot still", isOn: binding(\.fixtureRobotIsStatic))
         } header: {
             Text("Fixtures mode")
-        } footer: {
-            Text("""
-            The fixture robot turns slowly on the spot; this stops it. Position is always zero \
-            either way, because that is all odom_node reports. Odometry keeps publishing at the \
-            same rate regardless — only the pose stops changing. Hold it still when you are \
-            checking whether the marker and point cloud land in the right place, because a turning \
-            robot makes a yaw alignment error look like motion.
-            """)
         }
     }
 
@@ -286,8 +244,6 @@ struct SettingsView: View {
             }
         } header: {
             Text("About")
-        } footer: {
-            Text("Visualisation and diagnostics only. This app sends no flight-control commands.")
         }
         .font(.footnote)
     }
@@ -316,12 +272,6 @@ struct SettingsView: View {
             }
         } header: {
             Text("Offsets · AprilTags")
-        } footer: {
-            Text("""
-            Family is always tag16h5, so IDs run 0–29. Size is the edge of the outer black border,             not the paper and not the payload inside it — range scales directly with it, so a tag             entered 20% too big puts the robot 20% too far away with no other symptom.
-
-            The offset is where the tag sits on the robot, in the same frame as the camera mount:             stand behind it looking the way it faces, and +X is out, +Y is your left, +Z is up. A             tag on the nose is all zeros; one on the tail is yaw 180°; one facing the sky is             pitch −90°. Yaw matters here, unlike the camera: it is what decides which way the app             thinks the robot is pointing.
-            """)
         }
     }
 
@@ -356,12 +306,6 @@ struct SettingsView: View {
             }
         } header: {
             Text("Tag relocalisation")
-        } footer: {
-            Text("""
-            When a configured tag is in view the robot is placed from it. When none is, the marker             holds its last fix and follows odometry — which for odom_node means heading only.
-
-            tag16h5 has just 30 codes, so roughly one random square in 550 decodes as a valid tag.             Requiring the same tag on several consecutive frames is the guard that matters: false             positives do not repeat, a real tag does. Largest correction refuses a sighting that             would jump the robot further than this; set it to 0 to allow any jump.
-            """)
         }
     }
 
@@ -409,12 +353,6 @@ struct SettingsView: View {
             }
         } header: {
             Text("Localisation log")
-        } footer: {
-            Text("""
-            Writes a CSV with one row per estimate: every accepted tag fix, and the odometry             estimate a few times a second. Both are the robot's pose in the AR world frame, which             is what makes them comparable — differencing them at the same instant is the drift.
-
-            Tag rows also carry the odometry reading from that moment, so a fix can be compared             without interpolating between neighbouring rows. Tap a file to share it; swipe to             delete. Files also appear in the Files app under Initiator ▸ Localization.
-            """)
         }
     }
 
