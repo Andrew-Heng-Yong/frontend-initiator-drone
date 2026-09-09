@@ -1,6 +1,0 @@
-{
-  "op": "status",
-  "level": "error",
-  "msg": "Topic /odom does not exist",
-  "id": "initiator-drone-/odom"
-}

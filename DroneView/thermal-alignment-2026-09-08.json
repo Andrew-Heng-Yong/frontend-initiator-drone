@@ -1,0 +1,108 @@
+{
+  "method": "Approximate fit of five manually matched warm-region centres in two RGB/thermal views. Fit residual is not independent accuracy validation.",
+  "rgb_width": 640,
+  "rgb_height": 360,
+  "rgb_intrinsics": [
+    358.8936462402344,
+    0.0,
+    320.21282958984375,
+    0.0,
+    358.8936462402344,
+    175.09304809570312,
+    0.0,
+    0.0,
+    1.0
+  ],
+  "thermal_width": 80,
+  "thermal_height": 62,
+  "alignment": {
+    "offsetX": 4.05,
+    "offsetY": -8.09,
+    "scale": 0.85,
+    "barrel": -0.2,
+    "stretchX": 0.915,
+    "stretchY": 0.9731,
+    "hfov": 90.0,
+    "vfov": 68.0,
+    "referenceWidth": 640.0,
+    "referenceHeight": 480.0,
+    "flipX": false,
+    "flipY": false
+  },
+  "landmarks": [
+    {
+      "view": "seated",
+      "thermal_pixel_centre": [
+        49.1936933,
+        24.0795789
+      ],
+      "rgb_pixel": [
+        387.5,
+        120.5
+      ]
+    },
+    {
+      "view": "seated",
+      "thermal_pixel_centre": [
+        43.1067411,
+        39.9943826
+      ],
+      "rgb_pixel": [
+        339,
+        224.5
+      ]
+    },
+    {
+      "view": "seated",
+      "thermal_pixel_centre": [
+        51.7,
+        39.3486487
+      ],
+      "rgb_pixel": [
+        409,
+        224
+      ]
+    },
+    {
+      "view": "leaning",
+      "thermal_pixel_centre": [
+        40.4056604,
+        25.3962262
+      ],
+      "rgb_pixel": [
+        331,
+        137
+      ]
+    },
+    {
+      "view": "leaning",
+      "thermal_pixel_centre": [
+        44.7222221,
+        44.3290598
+      ],
+      "rgb_pixel": [
+        361,
+        259
+      ]
+    }
+  ],
+  "fit_rms_rgb_pixels_before": 9.75,
+  "fit_rms_rgb_pixels_after": 5.0,
+  "independent_check": {
+    "scene": "Standing farther away and left of optical centre",
+    "thermal_face_centre": [
+      21.3818182,
+      19.6181816
+    ],
+    "manual_rgb_face_centre": [
+      201,
+      78
+    ],
+    "mapped_rgb_face_centre": [
+      189.21,
+      92.61
+    ],
+    "residual_rgb_pixels": 18.77,
+    "result": "Mapping remains visibly inaccurate in this view. Do not interpret the fitting residual as calibrated accuracy."
+  }
+}

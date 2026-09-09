@@ -1,178 +1,145 @@
-# Thermal dashboard
+# DroneView
 
-This is a single-page dashboard for the drone camera stack. It starts and stops the drone launch file, starts rosbridge for the browser stream, then renders `/camera/depth/image_raw` as the window and blends `/thermal/image_raw` into the center. The Orbbec depth camera is required; the dashboard does not start thermal-only mode.
+Native iPhone/iPad viewer for the `camera-and-gyro` branch of
+`ros2-initiator-drone`. SwiftUI provides the interface; Metal draws the scene.
+The Pi-viewer tabs use HTTP; the Thermal AR tab adds phone-side reconstruction.
+No website, JavaScript or rosbridge is embedded.
 
-## Run on the ROS 2 machine
+## Run
 
-Build the workspace and install rosbridge once:
+Open `DroneView/DroneView.xcodeproj`, select **DroneView**, choose an iPhone or
+iPad simulator (or set your signing team for a physical device), and Run.
+Requires iOS 18+ and Xcode 26+; built and tested here with Xcode 27 beta.
 
-```bash
-cd ~/ros2-initiator-drone
-source /opt/ros/jazzy/setup.bash
-colcon build --packages-up-to drone_control
+The app opens the Thermal AR tab. It connects automatically to the
+saved address, initially `http://192.168.1.6:8080`. The floating network button
+changes the address or disconnects. Allow local-network access on a physical
+phone. The module must run `bash scripts/run.sh --host 0.0.0.0` on the same network.
 
-cd ../frontend-initiator-drone
-npm start
-```
+## Controls
 
-Open `http://<robot-ip>:4173`. The Start button sources ROS 2, sources the built workspace, then launches the drone ROS graph with rosbridge enabled. The saved Cropper checkbox controls both cropper launch arguments. For example, when enabled it launches:
+- Drag to orbit, pinch to zoom. **Fit** frames the map and camera.
+- **View** contains Follow camera, trajectory visibility, drag-to-pan and zoom.
+- The system **Thermal AR**, **Scene**, **Cameras** and **Tracking** tab bar switches native
+  screens. System toolbar buttons float over the full-screen Metal scene.
+- Cameras switches among RGB, registered depth (0–6 m colour scale), and
+  independent thermal imagery. Old frames are dimmed and marked stale.
+- Tracking shows optical-frame position, inliers, frame processing, image timing,
+  valid depth and gyro status. It also starts/stops module recordings (300-frame
+  limit), exports a PLY map to Files, and requests a new map after confirmation.
 
-```bash
-ros2 launch drone_control drone_launch.py start_rosbridge:=true start_depth_camera:=true start_imu:=true start_odom:=true start_flow_range:=true start_thermal_cropper:=true thermal_cropper_enabled:=true start_thermal_overlay:=false
-```
+A recording belongs to the module and continues if the app disconnects. A new
+map clears the module's map; save it first if it needs to be retained. Simulation
+is explicitly labelled. Local odometry drifts and is not gravity aligned.
 
-When cleared, both cropper arguments are set to `false`, so the cropper node is not launched.
+## Data flow
 
-Runtime defaults are loaded from `config/master_params.yaml`. Camera intrinsics, distortion, and camera-frame transforms live separately in `config/camera_calibrations.yaml`, and the master params file points to it with `camera_calibrations_params_file`. Environment variables still override YAML values, so one-off test runs do not require editing the params files.
+The app reads `/api/state`, `/api/scene`, and `/api/image/{rgb,depth,thermal}`.
+Commands use JSON POSTs to `/api/record` and `/api/reset`; map export uses
+`/api/map.ply`. All endpoints are on the selected HTTP(S) origin.
 
-Set `camera_streams.ros__parameters.frontend_mode` to choose the browser display:
+State and images poll at most five times per second; changed maps fetch at
+most once per second. Each stream permits only one outstanding request.
+Scene decoding runs off the main actor. Polling cancels when the app enters the
+background, changes server, or disconnects. The last accepted scene is retained
+on connection loss, with a visible stale/disconnected status. Recording toggles
+are never retried automatically after an ambiguous network error.
 
-- `simple`: subscribe to the thermal-cropped depth output plus throttled IMU, odometry, flow, and range telemetry, then place valid crops in a fixed `1024x768` depth window. Full-size passthrough frames are ignored while the cropper waits for a thermal region.
-- `full`: subscribe to depth, thermal, camera info, IMU, odometry, flow, and range topics for the full overlay/tuning dashboard.
+The binary point cloud is little-endian float32 XYZ/RGB. Metal renders point
+primitives and line primitives with depth testing. GPU point buffers are replaced
+only when a map arrives. Optical X/right, Y/down, Z/forward maps to display
+X/right, Y/up, Z/back; pose, trajectory and map use the same conversion.
 
-If the Orbbec setup is missing, the server logs the missing setup path and exits instead of launching thermal-only mode.
-
-Stop sends SIGINT to the launch process and all of its ROS nodes.
-
-`drone_control` is the top-level package for the drone. It starts the MI0802 SenXor thermal driver, the MPU6050 IMU, the PMW3901/VL53L1X driver, aided odometry, and `rosbridge_websocket`; add future drone nodes to `src/drone_control/launch/drone_launch.py`.
-
-The dashboard can be pointed at another compatible thermal backend without editing the frontend:
-
-```bash
-DRONE_LAUNCH_COMMAND='ros2 launch <package> <launch-file> start_rosbridge:=true' \
-DEPTH_IMAGE_TOPIC=/camera/depth/image_raw \
-THERMAL_IMAGE_TOPIC=/thermal/image_raw \
-OPTICAL_FLOW_TOPIC=/optical_flow/raw \
-RANGE_TOPIC=/range/down \
-DEPTH_FOV_HORIZONTAL=79 \
-DEPTH_FOV_VERTICAL=62 \
-THERMAL_FOV_HORIZONTAL=90 \
-THERMAL_FOV_VERTICAL=68 \
-npm start
-```
-
-Use the actual launch command/topic for the active backend. The server logs the active base/depth and thermal topics on start, which makes it obvious if the old MLX node or wrong camera topic is still being launched.
-
-The dashboard also subscribes to `/camera/depth/camera_info` by default and displays the depth intrinsics-derived FOV for debugging. Overlay sizing uses the configured `depth_fov_horizontal` and `depth_fov_vertical` params unless `USE_CAMERA_INFO_FOV=true` is set. Set `DEPTH_CAMERA_INFO_TOPIC` if your Orbbec driver publishes camera info somewhere else.
-
-By default `BASE_VIEW_MODE=full-depth`: the depth image is the main viewport and thermal is blended into the configured thermal FOV area. The Cropper checkbox controls the next ROS launch and never changes the running graph. When selected, the next Start launches the cropper and subscribes to `/camera/depth/cropped/image_raw`, `/camera/depth/cropped/camera_info`, and `/thermal/cropped/image_raw`. When cleared, the next Start omits the cropper node and subscribes directly to the corresponding raw topics.
-
-The separate **Uncropped thermal** window always subscribes to `raw_thermal_image_topic` (default `/thermal/image_raw`). It displays the complete thermal sensor frame with its live minimum and maximum values, even when the main depth overlay uses `/thermal/cropped/image_raw`.
-
-The thermal overlay defaults are `Blend=50`, `X=0`, `Y=0`, `Scale=100`, `Barrel=0`, `H=80`, and `V=90`. Its base size comes from the configured FOVs: depth is `79° x 62°`, and thermal is `90° x 68°`.
-
-Full mode also provides a display-only `View > Zoom` control from `30%` to `100%`, defaulting to `75%`. It keeps the canvas viewport fixed, fills the uncovered area with black, and scales the completed depth-and-thermal image around the center. The setting is stored in the browser and never changes thermal alignment or ROS cropper parameters.
-
-The thermal display is mirrored along the Y axis by default: `thermal_display.flip_x` is enabled and `thermal_display.flip_y` is disabled. Set `THERMAL_FLIP_X=false` to display the sensor-native orientation.
-
-For depth overlay, make sure the Orbbec workspace exists at `~/orbbec_ws/install/setup.bash`:
+## Checks
 
 ```bash
-cd ~/ros2-initiator-drone
-source /opt/ros/jazzy/setup.bash
-colcon build --packages-up-to drone_control
-source install/setup.bash
+# Pure decoding, coordinates, camera controls and HTTP contract checks:
+bash Tests/run.sh
+
+# Additional read-only checks against a running module:
+bash Tests/run.sh http://192.168.1.6:8080
+
+# Native model integration tests (use your installed simulator's name):
+xcodebuild -project DroneView/DroneView.xcodeproj -scheme DroneView \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  CODE_SIGNING_ALLOWED=NO test
 ```
 
-If the dashboard connects but no image appears, check the launch output. A healthy depth overlay launch should include `component_container`, the active thermal node, and `rosbridge_websocket`. If the launch package is missing new arguments, rebuild and source the ROS workspace on the Pi:
+The native test uses an isolated URLSession fixture for polling, images, command
+handling, export, stale states, feed switching, reconnects and cancellation.
+It sends no recording/reset requests to the physical module.
 
-```bash
-cd ~/ros2-initiator-drone
-rm -rf build/<thermal_package> build/drone_control install/<thermal_package> install/drone_control
-source /opt/ros/jazzy/setup.bash
-colcon build --packages-up-to drone_control
-source install/setup.bash
-```
+## Phone reconstruction and thermal AR
 
-For MI0802 hardware, the default device is `/dev/ttyACM0`; the stable target path is `/dev/serial/by-id/usb-Nuvoton_USB_Virtual_COM-if00`. The ROS user normally needs membership in `dialout`. The MLX90640 package remains available as a fallback but is no longer the frontend thermal source.
+The **Thermal AR** tab uses ARKit for the phone and native OpenCV 4.13 PnP for
+the external rig. Xcode resolves the pinned OpenCV package automatically. The
+existing Scene/Cameras/Tracking tabs retain their Pi-viewer behaviour.
 
-For MPU6050 hardware, `sudo i2cdetect -y 1` should normally show `0x68`. At startup the driver logs the device identity and reads back the actual gyro/accelerometer ranges instead of assuming its register writes succeeded. It publishes unmodified `sensor_msgs/Imu` samples on `/imu/data_raw` and chip temperature on `/imu/temperature`. After odometry calibration, the frontend reads `/imu/data_calibrated`, whose gyro is bias-corrected and whose orientation is the gyro-integrated relative attitude. Linear acceleration is marked unavailable.
+Start the Pi with `--processing phone`, connect to its port 8080, then select
+**Thermal AR**. Scanning starts automatically. Allow Camera and Local Network access. Point
+both cameras at the same well-lit textured area with geometry at different depths.
+Three consistent RGB/depth fits establish the shared frame. No markers are used.
+LiDAR hardware is required; the simulator displays the unsupported-device state.
 
-The header's **Static odom** checkbox is a persisted, next-start override for stationary bench
-testing. When active, `odom_node` skips calibration and gyro integration and publishes a fixed
-zero pose/motion with an identity orientation. It publishes calibrated status and a low position
-variance, so the iPhone reports **Robot track: Tracking**. Changing the checkbox while ROS is
-running marks it for a restart; it never switches the live estimator. Disable it before the robot
-can move.
+The overlay uses the previous FOV/offset/scale/stretch/barrel alignment; **Thermal**
+opens its controls. Saved values are scoped to the server and current camera
+profile. No measured thermal extrinsics are claimed. Changes reset the local map.
+Thermal values use the same already-oriented image as the Pi preview; legacy
+browser flips are not reapplied. The v2 orientation migration keeps saved offsets,
+scale and distortion while resetting the erroneous extra flips.
+For a saved adjustment, `Documents/ThermalAlignment.json` accepts a JSON dictionary
+from the exact camera-profile key in the scan log to a `ThermalAlignment` object.
+A matching valid profile is saved through the app's preferences and the import file
+is consumed; mismatched or invalid files are retained and logged. The approximate
+2026-09-08 fit and its manual correspondences are in `DroneView/thermal-alignment-2026-09-08.json`.
+The AR heat scale defaults to a fixed 19–28 °C, matching the Pi preview. Manual
+limits remain adjustable; automatic relative contrast is optional. In either mode,
+changing the scale never changes stored Celsius values. Thermal values refresh
+on every accepted RGB-D frame, including when the rig is stationary. The nearest
+of eight recent thermal samples is selected by capture time, retaining the
+150 ms rejection limit.
 
-The adjacent **Force good odom** checkbox leaves live gyro integration enabled but forces the
-published position covariance to look observed. This makes the iPhone show **Robot track:
-Tracking** even though translation remains fixed and unmeasured. It is a presentation/quality
-override only and takes effect on restart. Leave it disabled when evaluating flow/range aiding.
+A 60,000-voxel map is rendered with Metal. Show through walls applies to both dots and the filled highlight; switching it off restores phone-depth occlusion.
+Thermal observations over 150 ms from RGB are skipped. Cross-camera association
+requires capture-time agreement within 100 ms including half the clock probe RTT.
+Missing alignment, limited AR tracking or network loss hides the overlay and
+stops map integration. Alignment persists when the cameras no longer share a view.
+Rejected rig frames or missing timestamp pairs pause placement; accepted odometry
+recovery in the same rig map resumes it. AR tracking loss, network failure, map
+resets, and **Realign** still require another shared view. This first version is
+for mostly static indoor scenes, not moving-object thermal reconstruction.
+Thermal AR is the first/default tab and starts automatically. Switching tabs keeps
+capture and reconstruction running. Backgrounding/locking suspends camera capture
+as required by iOS; returning resumes automatically. Pi recording is independent.
+A live filled heat surface highlights samples above 20 °C by default (adjustable).
+The cutoff, visibility, through-wall setting and temperature scale persist across restarts.
+Show through walls bypasses phone depth occlusion for dots and highlights; it shows
+what the rig sees, not through-wall sensing. Warm objects also qualify. Highlights
+expire after 500 ms without a fresh observation. Hot map samples are replaced each
+accepted frame, and old foreground points are removed when current depth sees
+farther surfaces, limiting trails after a person moves.
+The Pi receives both poses and diagnostics, but not the reconstructed map.
 
-The main web viewer has three live cards beside the depth/thermal display. **Gyro navball** turns
-`/imu/data_calibrated` orientation into a circular cyan-sky/orange-ground attitude ball with
-spherical degree markings and a fixed gold/cyan vessel reticle. Roll, pitch, and yaw rotate the
-ball itself; there are no separate heading or speed panels. The card also subscribes directly to
-`/imu/data_raw` and displays the unmodified X/Y/Z accelerometer samples in `m/s²`.
-**Odometry** subscribes to `/odom` and `/odom/calibrated`, draws an isometric XYZ trail, and rotates
-a forward vector from the full pose quaternion to show where the robot's body +X axis faces. It
-also shows pose, received rate, message age, calibration/tracking state, position variance, and
-whether static or forced-quality mode supplied the reported quality. The cards move below the
-camera on narrow screens.
+### Native replay check
 
-Without the override, startup calibration collects 1000 stationary gyro samples. The header's
-**Calibrate gyro** button calls `/odom/calibrate` and repeats the bias estimate with 200 samples.
-The button is disabled while static odometry is active.
+`Tests/prepare_replay.py BACKEND RECORDING OUTPUT` exports identical JPEG-decoded
+frames and Python poses. Build `Tests/TrackingReplay.cpp` against OpenCV 4.13 and
+run it with `OUTPUT/frames.yml` to obtain native CSV poses. Use Python OpenCV
+4.13 for parity: a different OpenCV release can choose different RANSAC solutions.
+This replay is visual-only; gyro integration also needs recorded/device checks.
+Simulator tests cover binary decoding, transforms, thermal orientation, invalid JPEGs, and actual GPU rendering of dots and filled heat with wall occlusion both enabled and disabled.
+Physical AR alignment, occlusion and sustained 10-fps processing/30-fps rendering
+remain hardware acceptance checks, not guarantees from the replay.
 
-**Flow + range** subscribes to `/optical_flow/raw` and `/range/down`. It shows PMW3901 X/Y deltas,
-motion state, surface quality, shutter, sample period/rate, and the VL53L1X distance, validity,
-rate, and age. The dashboard launch starts the combined flow/range driver whenever odometry is
-started. Static and forced-quality odometry overrides default to off so these measurements can aid
-the estimator; the existing header checkboxes can still restore either bench override.
+Implementation checks (2026-09-08): signed iPhone 16 Pro build and installation,
+simulator integration/stream tests, and native gyro interpolation/bias/gap checks
+passed. Visual-only native/Python OpenCV 4.13 replay matched all 300 movement
+frame decisions, with maximum transform-element difference below 5e-13.
+The Pi passed 26 Python tests and six driver tests at backend commit 6ff1391.
+Live AR and sustained FPS acceptance are not established by these checks.
 
-The **Start blackbox** control in the Odometry card records one CSV file on the robot. It
-captures the estimator's raw inputs (`/imu/data_raw`, `/optical_flow/raw`, and `/range/down`)
-together with its calculated outputs (`/imu/data_calibrated`, `/odom`, and `/odom/calibrated`).
-Stopping the ROS graph also stops the recorder and flushes the file. Each recording is saved under
-`recordings/odom-blackbox/odom-<UTC timestamp>/odom_blackbox.csv`. It is an event log with one row
-per received ROS message; `category`, `topic`, and `message_type` identify the stream. A union
-schema keeps every raw and calculated field in named columns and leaves columns for other message
-types blank. It includes callback, middleware source/receipt, and ROS header timestamps when the
-message type provides them, plus complete IMU and odometry covariance arrays. The session's
-`manifest.json` describes the topic groups, ROS workspace, launch command, parameter-file paths,
-and active odometry overrides. Set `ODOM_BLACKBOX_DIRECTORY` or
-`system.ros__parameters.odom_blackbox_directory` to store recordings elsewhere.
-The recorder cannot be started after ROS shutdown begins. A session is reported as saved only if
-`odom_blackbox.csv` was actually created; interruption during environment setup is reported as an
-error in the dashboard and manifest instead of as a successful empty recording.
-
-If the thermal image is visible but does not line up with depth, use a small hot target such as a candle or warm hand and tune the dashboard `X`, `Y`, `Scale`, `Barrel`, `H`, and `V` controls until the thermal hot spot lands on the same depth object. `Barrel` applies signed radial distortion to the thermal overlay in Full mode: `0` disables it, positive values contract the image near the edges, and negative values expand it while leaving the center fixed. Edits are a browser preview only. **Save to parameter file** commits the transform to `.thermal-alignment.json` and `master_params.yaml`; it is applied immediately when the ROS cropper is running, or passed to the cropper on its next start. Values can also be seeded with `THERMAL_OFFSET_X`, `THERMAL_OFFSET_Y`, `THERMAL_SCALE`, `THERMAL_BARREL_DISTORTION`, `THERMAL_STRETCH_X`, and `THERMAL_STRETCH_Y`.
-
-The ROS cropper node uses highlighted thermal pixels to publish `/camera/depth/cropped/image_raw` and `/thermal/cropped/image_raw`. In simple mode it does not publish uncropped fallback frames while no thermal region is present. Valid regions publish rectangular crops around the selected thermal cluster and the frontend scales the crop into its fixed display. Each crop unit covers `crop_unit_thermal_pixels` square thermal pixels, clusters count diagonal neighbors, `min_region_size` rejects small clusters, and `inflation_radius_thermal_pixels` expands the crop region. Cropper tuning values live in the `thermal_cropper` block in `config/master_params.yaml` and are passed to `thermal_cropper_node` at launch.
-
-The frontend preview and ROS cropper use the same FOV, alignment, barrel distortion, stretch, and axis-flip mapping. Cropped thermal frames remain in their native 80×62 coordinates, so Full mode applies the configured transform instead of stretching the thermal mask across the complete depth frame.
-
-Full mode exposes the crop unit, minimum region, inflation, temperature bounds, frame-relative delta bounds, and empty-frame passthrough settings in the Cropper panel. Changes are persisted to `.thermal-cropper.json` and applied only on the next ROS start.
-
-Use **Save to parameter file** in the Full-mode tuning panel to write the current Blend, overlay alignment, and cropper controls into the loaded `master_params.yaml`. The button also keeps the alignment and cropper sidecar files synchronized with those values.
-
-The built-in dashboard calibration defaults are `Overlay=50.0`, `X=0.0`, `Y=0.0`, `Scale=100.0`, `Barrel=0.000`, `H=80.0`, and `V=90.0`. Saved alignment files carry a geometry revision, so calibration from an older setup is ignored automatically.
-
-Set `ROS2_WORKSPACE` when the ROS workspace is not beside this directory. The dashboard defaults to ROS 2 Jazzy; set `ROS_DISTRO` if you are using another distro, and `PORT` to change the dashboard port.
-
-Use `DRONE_MASTER_PARAMS=/path/to/master_params.yaml` to load a different master params file. Use `CAMERA_CALIBRATIONS_PARAMS=/path/to/camera_calibrations.yaml` to override only the calibration file referenced by the master params.
-
-## iPhone / iPad app
-
-`ios/` holds a native SwiftUI + ARKit app that talks to the same two ports as
-this dashboard: `GET/POST http://<robot-ip>:4173/api/…` for Start, Stop and
-Calibrate, and `ws://<robot-ip>:9090` for the streams. It shows the depth
-image, the `odom_node` status, and a marker drawn into the phone's camera
-view where the robot is in the room. It sends no flight-control commands.
-
-It can also place the robot from an AprilTag mounted on it, which is the only
-absolute position measurement in the system while `odom_node` estimates
-orientation only, and log both that fix and the odometry estimate to CSV for
-comparison. The tag detector runs on the phone; nothing extra is needed on the
-robot.
-
-Unlike the browser dashboard the app has no thermal camera in its path at all.
-It subscribes to `/camera/depth/image_raw` and `/camera/depth/camera_info`
-straight from the camera driver — not to `/thermal/cropped/image_raw`, and not
-to the `cropped` depth topics either, since those are republished by the thermal
-cropper and would make the app's depth view depend on the thermal sensor finding
-a hot region.
-
-See `ios/README.md` for building, signing and installing it, and for the topic
-and endpoint contract it expects.
+Phone diagnostics: **Thermal → Diagnostics → Export scan log** shares JSONL with
+camera stalls, clock offset/RTT, frame timing, tracking status and rates. It excludes
+images and poses. Logs live in the app's Documents/ScanLogs, retain five files,
+and cap each file at 4 MB. The AR history stores copied grayscale/depth snapshots,
+not retained ARFrames, so a delayed network frame cannot exhaust ARKit's buffers.

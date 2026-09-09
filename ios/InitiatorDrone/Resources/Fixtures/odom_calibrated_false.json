@@ -1,7 +1,0 @@
-{
-  "op": "publish",
-  "topic": "/odom/calibrated",
-  "msg": {
-    "data": false
-  }
-}
