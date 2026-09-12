@@ -11,7 +11,9 @@ struct ThermalARView: View {
             VStack(spacing:10) {
                 Text(!model.renderingError.isEmpty ? model.renderingError : (model.cameraWarning.isEmpty ? model.status : model.cameraWarning)).font(.callout).multilineTextAlignment(.center)
                 if model.running {
-                    if !model.aligned,!model.alignmentDiagnostics.isEmpty {
+                    if model.alignmentEstablished,!model.aligned {
+                        Text("Alignment saved · overlay paused until tracking recovers").font(.caption)
+                    } else if !model.alignmentEstablished,!model.alignmentDiagnostics.isEmpty {
                         Text("Shared features: \(model.alignmentDiagnostics["inliers",default:0])/30 verified · \(model.alignmentDiagnostics["confirmations",default:0])/3 consistent views")
                             .font(.caption.monospacedDigit())
                     }
@@ -25,7 +27,7 @@ struct ThermalARView: View {
             }.padding().background(.regularMaterial,in:.rect(cornerRadius:16)).padding()
         }
         .overlay(alignment:.topTrailing) {
-            if model.running,!model.aligned,let preview=model.rigPreview {
+            if model.running,!model.alignmentEstablished,let preview=model.rigPreview {
                 VStack(spacing:4) {
                     Image(uiImage:preview).resizable().scaledToFit().frame(width:160)
                         .accessibilityLabel("Rig camera preview. Aim both cameras at the same scene.")
@@ -150,7 +152,8 @@ struct ARMetalView: UIViewRepresentable {
             encoder.drawPrimitives(type:.triangleStrip,vertexStart:0,vertexCount:4)
             var retained:[CVMetalTexture]=[y.0,uv.0]
             let sceneDepth=frame.sceneDepth.flatMap{texture($0.depthMap,.r32Float,0)}
-            if model.aligned,(!model.points.isEmpty || !model.heatSurface.isEmpty),let pointPipeline,
+            if model.aligned,case .normal=frame.camera.trackingState,model.cameraAgeMS<300,
+               (!model.points.isEmpty || !model.heatSurface.isEmpty),let pointPipeline,
                model.showHeatThroughWalls || sceneDepth != nil,let depthTexture=sceneDepth?.1 ?? emptyDepth,let device=view.device {
                 if let sceneDepth {retained.append(sceneDepth.0)}
                 let cameraFromMap=frame.camera.viewMatrix(for:orientation)*model.worldFromMap

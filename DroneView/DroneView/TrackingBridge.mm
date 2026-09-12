@@ -32,7 +32,7 @@ static cv::Matx33d intrinsic(NSArray *a) { cv::Matx33d k;for(int i=0;i<9;i++)k.v
         }
         auto fit=_tracker->update(f,ready?&increment:nullptr);
         return @{@"status":_tracker->status==1?@"tracking":_tracker->status==2?@"lost":@"initializing",
-                 @"pose":matrixData(_tracker->pose),@"inliers":@(fit.inliers),@"gyro":@(ready)};
+                 @"pose":matrixData(_tracker->pose),@"inliers":@(fit.inliers),@"gyro":@(ready),@"keyframes":@(_tracker->keyframes.size())};
     }catch(const std::exception &){return @{@"status":@"invalid"};}}
     @catch(NSException *e){return @{@"status":@"invalid"};}
 }

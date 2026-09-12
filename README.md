@@ -112,8 +112,15 @@ Missing alignment, limited AR tracking or network loss hides the overlay and
 stops map integration. Alignment persists when the cameras no longer share a view.
 Rejected rig frames or missing timestamp pairs pause placement; accepted odometry
 recovery in the same rig map resumes it. Network gaps hide placement and can resume
-in the same maps. AR tracking loss, map resets, and **Realign** still require another
-shared view. **Realign** also restarts rig tracking; before initial alignment, a
+in the same maps. Temporary phone tracking loss, camera stalls and AR interruptions
+preserve alignment while hiding the overlay. ARKit attempts relocalization after
+an interruption. The UI distinguishes saved alignment from a usable live pose;
+a late good result cannot override the phone's current limited-tracking state.
+Rig recovery searches up to four older keyframes per lost frame from a bounded
+24-keyframe history, requiring at least 50 inliers and consistent depth. This is
+local recovery, not global SLAM or persistent room mapping. Return to a previously
+seen area if tracking is lost. New coordinate maps, a restarted scan, and **Realign**
+require another shared view. **Realign** also restarts rig tracking; before initial alignment, a
 rig that remains lost for one second automatically starts a new reference. Phone
 images use filtered downsampling, and low-confidence LiDAR samples are excluded
 from cross-camera depth checks. This first version is
@@ -139,10 +146,13 @@ run it with `OUTPUT/frames.yml` to obtain native CSV poses. Use Python OpenCV
 This replay is visual-only; gyro integration also needs recorded/device checks.
 Simulator tests cover binary decoding, transforms, thermal orientation, invalid JPEGs, and actual GPU rendering of dots and filled heat with wall occlusion both enabled and disabled.
 They also cover interrupted alignment confirmation, outliers, stale/duplicate fits,
-startup recovery, thermal changes preserving alignment, and startup guidance rendering.
+startup recovery, thermal changes preserving alignment, phone tracking/stall retention,
+recovery without shared-view images, new-map invalidation, and startup/recovery guidance rendering.
 The native replay binary's `--check` mode verifies known synthetic cross-camera
 poses at 15, 40 and 65 cm separation with different intrinsics and brightness,
-and rejects missing or inconsistent depth. These synthetic cases do not establish
+and rejects missing or inconsistent depth. It also checks bounded keyframe history,
+recovery into the original coordinate map after revisiting an older view, and
+rejection of a visually matching view with inconsistent depth. These synthetic cases do not establish
 live startup success rates.
 Physical AR alignment, occlusion and sustained 10-fps processing/30-fps rendering
 remain hardware acceptance checks, not guarantees from the replay.
@@ -155,7 +165,8 @@ The Pi passed 26 Python tests and six driver tests at backend commit 6ff1391.
 Live AR and sustained FPS acceptance are not established by these checks.
 
 Phone diagnostics: **Thermal → Diagnostics → Export scan log** shares JSONL with
-camera stalls, clock offset/RTT, frame timing, tracking status and rates. It excludes
+camera stalls, clock offset/RTT, frame timing, tracking status and rates, saved
+alignment state, phone tracking changes and rig keyframe count. It excludes
 images and poses. Logs live in the app's Documents/ScanLogs, retain five files,
 and cap each file at 4 MB. The AR history stores copied grayscale/depth snapshots,
 not retained ARFrames, so a delayed network frame cannot exhaust ARKit's buffers.

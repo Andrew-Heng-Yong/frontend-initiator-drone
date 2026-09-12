@@ -1,6 +1,7 @@
 import XCTest
 import simd
 import SwiftUI
+import ARKit
 @testable import DroneView
 
 final class SensorFrameTests:XCTestCase {
@@ -68,8 +69,11 @@ final class SensorFrameTests:XCTestCase {
         XCTAssertEqual(retained,aligned)
     }
     @MainActor func testStartupGuidanceRendering() throws {
+        for saved in [false,true] {
         let model=PhoneReconstruction()
         model.running=true;model.status="Aligning · 2/3 consistent views · keep the same scene visible"
+        model.alignmentEstablished=saved
+        if saved {model.status="Rig tracking lost · alignment saved · return to a previously seen area"}
         model.alignmentDiagnostics=["inliers":84,"confirmations":2]
         model.rigPreview=testImage()
         let scene=try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
@@ -82,8 +86,9 @@ final class SensorFrameTests:XCTestCase {
         let image=UIGraphicsImageRenderer(size:window.bounds.size).image {_ in
             XCTAssertTrue(window.drawHierarchy(in:window.bounds,afterScreenUpdates:true))
         }
-        let attachment=XCTAttachment(image:image);attachment.name="Marker-free startup guidance";attachment.lifetime = .keepAlways
+        let attachment=XCTAttachment(image:image);attachment.name=saved ? "Tracking recovery guidance" : "Marker-free startup guidance";attachment.lifetime = .keepAlways
         add(attachment)
+        }
     }
     func testAlignmentExpiresOldFitsAndDoesNotCountDuplicateFrames() async {
         let worker=ReconstructionWorker(),pose=matrix_identity_float4x4
@@ -145,9 +150,71 @@ final class SensorFrameTests:XCTestCase {
         for time in 1...3 {await worker.confirmAlignment(matrix_identity_float4x4,at:Double(time))}
         let rejected=await worker.process(try nextFrame(wire,sequence:frame.sequence+1),phone:nil,alignment:ThermalAlignment())
         XCTAssertFalse(rejected.valid)
-        XCTAssertTrue(rejected.status.hasPrefix("Rig tracking paused"),rejected.status)
+        XCTAssertTrue(rejected.status.hasPrefix("Rig tracking lost · alignment saved"),rejected.status)
+        XCTAssertNotNil(rejected.worldFromMap)
         let retained=await worker.currentAlignment()
         XCTAssertEqual(retained,matrix_identity_float4x4)
+    }
+    private func trackingFrame(sequence:Int,session:String="00000000-0000-4000-8000-000000000001") throws -> SensorFrame {
+        let w=320,h=240
+        let context=CGContext(data:nil,width:w,height:h,bitsPerComponent:8,bytesPerRow:w,space:CGColorSpaceCreateDeviceGray(),bitmapInfo:0)!
+        context.setFillColor(gray:0.8,alpha:1);context.fill(CGRect(x:0,y:0,width:w,height:h))
+        for y in stride(from:16,to:h-16,by:12) {for x in stride(from:16,to:w-16,by:12) {
+            let seed=(x*73+y*31)%251
+            context.setFillColor(gray:CGFloat(seed)/500,alpha:1)
+            context.fillEllipse(in:CGRect(x:x,y:y,width:3+seed%7,height:3+seed%9))
+        }}
+        let jpeg=UIImage(cgImage:context.makeImage()!).jpegData(compressionQuality:0.95)!
+        let metadata:[String:Any]=["version":1,"session":session,"sequence":sequence,
+            "timestamp":Double(sequence),"depth_timestamp":Double(sequence),"thermal_timestamp":Double(sequence),
+            "width":w,"height":h,"thermal_width":8,"thermal_height":6,
+            "K":[250.0,0,160,0,250,120,0,0,1],"jpeg_bytes":jpeg.count,"depth_bytes":w*h*4,
+            "thermal_bytes":8*6*4,"depth_encoding":"float32_metres","thermal_encoding":"float32_celsius"]
+        let header=try JSONSerialization.data(withJSONObject:metadata)
+        var size=UInt32(header.count).littleEndian,wire=Data("DVS1".utf8)
+        wire.append(withUnsafeBytes(of:&size){Data($0)});wire.append(header);wire.append(jpeg)
+        wire.append([Float](repeating:2,count:w*h).withUnsafeBytes{Data($0)})
+        wire.append([Float](repeating:22,count:48).withUnsafeBytes{Data($0)})
+        return try SensorFrame(wire)
+    }
+    func testPhoneTrackingDipKeepsAlignmentAndResumesWithoutSharedView() async throws {
+        let worker=ReconstructionWorker()
+        _=await worker.process(try trackingFrame(sequence:1),phone:nil,alignment:ThermalAlignment())
+        var saved=matrix_identity_float4x4;saved.columns.3.x=1.25
+        for time in 1...3 {await worker.confirmAlignment(saved,at:Double(time))}
+        func phone(normal:Bool)->PhoneObservation {
+            // No shared-view images: recovery must use the saved alignment.
+            PhoneObservation(unixTime:2,pose:matrix_identity_float4x4,normal:normal,gray:Data(),depth:Data(),w:0,h:0,k:[])
+        }
+        let limited=await worker.process(try trackingFrame(sequence:2),phone:phone(normal:false),alignment:ThermalAlignment())
+        XCTAssertEqual(limited.rigTrackingState,"tracking")
+        XCTAssertFalse(limited.valid);XCTAssertEqual(limited.worldFromMap,saved)
+        XCTAssertTrue(limited.status.hasPrefix("Phone tracking paused"),limited.status)
+        let missing=await worker.process(try trackingFrame(sequence:3),phone:nil,alignment:ThermalAlignment())
+        XCTAssertFalse(missing.valid);XCTAssertEqual(missing.worldFromMap,saved)
+        let recovered=await worker.process(try trackingFrame(sequence:4),phone:phone(normal:true),alignment:ThermalAlignment())
+        XCTAssertTrue(recovered.valid,recovered.status);XCTAssertEqual(recovered.worldFromMap,saved)
+        XCTAssertEqual(recovered.rigPose.columns.3.x,1.25,accuracy:0.01)
+        let newMap=await worker.process(try trackingFrame(sequence:5,session:UUID().uuidString),phone:phone(normal:true),alignment:ThermalAlignment())
+        XCTAssertFalse(newMap.valid);XCTAssertNil(newMap.worldFromMap)
+    }
+    @MainActor func testLivePhoneQualityAndStallsGateLateResultsWithoutForgettingAlignment() {
+        let model=PhoneReconstruction()
+        let result=ReconstructionResult(points:[],worldFromMap:matrix_identity_float4x4,rigPose:matrix_identity_float4x4,valid:true,status:"Aligned",inliers:100)
+        model.phoneTrackingChanged(.normal);model.apply(result)
+        XCTAssertTrue(model.aligned);XCTAssertTrue(model.alignmentEstablished)
+        for state:ARCamera.TrackingState in [.limited(.excessiveMotion),.limited(.insufficientFeatures),.limited(.relocalizing),.notAvailable] {
+            model.phoneTrackingChanged(state);model.apply(result)
+            XCTAssertFalse(model.aligned);XCTAssertTrue(model.alignmentEstablished)
+        }
+        model.phoneTrackingChanged(.normal);model.cameraHealth(age:2);model.apply(result)
+        XCTAssertFalse(model.aligned);XCTAssertTrue(model.alignmentEstablished)
+        model.cameraHealth(age:0.05);model.apply(result)
+        XCTAssertTrue(model.aligned);XCTAssertTrue(model.alignmentEstablished)
+        model.sessionWasInterrupted(model.arSession);model.apply(result)
+        XCTAssertFalse(model.aligned);XCTAssertTrue(model.alignmentEstablished)
+        XCTAssertTrue(model.sessionShouldAttemptRelocalization(model.arSession))
+        model.realign();XCTAssertFalse(model.alignmentEstablished)
     }
     func testThermalRangeAndCaptureTimeAssociation() async throws {
         let range=try XCTUnwrap(SensorFrame.temperatureRange((0...100).map(Float.init)+[.nan,.infinity]))

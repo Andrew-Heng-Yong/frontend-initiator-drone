@@ -3,6 +3,18 @@
 #include <iomanip>
 #include <cassert>
 #include <iostream>
+static drone::Frame roomView(double x,double stamp) {
+    drone::Frame f;f.stamp=stamp;f.k={500,0,320,0,500,180,0,0,1};
+    f.depth=cv::Mat(360,640,CV_32F,cv::Scalar(2));
+    for(int ix=-10;ix<180;ix++)for(int iy=-5;iy<=5;iy++) {
+        float u=float(500*(ix*.1-x)/2+320),v=float(500*iy*.1/2+180);
+        if(u<20||u>620||v<20||v>340)continue;
+        f.keys.emplace_back(cv::Point2f(u,v),10);
+        cv::Mat descriptor(1,32,CV_8U);cv::RNG random(1+(ix+10)*11+iy+5);
+        random.fill(descriptor,cv::RNG::UNIFORM,0,256);f.descriptors.push_back(descriptor);
+    }
+    return f;
+}
 int main(int argc,char **argv) {
     if(argc!=2)return 2;
     if(std::string(argv[1])=="--check") {
@@ -45,7 +57,30 @@ int main(int argc,char **argv) {
             assert(!drone::fit(rig,other,nullptr,true).valid);
         }
         assert(!drone::fit(drone::frame(image,depth,k,1),drone::frame(image,depth,k,1,true)).valid);
-        std::cout<<"Gyro checks and cross-camera pose/depth rejection passed\n";return 0;
+        drone::Tracker tracker;
+        for(int i=0;i<=40;i++) {
+            auto fit=tracker.update(roomView(i*.3,1+i*.2));
+            if(i>0){assert(fit.valid);assert(std::abs(tracker.pose(0,3)-i*.3)<.01);}
+            assert(tracker.keyframes.size()<=24);
+        }
+        assert(tracker.keyframes.size()==24);
+        auto lastPose=tracker.pose;
+        auto unseen=roomView(100,10);assert(!tracker.update(unseen).valid);assert(tracker.pose==lastPose);
+        auto revisit=roomView(8.4,11);
+        assert(!drone::fit(tracker.origin,revisit).valid);
+        assert(!drone::fit(tracker.active,revisit).valid);
+        assert(!drone::fit(tracker.recovery,revisit).valid);
+        auto inconsistent=revisit;inconsistent.depth=cv::Mat(revisit.depth+.6f);
+        assert(revisit.depth.at<float>(0,0)==2);
+        for(int i=0;i<6;i++){inconsistent.stamp=11+i*.2;assert(!tracker.update(inconsistent).valid);}
+        bool recovered=false;
+        auto start=cv::getTickCount();
+        for(int i=0;i<6&&!recovered;i++){revisit.stamp=13+i*.2;recovered=tracker.update(revisit).valid;}
+        assert(recovered);assert(std::abs(tracker.pose(0,3)-8.4)<.01);
+        assert(drone::angle(drone::rotation(tracker.pose))<.01);
+        std::cout<<"Keyframe revisit recovered in "<<1000*(cv::getTickCount()-start)/cv::getTickFrequency()<<" ms; bad depth rejected\n";
+        tracker=drone::Tracker();assert(tracker.keyframes.empty());assert(!tracker.initialized);
+        std::cout<<"Gyro, cross-camera and bounded keyframe recovery checks passed\n";return 0;
     }
     cv::FileStorage file(argv[1],cv::FileStorage::READ);drone::Tracker tracker;
     cv::setNumThreads(2);

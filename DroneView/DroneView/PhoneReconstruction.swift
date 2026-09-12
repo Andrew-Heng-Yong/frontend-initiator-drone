@@ -16,11 +16,13 @@ struct PhoneObservation: Sendable {
 struct ReconstructionResult: Sendable {
     var points: [SIMD4<Float>]
     var heatSurface: [SIMD4<Float>]=[]
-    var worldFromMap: simd_float4x4
+    var worldFromMap: simd_float4x4?
     var rigPose: simd_float4x4
     var valid: Bool
     var status: String
     var inliers: Int
+    var rigTrackingState = "unavailable"
+    var keyframes = 0
     var alignmentDiagnostics: [String:Int] = [:]
     var thermalDeltaMS = -1.0
 }
@@ -48,13 +50,15 @@ actor ReconstructionWorker {
             voxels.removeAll();order.removeAll();oldest=0;thermalHistory=[];thermalCalibration=thermalSignature
         }
         let thermal=thermalSample(stamp:f.thermalStamp,values:f.thermal,at:f.stamp)
-        var result=ReconstructionResult(points: [],worldFromMap: worldFromMap ?? matrix_identity_float4x4,rigPose: matrix_identity_float4x4,valid:false,status:"Waiting for a new sensor frame",inliers:0)
+        var result=ReconstructionResult(points: [],worldFromMap: worldFromMap,rigPose: matrix_identity_float4x4,valid:false,status:"Waiting for a new sensor frame",inliers:0)
         result.thermalDeltaMS=thermal.map{abs($0.stamp-f.stamp)*1000} ?? -1
         guard f.metadata["mode"] as? String != "demo" else { result.status="Simulation stream · live AR alignment disabled";return result }
         guard f.sequence>sequence else { return result };sequence=f.sequence
         let output=bridge.processJPEG(f.jpeg,depth:f.depthData,metadata:f.metadata)
         guard let data=output["pose"] as? Data, let pose=poseMatrix(data) else { result.status="Invalid sensor frame";return result }
         result.inliers=output["inliers"] as? Int ?? 0
+        result.rigTrackingState=output["status"] as? String ?? "unavailable"
+        result.keyframes=output["keyframes"] as? Int ?? 0
         let tracking=output["status"] as? String == "tracking"
         // A rejected frame does not reset the rig map. Pause placement until the
         // existing odometry checks accept recovery in that same map.
@@ -62,12 +66,12 @@ actor ReconstructionWorker {
             if trackingLostSince == nil {trackingLostSince=f.stamp}
             if worldFromMap == nil,let since=trackingLostSince,f.stamp-since>=1 {
                 reset();result.status="Restarting rig tracking · hold a textured view"
-            } else {result.status="Rig tracking paused · hold a textured view"}
+            } else {result.status=worldFromMap == nil ? "Rig tracking paused · hold a textured view" : "Rig tracking lost · alignment saved · return to a previously seen area"}
             return result
         }
         trackingLostSince=nil
         guard let phone else { result.status="Waiting for a timestamp-matched phone frame";return result }
-        guard phone.normal else { invalidate();result.status="Phone tracking limited · scan a textured area";return result }
+        guard phone.normal else { result.status="Phone tracking paused · recovering · scan a textured area";return result }
         if f.stamp-attemptTime > (worldFromMap == nil ? 0.5 : 1.0) {
             attemptTime=f.stamp
             if let data=bridge.alignGray(phone.gray,width:phone.w,height:phone.h,depth:phone.depth,intrinsics:phone.k.map(NSNumber.init)),let phoneToRig=poseMatrix(data) {
@@ -179,7 +183,7 @@ actor ReconstructionWorker {
         worldFromMap=averaged
     }
     // Shared-view checks refine alignment when available; loss of overlap is
-    // not loss of tracking. Reset/session changes and AR tracking loss invalidate it.
+    // not loss of tracking. Only explicit resets or new map coordinates invalidate it.
     func currentAlignment() -> simd_float4x4? { worldFromMap }
     private func distance(_ a: simd_float4x4,_ b: simd_float4x4)->Float { simd_length(a.columns.3-b.columns.3) }
     private func rotationDistance(_ a: simd_float4x4,_ b: simd_float4x4)->Float {
@@ -245,6 +249,9 @@ extension PhoneObservation {
     var pointRevision=0
     var worldFromMap=matrix_identity_float4x4
     var aligned=false
+    var alignmentEstablished=false
+    var phoneTrackingReason="initializing"
+    @ObservationIgnored private var phoneTrackingNormal=false
     var alignmentDiagnostics: [String:Int]=[:]
     var rigPreview: UIImage?
     var alignment=ThermalAlignment()
@@ -277,11 +284,14 @@ extension PhoneObservation {
     @ObservationIgnored private let worker=ReconstructionWorker()
     @ObservationIgnored private var observations: [PhoneObservation]=[]
     @ObservationIgnored private var task: Task<Void,Never>?
+    @ObservationIgnored private var pendingReset: Task<Void,Never>?
+    @ObservationIgnored private var alignmentRevision=0
     @ObservationIgnored private var savedKey=""
     @ObservationIgnored private var generation=UUID()
     @ObservationIgnored private var observationBusy=false
     @ObservationIgnored private var lastObservation=0.0
     func observe(_ frame: ARFrame) {
+        phoneTrackingChanged(frame.camera.trackingState)
         cameraFrames += 1
         let now=ProcessInfo.processInfo.systemUptime
         if now-cameraStart>=1 {cameraFPS=Double(cameraFrames)/(now-cameraStart);cameraFrames=0;cameraStart=now}
@@ -311,16 +321,29 @@ extension PhoneObservation {
     }
     func session(_ session:ARSession,didUpdate frame:ARFrame){observe(frame)}
     func session(_ session:ARSession,cameraDidChangeTrackingState camera:ARCamera) {
-        if case .normal=camera.trackingState {return}
-        aligned=false
-        Task {await worker.invalidate()}
+        phoneTrackingChanged(camera.trackingState)
     }
-    func session(_ session:ARSession,didFailWithError error:Error){cameraError(error.localizedDescription);aligned=false;status=error.localizedDescription}
-    func sessionWasInterrupted(_ session:ARSession){cameraError("AR session interrupted");realign()}
+    func phoneTrackingChanged(_ state:ARCamera.TrackingState) {
+        let reason:String
+        switch state {
+        case .normal: reason="normal"
+        case .notAvailable: reason="unavailable"
+        case .limited(.excessiveMotion): reason="move more slowly"
+        case .limited(.insufficientFeatures): reason="scan a textured area"
+        case .limited(.relocalizing): reason="return to a previously seen area"
+        default: reason="initializing"
+        }
+        phoneTrackingNormal=reason=="normal"
+        if reason != phoneTrackingReason {log.write("phone_tracking",["reason":reason,"alignment_saved":alignmentEstablished]);phoneTrackingReason=reason}
+        if !phoneTrackingNormal {aligned=false;status="Phone tracking paused · \(reason)"}
+    }
+    func session(_ session:ARSession,didFailWithError error:Error){cameraError(error.localizedDescription);stop();status=error.localizedDescription}
+    func sessionWasInterrupted(_ session:ARSession){cameraError("AR session interrupted");observations=[];phoneTrackingChanged(.notAvailable)}
+    func sessionShouldAttemptRelocalization(_ session:ARSession)->Bool {true}
     func suspend() {
         guard running else{return}
         log.write("app_background");generation=UUID();task?.cancel();task=nil
-        arSession.pause();running=false;aligned=false;observations=[];heatSurface=[]
+        arSession.pause();running=false;aligned=false;phoneTrackingNormal=false;observations=[];heatSurface=[]
     }
     func resume(_ endpoint:URL) {
         guard !running else{return}
@@ -330,16 +353,25 @@ extension PhoneObservation {
         arSession.run(config)
         task=Task {await loop(endpoint,id:id)}
     }
-    func stop() { if running {log.write("scan_stop")};generation=UUID();task?.cancel();task=nil;arSession.pause();running=false;aligned=false;alignmentDiagnostics=[:];rigPreview=nil;observations=[];points=[];heatSurface=[];arSession.delegate=nil;status="Scan paused" }
-    func realign() { log.write("realign_requested");aligned=false;alignmentDiagnostics=[:];points=[];heatSurface=[];Task { await worker.reset() } }
+    func stop() { if running {log.write("scan_stop")};generation=UUID();task?.cancel();task=nil;arSession.pause();running=false;aligned=false;alignmentEstablished=false;phoneTrackingNormal=false;alignmentDiagnostics=[:];rigPreview=nil;observations=[];points=[];heatSurface=[];arSession.delegate=nil;status="Scan paused" }
+    func realign() { log.write("realign_requested");alignmentRevision += 1;aligned=false;alignmentEstablished=false;alignmentDiagnostics=[:];points=[];heatSurface=[];pendingReset=Task { await worker.reset() } }
     func cameraHealth(age:Double) {
         cameraAgeMS=max(0,age*1000)
         if age>1,cameraWarning.isEmpty {
-            cameraWarning="Phone camera stalled · stop and restart scan"
-            log.write("camera_stalled",["age_ms":cameraAgeMS]);realign()
+            cameraWarning="Phone camera stalled · waiting to recover"
+            aligned=false;log.write("camera_stalled",["age_ms":cameraAgeMS])
         } else if age<0.3,!cameraWarning.isEmpty {cameraWarning="";log.write("camera_resumed")}
     }
     func cameraError(_ message:String) {log.write("ar_error",["message":message])}
+    func apply(_ result:ReconstructionResult) {
+        alignmentEstablished=result.worldFromMap != nil
+        // A capture-time result can arrive after the live phone tracking has degraded.
+        aligned=result.valid && phoneTrackingNormal && cameraWarning.isEmpty
+        worldFromMap=result.worldFromMap ?? matrix_identity_float4x4
+        points=result.points;heatSurface=result.heatSurface;inliers=result.inliers
+        status=phoneTrackingNormal ? result.status : "Phone tracking paused · \(phoneTrackingReason)"
+        alignmentDiagnostics=result.alignmentDiagnostics
+    }
     func saveAlignment() { guard !savedKey.isEmpty,let data=try? JSONEncoder().encode(alignment) else{return};UserDefaults.standard.set(data,forKey:savedKey);log.write("thermal_alignment_saved",["profile":savedKey,"parameters":String(describing:alignment)]) }
     private func loop(_ origin: URL,id:UUID) async {
         var offset=0.0,bestRTT=Double.infinity,lastClock=0.0,lastSequence=0,lastSession="",lastTime=Date(),count=0,lastPreview=0.0
@@ -370,7 +402,7 @@ extension PhoneObservation {
                 let frame=try await SensorFrame.decode(bytes)
                 guard !Task.isCancelled,generation==id else {return}
                 if frame.session != lastSession {
-                    log.write("sensor_session",["session":frame.session,"width":frame.width,"height":frame.height]);lastSession=frame.session;lastSequence=0;points=[];aligned=false;dropped=0
+                    log.write("sensor_session",["session":frame.session,"width":frame.width,"height":frame.height]);lastSession=frame.session;lastSequence=0;points=[];aligned=false;alignmentEstablished=false;dropped=0
                     savedKey="thermal-display-v2-\(origin.absoluteString)-\(frame.width)x\(frame.height)-\(frame.k)"
                     if let data=UserDefaults.standard.data(forKey:savedKey),let saved=try? JSONDecoder().decode(ThermalAlignment.self,from:data){alignment=saved}
                     else if let data=UserDefaults.standard.data(forKey:savedKey.replacingOccurrences(of:"thermal-display-v2-",with:"thermal-v1-")),var saved=try? JSONDecoder().decode(ThermalAlignment.self,from:data) {
@@ -392,22 +424,25 @@ extension PhoneObservation {
                 latencyMS=(Date().timeIntervalSince1970+offset-frame.stamp)*1000
                 guard latencyMS >= -100,latencyMS<500 else {aligned=false;rigPreview=nil;status="Sensor stream stale";try await Task.sleep(for:.milliseconds(100));continue}
                 let phone=observations.min {abs($0.unixTime+offset-frame.stamp)<abs($1.unixTime+offset-frame.stamp)}
-                let paired=phone.flatMap {abs($0.unixTime+offset-frame.stamp)+bestRTT/2<0.1 ? $0:nil}
+                let paired=phone.flatMap {phoneTrackingNormal && abs($0.unixTime+offset-frame.stamp)+bestRTT/2<0.1 ? $0:nil}
+                let revision=alignmentRevision
+                await pendingReset?.value
                 let result=await worker.process(frame,phone:paired,alignment:alignment,heatThreshold:Float(heatThreshold))
                 if automaticTemperatureScale,let range=SensorFrame.temperatureRange(frame.thermal) {
                     lowerTemperature=range.0;upperTemperature=range.1
                 }
                 guard !Task.isCancelled,generation==id else {return}
-                aligned=result.valid;worldFromMap=result.worldFromMap;points=result.points;heatSurface=result.heatSurface;heatObservationTime=frame.stamp-offset;status=result.status;inliers=result.inliers
-                alignmentDiagnostics=result.alignmentDiagnostics
-                if aligned {rigPreview=nil}
+                guard revision==alignmentRevision else {continue}
+                apply(result);heatObservationTime=frame.stamp-offset
+                if alignmentEstablished {rigPreview=nil}
                 else if frame.stamp-lastPreview>=0.5 {rigPreview=UIImage(data:frame.jpeg);lastPreview=frame.stamp}
                 let depthPercent=100*Double(frame.depth.lazy.filter{$0.isFinite && $0>=0.2 && $0<=6}.count)/Double(frame.depth.count)
                 if !aligned,depthPercent<5 {status=String(format:"Rig depth mostly missing · %.1f%% usable",depthPercent)}
                 count += 1;let elapsed=Date().timeIntervalSince(lastTime)
                 if elapsed>=1 {fps=Double(count)/elapsed;count=0;lastTime=Date()}
                 thermalState=String(describing:ProcessInfo.processInfo.thermalState)
-                let body:[String:Any]=["session":frame.session,"timestamp":frame.stamp,"valid":result.valid,
+                let body:[String:Any]=["session":frame.session,"timestamp":frame.stamp,"valid":aligned,
+                                       "alignment_saved":alignmentEstablished,"phone_tracking":phoneTrackingReason,"rig_tracking":result.rigTrackingState,"rig_keyframes":result.keyframes,
                                        "heat_triangles":heatSurface.count/3,"heat_threshold_c":heatThreshold,"show_through_walls":showHeatThroughWalls,"thermal_delta_ms":result.thermalDeltaMS,"temperature_range":[lowerTemperature,upperTemperature],"rig_depth_valid_percent":depthPercent,"alignment":result.alignmentDiagnostics,"camera_fps":cameraFPS,"camera_age_ms":cameraAgeMS,"clock_rtt_ms":bestRTT*1000,"phone_delta_ms":phone.map{abs($0.unixTime+offset-frame.stamp)*1000} ?? -1,
                                        "fps":fps,"render_fps":renderFPS,"latency_ms":latencyMS,"dropped":dropped,"inliers":inliers,"points":points.count,"status":status,
                                        "phone_pose":poseArray(paired?.pose ?? matrix_identity_float4x4),"rig_pose":poseArray(result.rigPose)]

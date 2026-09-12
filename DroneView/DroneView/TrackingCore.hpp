@@ -143,6 +143,8 @@ inline Fit fit(const Frame &ref,const Frame &cur,const cv::Matx33d *prior=nullpt
 class Tracker {
 public:
     Frame active,origin,recovery,current;M pose=M::eye();double lastGood=0,last=0;bool initialized=false,activeOrigin=true;int status=0;
+    std::vector<Frame> keyframes;
+    size_t recoveryCursor=0;
     Fit update(Frame f,const cv::Matx33d *increment=nullptr) {
         Fit result;
         if(!std::isfinite(f.stamp)||f.stamp<=last)return result;last=f.stamp;current=f;
@@ -156,11 +158,21 @@ public:
             if(result.valid){base=recovery.pose;recovered=true;}
         }
         if(!result.valid&&!activeOrigin){result=fit(origin,f);if(result.valid){base=origin.pose;recovered=true;}}
+        // ponytail: 24 recent keyframes, four checks per lost frame; place indexing if room-scale history is needed.
+        for(size_t i=0;!result.valid&&i<std::min(size_t(4),keyframes.size());i++) {
+            auto &reference=keyframes[keyframes.size()-1-(recoveryCursor++%keyframes.size())];
+            result=fit(reference,f,nullptr,true);
+            if(result.inliers<50)result.valid=false;
+            if(result.valid){base=reference.pose;recovered=true;}
+        }
         if(!result.valid){status=2;return result;}
         M next=base*result.pose;double dt=f.stamp-lastGood;
         if(dt<=0||cv::norm(translation(next)-translation(pose))/dt>5||angle(rotation(pose).t()*rotation(next))/dt>3){result.valid=false;status=2;return result;}
         pose=next;f.pose=pose;current.pose=pose;lastGood=f.stamp;status=1;
-        if(recovered||cv::norm(translation(result.pose))>=.2||angle(rotation(result.pose))>=CV_PI/12){active=f;activeOrigin=false;}
+        if(recovered||cv::norm(translation(result.pose))>=.2||angle(rotation(result.pose))>=CV_PI/12){
+            if(!activeOrigin){keyframes.push_back(active);if(keyframes.size()>24)keyframes.erase(keyframes.begin());}
+            active=f;activeOrigin=false;recoveryCursor=0;
+        }
         recovery=f;return result;
     }
 };
