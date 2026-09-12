@@ -11,6 +11,10 @@ struct ThermalARView: View {
             VStack(spacing:10) {
                 Text(!model.renderingError.isEmpty ? model.renderingError : (model.cameraWarning.isEmpty ? model.status : model.cameraWarning)).font(.callout).multilineTextAlignment(.center)
                 if model.running {
+                    if !model.aligned,!model.alignmentDiagnostics.isEmpty {
+                        Text("Shared features: \(model.alignmentDiagnostics["inliers",default:0])/30 verified · \(model.alignmentDiagnostics["confirmations",default:0])/3 consistent views")
+                            .font(.caption.monospacedDigit())
+                    }
                     Text(String(format:"%.1f processed · %.0f rendered fps · %.0f ms · %d skipped · %d inliers",model.fps,model.renderFPS,model.latencyMS,model.dropped,model.inliers)).font(.caption.monospacedDigit())
                     Text("Camera: \(model.cameraFPS,format:.number.precision(.fractionLength(0))) fps · Phone thermal state: \(model.thermalState)").font(.caption2)
                 }
@@ -19,6 +23,15 @@ struct ThermalARView: View {
                     Button("Thermal",systemImage:"slider.horizontal.3") {settings=true}
                 }.buttonStyle(.borderedProminent)
             }.padding().background(.regularMaterial,in:.rect(cornerRadius:16)).padding()
+        }
+        .overlay(alignment:.topTrailing) {
+            if model.running,!model.aligned,let preview=model.rigPreview {
+                VStack(spacing:4) {
+                    Image(uiImage:preview).resizable().scaledToFit().frame(width:160)
+                        .accessibilityLabel("Rig camera preview. Aim both cameras at the same scene.")
+                    Text("Rig camera").font(.caption)
+                }.padding(6).background(.regularMaterial,in:.rect(cornerRadius:10)).padding()
+            }
         }
         .sheet(isPresented:$settings) {
             NavigationStack {
@@ -32,7 +45,7 @@ struct ThermalARView: View {
                         adjustment("Vertical stretch",value:$model.alignment.stretchY,range:0.5...1.5)
                         Toggle("Flip horizontal",isOn:$model.alignment.flipX)
                         Toggle("Flip vertical",isOn:$model.alignment.flipY)
-                        Text("Offsets use the old 640 × 480 reference. Changes start a new local map. Driver image flips are accounted for separately.").font(.caption)
+                        Text("Offsets use the old 640 × 480 reference. Changes refresh thermal points and keep camera alignment. Driver image flips are accounted for separately.").font(.caption)
                         Button("Save for this camera profile") {model.saveAlignment()}
                     }
                     Section("Thermal display") {

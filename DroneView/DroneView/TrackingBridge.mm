@@ -3,10 +3,10 @@
 using namespace drone;
 static NSData *matrixData(M m) { float a[16];for(int c=0;c<4;c++)for(int r=0;r<4;r++)a[c*4+r]=float(m(r,c));return [NSData dataWithBytes:a length:sizeof(a)]; }
 static cv::Matx33d intrinsic(NSArray *a) { cv::Matx33d k;for(int i=0;i<9;i++)k.val[i]=[a[i] doubleValue];return k; }
-@implementation TrackingBridge { std::unique_ptr<Tracker> _tracker; NSDictionary *_alignmentDiagnostics; }
+@implementation TrackingBridge { std::unique_ptr<Tracker> _tracker; NSDictionary *_alignmentDiagnostics; cv::Mat _gray; }
 - (instancetype)init { if((self=[super init])){_tracker=std::make_unique<Tracker>();cv::setNumThreads(2);}return self; }
 - (NSDictionary *)alignmentDiagnostics { return _alignmentDiagnostics ?: @{}; }
-- (void)reset { _tracker=std::make_unique<Tracker>(); }
+- (void)reset { _tracker=std::make_unique<Tracker>();_alignmentDiagnostics=nil;_gray.release(); }
 - (NSDictionary *)processJPEG:(NSData *)jpeg depth:(NSData *)depth metadata:(NSDictionary *)m {
     @try { try {
         int w=[m[@"width"] intValue],h=[m[@"height"] intValue];
@@ -14,6 +14,7 @@ static cv::Matx33d intrinsic(NSArray *a) { cv::Matx33d k;for(int i=0;i<9;i++)k.v
         cv::Mat bytes(1,int(jpeg.length),CV_8U,const_cast<void *>(jpeg.bytes));auto image=cv::imdecode(bytes,cv::IMREAD_COLOR);
         if(!image.empty())cv::cvtColor(image,image,cv::COLOR_BGR2GRAY);
         if(image.cols!=w||image.rows!=h)return @{@"status":@"invalid"};
+        _gray=image;
         cv::Mat d(h,w,CV_32F,const_cast<void *>(depth.bytes));auto f=frame(image,d,intrinsic(m[@"K"]),[m[@"timestamp"] doubleValue]);
         cv::Matx33d increment=cv::Matx33d::eye();bool ready=false;
         NSDictionary *g=m[@"gyro"];NSArray *samples=g[@"samples"],*bias=g[@"bias"],*mount=g[@"rotation"];
@@ -36,11 +37,14 @@ static cv::Matx33d intrinsic(NSArray *a) { cv::Matx33d k;for(int i=0;i<9;i++)k.v
     @catch(NSException *e){return @{@"status":@"invalid"};}
 }
 - (NSData *)alignGray:(NSData *)gray width:(NSInteger)w height:(NSInteger)h depth:(NSData *)depth intrinsics:(NSArray<NSNumber *> *)k {
-    if(!_tracker->initialized||w<=0||h<=0||w>1920||h>1440||gray.length!=size_t(w*h)||depth.length!=size_t(w*h*4)||k.count!=9)return nil;
+    if(!_tracker->initialized||_gray.empty()||w<=0||h<=0||w>1920||h>1440||gray.length!=size_t(w*h)||depth.length!=size_t(w*h*4)||k.count!=9)return nil;
     try {
-        auto phone=frame(cv::Mat(int(h),int(w),CV_8U,const_cast<void *>(gray.bytes)),cv::Mat(int(h),int(w),CV_32F,const_cast<void *>(depth.bytes)),intrinsic(k),0);
-        auto match=fit(_tracker->current,phone,nullptr,true);
-        _alignmentDiagnostics=@{@"rig_features":@(_tracker->current.keys.size()),@"phone_features":@(phone.keys.size()),
+        auto start=cv::getTickCount();
+        auto rig=frame(_gray,_tracker->current.depth,_tracker->current.k,0,true);
+        auto phone=frame(cv::Mat(int(h),int(w),CV_8U,const_cast<void *>(gray.bytes)),cv::Mat(int(h),int(w),CV_32F,const_cast<void *>(depth.bytes)),intrinsic(k),0,true);
+        auto match=fit(rig,phone,nullptr,true);
+        _alignmentDiagnostics=@{@"rig_features":@(rig.keys.size()),@"phone_features":@(phone.keys.size()),
+                                @"processing_ms":@(int(1000*(cv::getTickCount()-start)/cv::getTickFrequency())),
                                 @"matches":@(match.matches),@"inliers":@(match.inliers),@"depth_samples":@(match.depthSamples),@"accepted":@(match.valid&&match.inliers>=30),
                                 @"rejection":@(match.valid&&match.inliers<30?10:match.rejection),
                                 @"depth_median_mm":@(int(match.depthMedian*1000)),@"depth_p75_mm":@(int(match.depthP75*1000))};

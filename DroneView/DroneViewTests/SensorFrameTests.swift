@@ -1,5 +1,6 @@
 import XCTest
 import simd
+import SwiftUI
 @testable import DroneView
 
 final class SensorFrameTests:XCTestCase {
@@ -28,33 +29,123 @@ final class SensorFrameTests:XCTestCase {
     }
     func testAlignmentConfirmationSurvivesPendingFrames() async {
         let worker=ReconstructionWorker(), pose=matrix_identity_float4x4
-        for _ in 0..<2 {
-            await worker.confirmAlignment(pose)
+        for time in 1...2 {
+            await worker.confirmAlignment(pose,at:Double(time))
             let pending=await worker.currentAlignment()
             XCTAssertNil(pending)
         }
-        await worker.confirmAlignment(pose)
+        await worker.confirmAlignment(pose,at:3)
         let aligned=await worker.currentAlignment()
         XCTAssertEqual(aligned,pose)
         await worker.invalidate()
         let invalidated=await worker.currentAlignment()
         XCTAssertNil(invalidated)
-        await worker.confirmAlignment(pose)
+        await worker.confirmAlignment(pose,at:4)
         let pendingAgain=await worker.currentAlignment()
         XCTAssertNil(pendingAgain)
     }
-    func testRejectedRigFramePausesWithoutDiscardingAlignment() async throws {
-        let url=try XCTUnwrap(Bundle(for:Self.self).url(forResource:"sensor-v1",withExtension:"bin"))
-        let wire=try Data(contentsOf:url), frame=try SensorFrame(wire), worker=ReconstructionWorker()
-        _=await worker.process(frame,phone:nil,alignment:ThermalAlignment())
-        for _ in 0..<3 {await worker.confirmAlignment(matrix_identity_float4x4)}
-        var metadata=frame.metadata;metadata["sequence"]=frame.sequence+1
+    func testAlignmentKeepsGoodFitsAcrossMissesAndRejectsAnOutlier() async {
+        let worker=ReconstructionWorker()
+        var pose=matrix_identity_float4x4
+        await worker.confirmAlignment(pose,at:1)
+        await worker.confirmAlignment(nil,at:1.5)
+        pose.columns.3.x=1
+        await worker.confirmAlignment(pose,at:2)
+        pose=simd_float4x4(simd_quatf(angle:0.02,axis:SIMD3(0,1,0)))
+        pose.columns.3.x=0.02
+        await worker.confirmAlignment(pose,at:2.5)
+        var aligned=await worker.currentAlignment()
+        XCTAssertNil(aligned)
+        pose=simd_float4x4(simd_quatf(angle:-0.02,axis:SIMD3(0,1,0)));pose.columns.3.x = -0.02
+        await worker.confirmAlignment(pose,at:3)
+        aligned=await worker.currentAlignment()
+        XCTAssertNotNil(aligned)
+        XCTAssertEqual(aligned!.columns.3.x,0,accuracy:0.0001)
+        XCTAssertEqual(simd_quatf(aligned!).angle,0,accuracy:0.0001)
+        XCTAssertEqual(simd_determinant(aligned!),1,accuracy:0.0001)
+        await worker.confirmAlignment(nil,at:10)
+        let retained=await worker.currentAlignment()
+        XCTAssertEqual(retained,aligned)
+    }
+    @MainActor func testStartupGuidanceRendering() throws {
+        let model=PhoneReconstruction()
+        model.running=true;model.status="Aligning · 2/3 consistent views · keep the same scene visible"
+        model.alignmentDiagnostics=["inliers":84,"confirmations":2]
+        model.rigPreview=testImage()
+        let scene=try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let window=UIWindow(windowScene:scene)
+        window.frame=CGRect(x:0,y:0,width:393,height:852)
+        let controller=UIHostingController(rootView:ThermalARView(model:model))
+        window.rootViewController=controller;window.makeKeyAndVisible()
+        defer {window.isHidden=true}
+        controller.view.layoutIfNeeded()
+        let image=UIGraphicsImageRenderer(size:window.bounds.size).image {_ in
+            XCTAssertTrue(window.drawHierarchy(in:window.bounds,afterScreenUpdates:true))
+        }
+        let attachment=XCTAttachment(image:image);attachment.name="Marker-free startup guidance";attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+    func testAlignmentExpiresOldFitsAndDoesNotCountDuplicateFrames() async {
+        let worker=ReconstructionWorker(),pose=matrix_identity_float4x4
+        await worker.confirmAlignment(pose,at:1)
+        await worker.confirmAlignment(pose,at:1)
+        await worker.confirmAlignment(pose,at:2)
+        var aligned=await worker.currentAlignment()
+        XCTAssertNil(aligned)
+        await worker.confirmAlignment(pose,at:7)
+        await worker.confirmAlignment(pose,at:8)
+        aligned=await worker.currentAlignment()
+        XCTAssertNil(aligned)
+        await worker.confirmAlignment(pose,at:9)
+        aligned=await worker.currentAlignment()
+        XCTAssertEqual(aligned,pose)
+    }
+    private func testImage(width:Int=24,height:Int=16) -> UIImage {
+        let context=CGContext(data:nil,width:width,height:height,bitsPerComponent:8,bytesPerRow:width,space:CGColorSpaceCreateDeviceGray(),bitmapInfo:0)!
+        context.setFillColor(gray:0.6,alpha:1);context.fill(CGRect(x:0,y:0,width:CGFloat(width),height:CGFloat(height)))
+        return UIImage(cgImage:context.makeImage()!)
+    }
+    private func nextFrame(_ wire:Data,sequence:Int,stamp:Double?=nil) throws -> SensorFrame {
+        var metadata=try SensorFrame(wire).metadata;metadata["sequence"]=sequence
+        if let stamp {
+            let shift=stamp-(metadata["timestamp"] as! Double)
+            for key in ["timestamp","depth_timestamp","thermal_timestamp"] {
+                if let value=metadata[key] as? Double {metadata[key]=value+shift}
+            }
+        }
+        let oldJPEG=metadata["jpeg_bytes"] as! Int
+        let jpeg=testImage(width:metadata["width"] as! Int,height:metadata["height"] as! Int).jpegData(compressionQuality:0.9)!
+        metadata["jpeg_bytes"]=jpeg.count
         let header=try JSONSerialization.data(withJSONObject:metadata)
         let oldSize=Int(wire.withUnsafeBytes{$0.loadUnaligned(fromByteOffset:4,as:UInt32.self).littleEndian})
         var size=UInt32(header.count).littleEndian
-        var next=Data("DVS1".utf8);next.append(withUnsafeBytes(of:&size){Data($0)});next.append(header);next.append(wire.dropFirst(8+oldSize))
-        let rejected=await worker.process(try SensorFrame(next),phone:nil,alignment:ThermalAlignment())
+        var next=Data("DVS1".utf8);next.append(withUnsafeBytes(of:&size){Data($0)});next.append(header);next.append(jpeg);next.append(wire.dropFirst(8+oldSize+oldJPEG))
+        return try SensorFrame(next)
+    }
+    func testStartupRecoversAndThermalChangesPreserveAlignment() async throws {
+        let url=try XCTUnwrap(Bundle(for:Self.self).url(forResource:"sensor-v1",withExtension:"bin"))
+        let wire=try Data(contentsOf:url),frame=try nextFrame(wire,sequence:1),worker=ReconstructionWorker()
+        _=await worker.process(frame,phone:nil,alignment:ThermalAlignment())
+        let restarted=await worker.process(try nextFrame(wire,sequence:frame.sequence+1,stamp:frame.stamp+2),phone:nil,alignment:ThermalAlignment())
+        XCTAssertTrue(restarted.status.hasPrefix("Restarting rig tracking"),restarted.status)
+        _=await worker.process(try nextFrame(wire,sequence:frame.sequence+2,stamp:frame.stamp+3),phone:nil,alignment:ThermalAlignment())
+        for time in 1...3 {await worker.confirmAlignment(matrix_identity_float4x4,at:Double(time))}
+        var thermal=ThermalAlignment();thermal.offsetX += 3
+        _=await worker.process(try nextFrame(wire,sequence:frame.sequence+3,stamp:frame.stamp+4),phone:nil,alignment:thermal)
+        let retained=await worker.currentAlignment()
+        XCTAssertEqual(retained,matrix_identity_float4x4)
+        await worker.reset()
+        let reset=await worker.currentAlignment()
+        XCTAssertNil(reset)
+    }
+    func testRejectedRigFramePausesWithoutDiscardingAlignment() async throws {
+        let url=try XCTUnwrap(Bundle(for:Self.self).url(forResource:"sensor-v1",withExtension:"bin"))
+        let wire=try Data(contentsOf:url), frame=try nextFrame(wire,sequence:1), worker=ReconstructionWorker()
+        _=await worker.process(frame,phone:nil,alignment:ThermalAlignment())
+        for time in 1...3 {await worker.confirmAlignment(matrix_identity_float4x4,at:Double(time))}
+        let rejected=await worker.process(try nextFrame(wire,sequence:frame.sequence+1),phone:nil,alignment:ThermalAlignment())
         XCTAssertFalse(rejected.valid)
+        XCTAssertTrue(rejected.status.hasPrefix("Rig tracking paused"),rejected.status)
         let retained=await worker.currentAlignment()
         XCTAssertEqual(retained,matrix_identity_float4x4)
     }

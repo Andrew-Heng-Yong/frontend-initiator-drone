@@ -56,16 +56,18 @@ struct Frame {
     cv::Matx33d k;
     M pose=M::eye(); double stamp=0;
 };
-inline Frame frame(const cv::Mat &image,const cv::Mat &depth,cv::Matx33d k,double stamp) {
+inline Frame frame(const cv::Mat &image,const cv::Mat &depth,cv::Matx33d k,double stamp,bool crossCamera=false) {
     Frame f; f.depth=depth.clone();f.k=k;f.stamp=stamp;
-    auto orb=cv::ORB::create(800,1.2f,8,15,0,2,cv::ORB::HARRIS_SCORE,31,10);
-    orb->detectAndCompute(image,cv::noArray(),f.keys,f.descriptors);return f;
+    cv::Ptr<cv::Feature2D> detector;
+    if(crossCamera)detector=cv::SIFT::create(1600);
+    else detector=cv::ORB::create(800,1.2f,8,15,0,2,cv::ORB::HARRIS_SCORE,31,10);
+    detector->detectAndCompute(image,cv::noArray(),f.keys,f.descriptors);return f;
 }
 struct Fit { bool valid=false; M pose=M::eye(); int inliers=0, matches=0, depthSamples=0, rejection=1; double depthMedian=0, depthP75=0; double rmse=0; };
 inline Fit fit(const Frame &ref,const Frame &cur,const cv::Matx33d *prior=nullptr,bool requireDepth=false) {
     Fit out;
-    if(ref.descriptors.rows<2||cur.descriptors.rows<2) return out;
-    cv::BFMatcher matcher(cv::NORM_HAMMING);
+    if(ref.descriptors.rows<2||cur.descriptors.rows<2||ref.descriptors.type()!=cur.descriptors.type()) return out;
+    cv::BFMatcher matcher(ref.descriptors.depth()==CV_32F?cv::NORM_L2:cv::NORM_HAMMING);
     std::vector<std::vector<cv::DMatch>> forward,reverse;
     matcher.knnMatch(ref.descriptors,cur.descriptors,forward,2);
     matcher.knnMatch(cur.descriptors,ref.descriptors,reverse,2);
@@ -98,7 +100,7 @@ inline Fit fit(const Frame &ref,const Frame &cur,const cv::Matx33d *prior=nullpt
         try {
             cv::setRNGSeed(7);
             out.rejection=4;
-            if(!cv::solvePnPRansac(objects,pixels,cur.k,cv::noArray(),rvec,tvec,seeded,100,3.,.99,ids,
+            if(!cv::solvePnPRansac(objects,pixels,cur.k,cv::noArray(),rvec,tvec,seeded,requireDepth?500:100,3.,.99,ids,
                                   seeded?cv::SOLVEPNP_ITERATIVE:cv::SOLVEPNP_EPNP)||ids.rows<4)continue;
             std::vector<cv::Point3f> oi;std::vector<cv::Point2f> pi;
             for(int i=0;i<ids.rows;i++){int j=ids.at<int>(i);oi.push_back(objects[j]);pi.push_back(pixels[j]);}

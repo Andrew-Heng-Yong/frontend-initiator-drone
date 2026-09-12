@@ -78,12 +78,18 @@ existing Scene/Cameras/Tracking tabs retain their Pi-viewer behaviour.
 Start the Pi with `--processing phone`, connect to its port 8080, then select
 **Thermal AR**. Scanning starts automatically. Allow Camera and Local Network access. Point
 both cameras at the same well-lit textured area with geometry at different depths.
-Three consistent RGB/depth fits establish the shared frame. No markers are used.
+Three consistent RGB/depth fits within a four-second window establish the shared
+frame; missed fits do not erase good candidates. The accepted poses are averaged.
+SIFT matches the two cameras during alignment; continuous rig tracking still uses
+ORB. The 30-inlier and geometric/depth checks remain required. A rig-camera inset
+and shared-feature/progress counts guide startup. Both cameras need an overlapping
+scene, but do not need to touch. No markers are used.
 LiDAR hardware is required; the simulator displays the unsupported-device state.
 
 The overlay uses the previous FOV/offset/scale/stretch/barrel alignment; **Thermal**
 opens its controls. Saved values are scoped to the server and current camera
-profile. No measured thermal extrinsics are claimed. Changes reset the local map.
+profile. No measured thermal extrinsics are claimed. Changes clear thermal points
+while preserving rig tracking and phone alignment.
 Thermal values use the same already-oriented image as the Pi preview; legacy
 browser flips are not reapplied. The v2 orientation migration keeps saved offsets,
 scale and distortion while resetting the erroneous extra flips.
@@ -105,8 +111,12 @@ requires capture-time agreement within 100 ms including half the clock probe RTT
 Missing alignment, limited AR tracking or network loss hides the overlay and
 stops map integration. Alignment persists when the cameras no longer share a view.
 Rejected rig frames or missing timestamp pairs pause placement; accepted odometry
-recovery in the same rig map resumes it. AR tracking loss, network failure, map
-resets, and **Realign** still require another shared view. This first version is
+recovery in the same rig map resumes it. Network gaps hide placement and can resume
+in the same maps. AR tracking loss, map resets, and **Realign** still require another
+shared view. **Realign** also restarts rig tracking; before initial alignment, a
+rig that remains lost for one second automatically starts a new reference. Phone
+images use filtered downsampling, and low-confidence LiDAR samples are excluded
+from cross-camera depth checks. This first version is
 for mostly static indoor scenes, not moving-object thermal reconstruction.
 Thermal AR is the first/default tab and starts automatically. Switching tabs keeps
 capture and reconstruction running. Backgrounding/locking suspends camera capture
@@ -128,6 +138,12 @@ run it with `OUTPUT/frames.yml` to obtain native CSV poses. Use Python OpenCV
 4.13 for parity: a different OpenCV release can choose different RANSAC solutions.
 This replay is visual-only; gyro integration also needs recorded/device checks.
 Simulator tests cover binary decoding, transforms, thermal orientation, invalid JPEGs, and actual GPU rendering of dots and filled heat with wall occlusion both enabled and disabled.
+They also cover interrupted alignment confirmation, outliers, stale/duplicate fits,
+startup recovery, thermal changes preserving alignment, and startup guidance rendering.
+The native replay binary's `--check` mode verifies known synthetic cross-camera
+poses at 15, 40 and 65 cm separation with different intrinsics and brightness,
+and rejects missing or inconsistent depth. These synthetic cases do not establish
+live startup success rates.
 Physical AR alignment, occlusion and sustained 10-fps processing/30-fps rendering
 remain hardware acceptance checks, not guarantees from the replay.
 

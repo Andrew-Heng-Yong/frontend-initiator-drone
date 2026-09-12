@@ -1,7 +1,9 @@
 import ARKit
+import Accelerate
 import Foundation
 import Observation
 import simd
+import UIKit
 
 struct PhoneObservation: Sendable {
     let unixTime: Double
@@ -25,21 +27,26 @@ struct ReconstructionResult: Sendable {
 
 actor ReconstructionWorker {
     private let bridge=TrackingBridge()
-    private var session="", calibration=""
+    private var session="", calibration="", thermalCalibration=""
     private var sequence=0
     private var worldFromMap: simd_float4x4?
-    private var candidate: simd_float4x4?
+    private var alignmentSamples: [(time:Double,pose:simd_float4x4)]=[]
     private var confirmations=0
     private var attemptTime=0.0
+    private var trackingLostSince: Double?
     private var voxels: [SIMD3<Int32>: SIMD4<Float>]=[:]
     private var order: [SIMD3<Int32>]=[]
     private var oldest=0
     private var thermalHistory: [(stamp:Double,values:[Float])]=[]
-    func reset() { bridge.reset();session="";sequence=0;invalidate();voxels.removeAll();order.removeAll();oldest=0;thermalHistory=[] }
-    func invalidate() { worldFromMap=nil;candidate=nil;confirmations=0;attemptTime=0 }
+    func reset() { bridge.reset();session="";sequence=0;thermalCalibration="";trackingLostSince=nil;invalidate();voxels.removeAll();order.removeAll();oldest=0;thermalHistory=[] }
+    func invalidate() { worldFromMap=nil;alignmentSamples=[];confirmations=0;attemptTime=0 }
     func process(_ f: SensorFrame, phone: PhoneObservation?, alignment: ThermalAlignment, heatThreshold:Float=24) -> ReconstructionResult {
-        let signature=f.k.description+"\(f.width)x\(f.height)-\(f.thermalWidth)x\(f.thermalHeight)"+String(describing: alignment)
+        let signature=f.k.description+"\(f.width)x\(f.height)"
         if session != f.session || calibration != signature { reset();session=f.session;calibration=signature }
+        let thermalSignature="\(f.thermalWidth)x\(f.thermalHeight)"+String(describing:alignment)
+        if thermalCalibration != thermalSignature {
+            voxels.removeAll();order.removeAll();oldest=0;thermalHistory=[];thermalCalibration=thermalSignature
+        }
         let thermal=thermalSample(stamp:f.thermalStamp,values:f.thermal,at:f.stamp)
         var result=ReconstructionResult(points: [],worldFromMap: worldFromMap ?? matrix_identity_float4x4,rigPose: matrix_identity_float4x4,valid:false,status:"Waiting for a new sensor frame",inliers:0)
         result.thermalDeltaMS=thermal.map{abs($0.stamp-f.stamp)*1000} ?? -1
@@ -51,28 +58,39 @@ actor ReconstructionWorker {
         let tracking=output["status"] as? String == "tracking"
         // A rejected frame does not reset the rig map. Pause placement until the
         // existing odometry checks accept recovery in that same map.
-        guard tracking else { result.status="Rig tracking paused · hold a textured view";return result }
+        guard tracking else {
+            if trackingLostSince == nil {trackingLostSince=f.stamp}
+            if worldFromMap == nil,let since=trackingLostSince,f.stamp-since>=1 {
+                reset();result.status="Restarting rig tracking · hold a textured view"
+            } else {result.status="Rig tracking paused · hold a textured view"}
+            return result
+        }
+        trackingLostSince=nil
         guard let phone else { result.status="Waiting for a timestamp-matched phone frame";return result }
         guard phone.normal else { invalidate();result.status="Phone tracking limited · scan a textured area";return result }
         if f.stamp-attemptTime > (worldFromMap == nil ? 0.5 : 1.0) {
             attemptTime=f.stamp
             if let data=bridge.alignGray(phone.gray,width:phone.w,height:phone.h,depth:phone.depth,intrinsics:phone.k.map(NSNumber.init)),let phoneToRig=poseMatrix(data) {
                 let transform=phone.pose * opticalToAR * phoneToRig.inverse * pose.inverse
-                confirmAlignment(transform)
-            } else { confirmations=0;candidate=nil }
+                confirmAlignment(transform,at:f.stamp)
+            } else { confirmAlignment(nil,at:f.stamp) }
         }
         for (key,value) in bridge.alignmentDiagnostics {
             if let key=key as? String,let value=value as? NSNumber {result.alignmentDiagnostics[key]=value.intValue}
         }
+        result.alignmentDiagnostics["confirmations"]=confirmations
         guard let transform=currentAlignment() else {
             let reason=result.alignmentDiagnostics["rejection"] ?? 0
             switch reason {
             case 6: result.status="Alignment · insufficient shared depth; aim 1–2 m away"
             case 7: result.status="Alignment · camera depths disagree; hold a shared view"
-            case 1...5,10: result.status="Alignment · too few reliable matches; move cameras closer together"
+            case 1: result.status="Alignment · aim both cameras at a well-lit, textured area"
+            case 2: result.status="Alignment · rig depth missing at shared features; aim 1–2 m away"
+            case 3: result.status="Alignment · include more of the shared scene"
+            case 4,5,10: result.status="Alignment · show both cameras the same textured area"
             default: result.status="Alignment · hold both cameras steady on the same scene"
             }
-            result.alignmentDiagnostics["confirmations"]=confirmations
+            if confirmations>0 {result.status="Aligning · \(confirmations)/3 consistent views · keep the same scene visible"}
             return result
         }
         result.worldFromMap=transform;result.rigPose=transform*pose*opticalToAR;result.valid=true
@@ -137,10 +155,28 @@ actor ReconstructionWorker {
         }
         return thermalHistory.min{abs($0.stamp-capture)<abs($1.stamp-capture)}
     }
-    func confirmAlignment(_ transform:simd_float4x4) {
-        if let candidate, distance(candidate,transform)<0.08, rotationDistance(candidate,transform)<0.08 { confirmations += 1 } else { confirmations=1 }
-        candidate=transform
-        if confirmations>=3 { worldFromMap=transform }
+    func confirmAlignment(_ transform:simd_float4x4?,at time:Double) {
+        guard time.isFinite else {return}
+        alignmentSamples.removeAll{time-$0.time>4 || time<$0.time}
+        if let transform,alignmentSamples.last?.time != time {alignmentSamples.append((time,transform))}
+        if alignmentSamples.count>8 {alignmentSamples.removeFirst(alignmentSamples.count-8)}
+        // ponytail: bounded eight-pose consensus; revisit only if longer histories are needed.
+        let groups=alignmentSamples.map {seed in alignmentSamples.filter {
+            distance(seed.pose,$0.pose)<0.08 && rotationDistance(seed.pose,$0.pose)<0.08
+        }}
+        guard let group=groups.max(by:{$0.count<$1.count}) else {confirmations=0;return}
+        confirmations=group.count
+        guard confirmations>=3 else {return}
+        let reference=simd_quatf(group[0].pose).vector
+        var orientation=SIMD4<Float>(repeating:0),position=SIMD4<Float>(repeating:0)
+        for sample in group {
+            let q=simd_quatf(sample.pose).vector
+            orientation += simd_dot(reference,q)<0 ? -q:q
+            position += sample.pose.columns.3
+        }
+        var averaged=simd_float4x4(simd_quatf(vector:simd_normalize(orientation)))
+        averaged.columns.3=position/Float(group.count)
+        worldFromMap=averaged
     }
     // Shared-view checks refine alignment when available; loss of overlap is
     // not loss of tracking. Reset/session changes and AR tracking loss invalidate it.
@@ -155,25 +191,39 @@ actor ReconstructionWorker {
 extension PhoneObservation {
     @concurrent static func capture(_ f: ARFrame, unixTime:Double) async -> PhoneObservation? {
         guard let scene=f.sceneDepth else { return nil }
-        let image=f.capturedImage, depth=scene.depthMap
+        let image=f.capturedImage, depth=scene.depthMap,confidence=scene.confidenceMap
         CVPixelBufferLockBaseAddress(image,.readOnly);CVPixelBufferLockBaseAddress(depth,.readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(image,.readOnly);CVPixelBufferUnlockBaseAddress(depth,.readOnly) }
+        if let confidence {CVPixelBufferLockBaseAddress(confidence,.readOnly)}
+        defer {
+            CVPixelBufferUnlockBaseAddress(image,.readOnly);CVPixelBufferUnlockBaseAddress(depth,.readOnly)
+            if let confidence {CVPixelBufferUnlockBaseAddress(confidence,.readOnly)}
+        }
         let iw=CVPixelBufferGetWidthOfPlane(image,0),ih=CVPixelBufferGetHeightOfPlane(image,0)
         let step=max(1,iw/640),w=iw/step,h=ih/step
         guard let ybase=CVPixelBufferGetBaseAddressOfPlane(image,0),let dbase=CVPixelBufferGetBaseAddress(depth) else { return nil }
         let ys=CVPixelBufferGetBytesPerRowOfPlane(image,0),ds=CVPixelBufferGetBytesPerRow(depth)/4
         let dw=CVPixelBufferGetWidth(depth),dh=CVPixelBufferGetHeight(depth)
-        var gray=[UInt8](repeating:0,count:w*h),values=[Float](repeating:0,count:w*h)
+        let cbase=confidence.flatMap{CVPixelBufferGetBaseAddress($0)?.assumingMemoryBound(to:UInt8.self)}
+        let cw=confidence.map{CVPixelBufferGetWidth($0)} ?? 0,ch=confidence.map{CVPixelBufferGetHeight($0)} ?? 0,cs=confidence.map{CVPixelBufferGetBytesPerRow($0)} ?? 0
+        var gray=Data(count:w*h),values=[Float](repeating:0,count:w*h)
+        let scaled=gray.withUnsafeMutableBytes {bytes in
+            var source=vImage_Buffer(data:ybase,height:vImagePixelCount(h*step),width:vImagePixelCount(w*step),rowBytes:ys)
+            var target=vImage_Buffer(data:bytes.baseAddress!,height:vImagePixelCount(h),width:vImagePixelCount(w),rowBytes:w)
+            return vImageScale_Planar8(&source,&target,nil,vImage_Flags(kvImageHighQualityResampling))
+        }
+        guard scaled==kvImageNoError else{return nil}
         for y in 0..<h { for x in 0..<w {
-            gray[y*w+x]=ybase.assumingMemoryBound(to:UInt8.self)[y*step*ys+x*step]
             values[y*w+x]=dbase.assumingMemoryBound(to:Float.self)[min(dh-1,y*dh/h)*ds+min(dw-1,x*dw/w)]
+            if let cbase {
+                if cbase[(y*ch/h)*cs+x*cw/w]==UInt8(ARConfidenceLevel.low.rawValue) {values[y*w+x] = .nan}
+            }
         }}
-        let k=f.camera.intrinsics,s=Double(step)
+        let k=f.camera.intrinsics,s=Double(step),center=Double(step-1)/2
         let normal:Bool
         if case .normal=f.camera.trackingState {normal=true} else {normal=false}
         return PhoneObservation(unixTime:unixTime,pose:f.camera.transform,normal:normal,
-                                gray:Data(gray),depth:values.withUnsafeBytes{Data($0)},w:w,h:h,
-                                k:[Double(k[0][0])/s,0,Double(k[2][0])/s,0,Double(k[1][1])/s,Double(k[2][1])/s,0,0,1])
+                                gray:gray,depth:values.withUnsafeBytes{Data($0)},w:w,h:h,
+                                k:[Double(k[0][0])/s,0,(Double(k[2][0])-center)/s,0,Double(k[1][1])/s,(Double(k[2][1])-center)/s,0,0,1])
     }
 }
 
@@ -195,6 +245,8 @@ extension PhoneObservation {
     var pointRevision=0
     var worldFromMap=matrix_identity_float4x4
     var aligned=false
+    var alignmentDiagnostics: [String:Int]=[:]
+    var rigPreview: UIImage?
     var alignment=ThermalAlignment()
     var automaticTemperatureScale=UserDefaults.standard.object(forKey:"thermal-automatic-scale") as? Bool ?? false {
         didSet {UserDefaults.standard.set(automaticTemperatureScale,forKey:"thermal-automatic-scale")}
@@ -258,6 +310,11 @@ extension PhoneObservation {
         task=Task { await worker.reset();await loop(endpoint,id:id) }
     }
     func session(_ session:ARSession,didUpdate frame:ARFrame){observe(frame)}
+    func session(_ session:ARSession,cameraDidChangeTrackingState camera:ARCamera) {
+        if case .normal=camera.trackingState {return}
+        aligned=false
+        Task {await worker.invalidate()}
+    }
     func session(_ session:ARSession,didFailWithError error:Error){cameraError(error.localizedDescription);aligned=false;status=error.localizedDescription}
     func sessionWasInterrupted(_ session:ARSession){cameraError("AR session interrupted");realign()}
     func suspend() {
@@ -273,8 +330,8 @@ extension PhoneObservation {
         arSession.run(config)
         task=Task {await loop(endpoint,id:id)}
     }
-    func stop() { if running {log.write("scan_stop")};generation=UUID();task?.cancel();task=nil;arSession.pause();running=false;aligned=false;observations=[];points=[];heatSurface=[];arSession.delegate=nil;status="Scan paused" }
-    func realign() { log.write("realign_requested");aligned=false;Task { await worker.invalidate() } }
+    func stop() { if running {log.write("scan_stop")};generation=UUID();task?.cancel();task=nil;arSession.pause();running=false;aligned=false;alignmentDiagnostics=[:];rigPreview=nil;observations=[];points=[];heatSurface=[];arSession.delegate=nil;status="Scan paused" }
+    func realign() { log.write("realign_requested");aligned=false;alignmentDiagnostics=[:];points=[];heatSurface=[];Task { await worker.reset() } }
     func cameraHealth(age:Double) {
         cameraAgeMS=max(0,age*1000)
         if age>1,cameraWarning.isEmpty {
@@ -285,7 +342,7 @@ extension PhoneObservation {
     func cameraError(_ message:String) {log.write("ar_error",["message":message])}
     func saveAlignment() { guard !savedKey.isEmpty,let data=try? JSONEncoder().encode(alignment) else{return};UserDefaults.standard.set(data,forKey:savedKey);log.write("thermal_alignment_saved",["profile":savedKey,"parameters":String(describing:alignment)]) }
     private func loop(_ origin: URL,id:UUID) async {
-        var offset=0.0,bestRTT=Double.infinity,lastClock=0.0,lastSequence=0,lastSession="",lastTime=Date(),count=0
+        var offset=0.0,bestRTT=Double.infinity,lastClock=0.0,lastSequence=0,lastSession="",lastTime=Date(),count=0,lastPreview=0.0
         let config=URLSessionConfiguration.ephemeral;config.timeoutIntervalForRequest=3
         let network=URLSession(configuration:config)
         defer { network.invalidateAndCancel() }
@@ -333,7 +390,7 @@ extension PhoneObservation {
                 guard frame.sequence>lastSequence else {try await Task.sleep(for:.milliseconds(15));continue}
                 if lastSequence>0 {dropped += max(0,frame.sequence-lastSequence-1)};lastSequence=frame.sequence
                 latencyMS=(Date().timeIntervalSince1970+offset-frame.stamp)*1000
-                guard latencyMS >= -100,latencyMS<500 else {await worker.invalidate();aligned=false;status="Sensor stream stale";try await Task.sleep(for:.milliseconds(100));continue}
+                guard latencyMS >= -100,latencyMS<500 else {aligned=false;rigPreview=nil;status="Sensor stream stale";try await Task.sleep(for:.milliseconds(100));continue}
                 let phone=observations.min {abs($0.unixTime+offset-frame.stamp)<abs($1.unixTime+offset-frame.stamp)}
                 let paired=phone.flatMap {abs($0.unixTime+offset-frame.stamp)+bestRTT/2<0.1 ? $0:nil}
                 let result=await worker.process(frame,phone:paired,alignment:alignment,heatThreshold:Float(heatThreshold))
@@ -342,6 +399,9 @@ extension PhoneObservation {
                 }
                 guard !Task.isCancelled,generation==id else {return}
                 aligned=result.valid;worldFromMap=result.worldFromMap;points=result.points;heatSurface=result.heatSurface;heatObservationTime=frame.stamp-offset;status=result.status;inliers=result.inliers
+                alignmentDiagnostics=result.alignmentDiagnostics
+                if aligned {rigPreview=nil}
+                else if frame.stamp-lastPreview>=0.5 {rigPreview=UIImage(data:frame.jpeg);lastPreview=frame.stamp}
                 let depthPercent=100*Double(frame.depth.lazy.filter{$0.isFinite && $0>=0.2 && $0<=6}.count)/Double(frame.depth.count)
                 if !aligned,depthPercent<5 {status=String(format:"Rig depth mostly missing · %.1f%% usable",depthPercent)}
                 count += 1;let elapsed=Date().timeIntervalSince(lastTime)
@@ -361,7 +421,8 @@ extension PhoneObservation {
                 guard (poseResponse as? HTTPURLResponse)?.statusCode==200 else {throw APIError.invalidData}
             } catch {
                 guard !Task.isCancelled,generation==id else{return}
-                log.write("stream_error",["message":error.localizedDescription]);aligned=false;status="Connection interrupted · \(error.localizedDescription)";await worker.invalidate()
+                // A network gap hides placement; fresh frames can resume in the same maps.
+                log.write("stream_error",["message":error.localizedDescription]);aligned=false;rigPreview=nil;status="Connection interrupted · \(error.localizedDescription)"
                 do {try await Task.sleep(for:.milliseconds(500))}catch{return}
             }
         }
