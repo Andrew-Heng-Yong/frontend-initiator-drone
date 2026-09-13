@@ -243,6 +243,9 @@ extension PhoneObservation {
     var showHeatThroughWalls=UserDefaults.standard.object(forKey:"thermal-show-through-walls") as? Bool ?? true {
         didSet {UserDefaults.standard.set(showHeatThroughWalls,forKey:"thermal-show-through-walls")}
     }
+    var showPointCloud=UserDefaults.standard.object(forKey:"thermal-show-point-cloud") as? Bool ?? true {
+        didSet {UserDefaults.standard.set(showPointCloud,forKey:"thermal-show-point-cloud")}
+    }
     var heatThreshold=UserDefaults.standard.object(forKey:"thermal-heat-threshold") as? Double ?? 20.0 {
         didSet {UserDefaults.standard.set(heatThreshold,forKey:"thermal-heat-threshold")}
     }
@@ -459,7 +462,7 @@ extension PhoneObservation {
                 thermalState=String(describing:ProcessInfo.processInfo.thermalState)
                 let body:[String:Any]=["session":frame.session,"timestamp":frame.stamp,"valid":aligned,
                                        "alignment_saved":alignmentEstablished,"phone_tracking":phoneTrackingReason,"rig_tracking":result.rigTrackingState,"rig_keyframes":result.keyframes,
-                                       "heat_triangles":heatSurface.count/3,"heat_threshold_c":heatThreshold,"show_through_walls":showHeatThroughWalls,"thermal_delta_ms":result.thermalDeltaMS,"temperature_range":[lowerTemperature,upperTemperature],"rig_depth_valid_percent":depthPercent,"alignment":result.alignmentDiagnostics,"camera_fps":cameraFPS,"camera_age_ms":cameraAgeMS,"clock_rtt_ms":bestRTT*1000,"phone_delta_ms":phone.map{abs($0.unixTime+offset-frame.stamp)*1000} ?? -1,
+                                       "heat_triangles":heatSurface.count/3,"heat_threshold_c":heatThreshold,"show_point_cloud":showPointCloud,"show_through_walls":showHeatThroughWalls,"thermal_delta_ms":result.thermalDeltaMS,"temperature_range":[lowerTemperature,upperTemperature],"rig_depth_valid_percent":depthPercent,"alignment":result.alignmentDiagnostics,"camera_fps":cameraFPS,"camera_age_ms":cameraAgeMS,"clock_rtt_ms":bestRTT*1000,"phone_delta_ms":phone.map{abs($0.unixTime+offset-frame.stamp)*1000} ?? -1,
                                        "fps":fps,"render_fps":renderFPS,"latency_ms":latencyMS,"dropped":dropped,"inliers":inliers,"points":points.count,"status":status,
                                        "phone_pose":poseArray(paired?.pose ?? matrix_identity_float4x4),"rig_pose":poseArray(result.rigPose)]
                 if Date().timeIntervalSince1970-lastDiagnostic>=1 || status != lastDiagnosticStatus {

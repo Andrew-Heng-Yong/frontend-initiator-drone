@@ -48,6 +48,7 @@ struct HeadsetProfile: Codable, Equatable {
 
 struct HeadsetSetupView: View {
     @Bindable var settings: HeadsetSettings
+    @Bindable var model: PhoneReconstruction
     let start: (Bool) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -68,6 +69,10 @@ struct HeadsetSetupView: View {
                     Button("Reset optics") { settings.profile = HeadsetProfile() }
                 } header: { Text("Optical calibration") } footer: {
                     Text("These are approximate starting values, not a measured MERGE preset. Preview the grid through the lenses, then remove the phone to adjust. Aim for straight lines, square cells and one comfortable central cross. These controls do not change thermal alignment.")
+                }
+                Section("Thermal overlay") {
+                    Toggle("Show surrounding point cloud", isOn: $model.showPointCloud)
+                    Text("Turn this off to keep the live camera and filled heat highlight without drawing the mapped surroundings.")
                 }
                 Section {
                     Button("Preview calibration grid", systemImage: "grid") { start(true) }

@@ -65,7 +65,7 @@ struct ContentView: View {
         .sheet(isPresented: $showsHeadsetSetup, onDismiss: {
             if let grid = headsetLaunch { headsetLaunch = nil; headset.enter(grid: grid) }
         }) {
-            HeadsetSetupView(settings: headset) { grid in
+            HeadsetSetupView(settings: headset, model: arModel) { grid in
                 headsetLaunch = grid
                 showsHeadsetSetup = false
             }

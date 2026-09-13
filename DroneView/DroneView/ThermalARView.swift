@@ -53,6 +53,7 @@ struct ThermalARView: View {
                         Button("Save for this camera profile") {model.saveAlignment()}
                     }
                     Section("Thermal display") {
+                        Toggle("Show surrounding point cloud",isOn:$model.showPointCloud)
                         Toggle("Show dots and highlight through walls",isOn:$model.showHeatThroughWalls)
                         Toggle("Filled heat region",isOn:$model.heatHighlight)
                         adjustment("Highlight above °C",value:$model.heatThreshold,range:15...45)
@@ -212,7 +213,7 @@ struct ARMetalView: UIViewRepresentable {
                 encoder.setVertexBytes(&opticalFromMap,length:64,index:2);encoder.setVertexBytes(&k,length:MemoryLayout<simd_float3x3>.stride,index:3)
                 encoder.setVertexBytes(&sizes,length:16,index:4);encoder.setFragmentBytes(&range,length:8,index:0)
                 encoder.setFragmentBytes(&options,length:8,index:1);encoder.setFragmentTexture(depthTexture,index:0)
-                if let buffer=pointBuffer {
+                if model.showPointCloud,let buffer=pointBuffer {
                     encoder.setRenderPipelineState(pointPipeline)
                     encoder.setDepthStencilState(model.showHeatThroughWalls ? heatDepthState : depthState)
                     encoder.setVertexBuffer(buffer,offset:0,index:0)

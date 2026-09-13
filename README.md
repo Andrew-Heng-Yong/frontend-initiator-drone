@@ -105,7 +105,11 @@ on every accepted RGB-D frame, including when the rig is stationary. The nearest
 of eight recent thermal samples is selected by capture time, retaining the
 150 ms rejection limit.
 
-A 60,000-voxel map is rendered with Metal. Show through walls applies to both dots and the filled highlight; switching it off restores phone-depth occlusion.
+A 60,000-voxel map is rendered with Metal. **Show surrounding point cloud** can
+hide the mapped dots while retaining the live camera and optional filled heat
+highlight; the choice persists across app restarts and also applies in headset
+passthrough. Show through walls applies to both dots and the filled highlight;
+switching it off restores phone-depth occlusion.
 Thermal observations over 150 ms from RGB are skipped. Cross-camera association
 requires capture-time agreement within 100 ms including half the clock probe RTT.
 Missing alignment, limited AR tracking or network loss hides the overlay and
@@ -129,7 +133,7 @@ Thermal AR is the first/default tab and starts automatically. Switching tabs kee
 capture and reconstruction running. Backgrounding/locking suspends camera capture
 as required by iOS; returning resumes automatically. Pi recording is independent.
 A live filled heat surface highlights samples above 20 °C by default (adjustable).
-The cutoff, visibility, through-wall setting and temperature scale persist across restarts.
+The cutoff, visibility, point-cloud, through-wall and temperature-scale settings persist across restarts.
 Show through walls bypasses phone depth occlusion for dots and highlights; it shows
 what the rig sees, not through-wall sensing. Warm objects also qualify. Highlights
 expire after 500 ms without a fresh observation. Hot map samples are replaced each
@@ -139,7 +143,8 @@ The Pi receives both poses and diagnostics, but not the reconstructed map.
 
 ### MERGE headset passthrough
 
-In **Thermal AR → Headset**, open **Preview calibration grid** first. Remove the
+In **Thermal AR → Headset**, choose whether to show the surrounding point cloud,
+then open **Preview calibration grid** first. Remove the
 headset's camera window, check that the rear camera and LiDAR are unobstructed,
 and seat the phone in landscape. Adjust the physical lenses for focus. The saved
 image-size, lens-spacing, vertical-centre and radial-correction sliders tune the
