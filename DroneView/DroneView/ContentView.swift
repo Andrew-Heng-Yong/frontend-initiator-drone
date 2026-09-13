@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 @main struct DroneViewApp: App {
+    @UIApplicationDelegateAdaptor(DroneOrientation.self) private var orientation
     var body: some Scene {
         WindowGroup { ContentView().preferredColorScheme(.dark) }
     }
@@ -10,6 +11,9 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @State private var model = DroneModel()
     @State private var arModel = PhoneReconstruction()
+    @State private var headset = HeadsetSettings()
+    @State private var showsHeadsetSetup = false
+    @State private var headsetLaunch: Bool?
     @State private var selectedTab = AppTab.ar
     @State private var showsConnection = false
     @AppStorage("moduleAddress") private var address = "http://192.168.1.6:8080"
@@ -17,34 +21,55 @@ struct ContentView: View {
     private enum AppTab: Hashable { case scene, cameras, tracking, ar }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            Tab("Thermal AR", systemImage: "arkit", value: AppTab.ar) {
-                ThermalARView(model: arModel)
-            }
-            Tab("Scene", systemImage: "cube.transparent", value: AppTab.scene) {
-                NavigationStack {
-                    SceneView(model: model, connect: { showsConnection = true })
-                        .toolbarBackground(.hidden, for: .navigationBar)
+        ZStack {
+            if headset.active {
+                HeadsetView(model: arModel, settings: headset)
+            } else {
+                TabView(selection: $selectedTab) {
+                    Tab("Thermal AR", systemImage: "arkit", value: AppTab.ar) {
+                        ThermalARView(model: arModel, openHeadset: { showsHeadsetSetup = true })
+                    }
+                    Tab("Scene", systemImage: "cube.transparent", value: AppTab.scene) {
+                        NavigationStack {
+                            SceneView(model: model, connect: { showsConnection = true })
+                                .toolbarBackground(.hidden, for: .navigationBar)
+                        }
+                    }
+                    Tab("Cameras", systemImage: "camera", value: AppTab.cameras) {
+                        NavigationStack { CameraView(model: model).navigationTitle("Cameras") }
+                    }
+                    Tab("Tracking", systemImage: "waveform.path.ecg", value: AppTab.tracking) {
+                        NavigationStack { TrackingView(model: model).navigationTitle("Tracking") }
+                    }
                 }
-            }
-            Tab("Cameras", systemImage: "camera", value: AppTab.cameras) {
-                NavigationStack { CameraView(model: model).navigationTitle("Cameras") }
-            }
-            Tab("Tracking", systemImage: "waveform.path.ecg", value: AppTab.tracking) {
-                NavigationStack { TrackingView(model: model).navigationTitle("Tracking") }
             }
         }
         .onChange(of: model.endpoint) {_,endpoint in
             arModel.stop()
-            if let endpoint,scenePhase == .active {arModel.start(endpoint)}
+            if scenePhase == .active,endpoint != nil || headset.active {arModel.start(endpoint)}
         }
         .onChange(of: scenePhase) {_,phase in
             if phase == .background {arModel.suspend();UIApplication.shared.isIdleTimerDisabled=false}
-            else if phase == .active,let endpoint=model.endpoint {arModel.resume(endpoint);UIApplication.shared.isIdleTimerDisabled=true}
+            else if phase == .active,model.endpoint != nil || headset.active {
+                arModel.resume(model.endpoint);UIApplication.shared.isIdleTimerDisabled=arModel.running || headset.active
+            }
         }
-        .onChange(of: arModel.running) {_,running in UIApplication.shared.isIdleTimerDisabled=running}
+        .onChange(of: arModel.running) {_,running in UIApplication.shared.isIdleTimerDisabled=scenePhase == .active && (running || headset.active)}
+        .onChange(of: headset.active) {_,active in
+            if active,!arModel.running,scenePhase == .active {arModel.start(model.endpoint)}
+            else if !active,model.endpoint == nil {arModel.stop()}
+            UIApplication.shared.isIdleTimerDisabled=scenePhase == .active && (arModel.running || active)
+        }
         .toolbarBackground(.hidden, for: .tabBar)
         .sheet(isPresented: $showsConnection) { ConnectionView(model: model) }
+        .sheet(isPresented: $showsHeadsetSetup, onDismiss: {
+            if let grid = headsetLaunch { headsetLaunch = nil; headset.enter(grid: grid) }
+        }) {
+            HeadsetSetupView(settings: headset) { grid in
+                headsetLaunch = grid
+                showsHeadsetSetup = false
+            }
+        }
         .task {
             if let url = TrackingAPI.address(address) { model.connect(url) }
         }

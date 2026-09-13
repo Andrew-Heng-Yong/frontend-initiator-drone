@@ -290,12 +290,17 @@ extension PhoneObservation {
     @ObservationIgnored private var generation=UUID()
     @ObservationIgnored private var observationBusy=false
     @ObservationIgnored private var lastObservation=0.0
+    @ObservationIgnored private var processingEnabled=false
     func observe(_ frame: ARFrame) {
+        guard running else{return}
         phoneTrackingChanged(frame.camera.trackingState)
         cameraFrames += 1
         let now=ProcessInfo.processInfo.systemUptime
-        if now-cameraStart>=1 {cameraFPS=Double(cameraFrames)/(now-cameraStart);cameraFrames=0;cameraStart=now}
-        guard !observationBusy,frame.timestamp-lastObservation>=0.045 else {return}
+        if now-cameraStart>=1 {
+            cameraFPS=Double(cameraFrames)/(now-cameraStart);cameraFrames=0;cameraStart=now
+            thermalState=String(describing:ProcessInfo.processInfo.thermalState)
+        }
+        guard processingEnabled,!observationBusy,frame.timestamp-lastObservation>=0.045 else {return}
         observationBusy=true;lastObservation=frame.timestamp
         let time=Date().timeIntervalSince1970-ProcessInfo.processInfo.systemUptime+frame.timestamp
         let id=generation
@@ -307,17 +312,18 @@ extension PhoneObservation {
             if observations.count>30 {observations.removeFirst(observations.count-30)}
         }
     }
-    func start(_ endpoint: URL) {
+    func start(_ endpoint: URL?) {
         stop();let id=UUID();generation=id
         guard ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) else {status="A LiDAR iPhone or iPad is required";return}
         log.write("scan_start",["app_version":Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "unknown",
                                 "system":ProcessInfo.processInfo.operatingSystemVersionString])
         arSession.delegate=self;arSession.delegateQueue = .main
-        cameraWarning="";running=true
-        status="Connecting to Pi · show both cameras the same scene"
-        let config=ARWorldTrackingConfiguration();config.frameSemantics=[.sceneDepth]
+        cameraWarning="";renderingError="";running=true;processingEnabled=endpoint != nil
+        cameraFrames=0;cameraStart=ProcessInfo.processInfo.systemUptime;lastObservation=0
+        status=endpoint == nil ? "Local camera only · connect the Pi for thermal AR" : "Connecting to Pi · show both cameras the same scene"
+        let config=cameraConfiguration()
         arSession.run(config,options:[.resetTracking,.removeExistingAnchors])
-        task=Task { await worker.reset();await loop(endpoint,id:id) }
+        task=Task { await worker.reset();if let endpoint {await loop(endpoint,id:id)} }
     }
     func session(_ session:ARSession,didUpdate frame:ARFrame){observe(frame)}
     func session(_ session:ARSession,cameraDidChangeTrackingState camera:ARCamera) {
@@ -345,13 +351,23 @@ extension PhoneObservation {
         log.write("app_background");generation=UUID();task?.cancel();task=nil
         arSession.pause();running=false;aligned=false;phoneTrackingNormal=false;observations=[];heatSurface=[]
     }
-    func resume(_ endpoint:URL) {
+    func resume(_ endpoint:URL?) {
         guard !running else{return}
         if task == nil,arSession.delegate == nil {start(endpoint);return}
-        let id=UUID();generation=id;running=true
+        let id=UUID();generation=id;running=true;processingEnabled=endpoint != nil
+        cameraFrames=0;cameraStart=ProcessInfo.processInfo.systemUptime
+        arSession.run(cameraConfiguration())
+        task=Task {if let endpoint {await loop(endpoint,id:id)}}
+    }
+    private func cameraConfiguration()->ARWorldTrackingConfiguration {
         let config=ARWorldTrackingConfiguration();config.frameSemantics=[.sceneDepth]
-        arSession.run(config)
-        task=Task {await loop(endpoint,id:id)}
+        // Preserve ARKit's default camera; select 60 Hz only when that camera
+        // exposes a supported format. Display FPS is measured independently.
+        if config.videoFormat.framesPerSecond != 60,
+           let format=ARWorldTrackingConfiguration.supportedVideoFormats.first(where:{
+               $0.framesPerSecond == 60 && $0.captureDeviceType == config.videoFormat.captureDeviceType
+           }) {config.videoFormat=format}
+        return config
     }
     func stop() { if running {log.write("scan_stop")};generation=UUID();task?.cancel();task=nil;arSession.pause();running=false;aligned=false;alignmentEstablished=false;phoneTrackingNormal=false;alignmentDiagnostics=[:];rigPreview=nil;observations=[];points=[];heatSurface=[];arSession.delegate=nil;status="Scan paused" }
     func realign() { log.write("realign_requested");alignmentRevision += 1;aligned=false;alignmentEstablished=false;alignmentDiagnostics=[:];points=[];heatSurface=[];pendingReset=Task { await worker.reset() } }

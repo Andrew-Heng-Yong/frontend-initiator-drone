@@ -35,6 +35,34 @@ fragment float4 arCameraFragment(CameraVertex in [[stage_in]],texture2d<float> y
     float l=y.sample(s,in.uv).r;float2 c=uv.sample(s,in.uv).rg-float2(.5);
     return float4(l+1.402*c.y,l-.344136*c.x-.714136*c.y,l+1.772*c.x,1);
 }
+
+fragment float4 headsetFragment(CameraVertex in [[stage_in]],texture2d<float> scene [[texture(0)]],
+                                texture2d<float> hud [[texture(1)]],constant float4 &optics [[buffer(0)]],
+                                constant float4 &layout [[buffer(1)]]) {
+    // optics: image scale, lens spacing / screen width, vertical centre, k1.
+    // layout: eye aspect, source aspect, eye index, calibration grid enabled.
+    float2 centre=float2(layout.z<.5 ? 1-optics.y:optics.y,optics.z);
+    float2 p=(in.uv-centre)*float2(layout.x,1)*2;
+    float fit=min(1.f,layout.x/layout.y);
+    float2 uv=.5+p*(1+optics.w*dot(p,p))/(2*optics.x*fit*float2(layout.y,1));
+    constexpr sampler s(filter::linear,address::clamp_to_edge);
+    float3 color=scene.sample(s,uv).rgb;
+    if(layout.w>.5) {
+        float2 position=(uv-.5)*float2(layout.y,1);
+        float2 grid=position*8;
+        float2 distance=abs(fract(grid+.5)-.5)/max(fwidth(grid),float2(.0001));
+        float line=1-smoothstep(0.f,1.5f,min(distance.x,distance.y));
+        color=mix(float3(.025),float3(.55),line);
+        if(any(abs(position)<max(float2(.003),fwidth(position)*.75))) color=float3(.2,1,.6);
+        if(abs(length(position)-.2)<max(.002f,fwidth(length(position)))) color=float3(1,.7,.2);
+    }
+    // Keep derivative evaluation above this non-uniform clip, including helper
+    // pixels at the border, so the calibration grid has no coloured edge fringes.
+    if(any(uv<0)||any(uv>1)||in.uv.x<.002||in.uv.x>.998) return float4(0,0,0,1);
+    float4 status=hud.sample(s,uv);
+    // UIKit's text bitmap is premultiplied alpha.
+    return float4(status.rgb+color*(1-status.a),1);
+}
 struct ThermalVertex { float4 position [[position]];float size [[point_size]];float temperature;float depth;float2 uv; };
 vertex ThermalVertex thermalVertex(uint id [[vertex_id]],const device float4 *points [[buffer(0)]],
                                    constant float4x4 &matrix [[buffer(1)]],constant float4x4 &optical [[buffer(2)]],

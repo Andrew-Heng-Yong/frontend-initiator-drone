@@ -137,6 +137,54 @@ accepted frame, and old foreground points are removed when current depth sees
 farther surfaces, limiting trails after a person moves.
 The Pi receives both poses and diagnostics, but not the reconstructed map.
 
+### MERGE headset passthrough
+
+In **Thermal AR → Headset**, open **Preview calibration grid** first. Remove the
+headset's camera window, check that the rear camera and LiDAR are unobstructed,
+and seat the phone in landscape. Adjust the physical lenses for focus. The saved
+image-size, lens-spacing, vertical-centre and radial-correction sliders tune the
+display independently of thermal alignment. Defaults are approximate, not a
+measured MERGE optical profile; remove the phone between adjustments.
+
+For thermal AR, establish alignment in the normal AR view before inserting the
+phone. Select **Start passthrough** for the live view. The app hides the tabs and system
+overlays, requests landscape orientation, and restores the previous orientation
+when you exit. Either landscape direction is supported so the camera can face
+the opening. Touch controls (including headset buttons that contact the screen):
+
+- Left half: toggle display information.
+- Right half: realign thermal AR; this requires another shared camera view.
+- Hold either half for one second: exit headset mode. VoiceOver also exposes
+  named exit, display-information and realign actions.
+
+One ARKit camera/thermal scene is drawn into a reusable Metal texture, then
+aspect-fitted and lens-corrected into both eyes. This is **monoscopic**, with the
+same camera view and HUD in each eye; it does not reconstruct stereo eye views
+or compensate for the physical camera-to-eye offset. It adds no rendering engine
+or tracking SDK. The display targets 60 fps and ARKit uses a supported 60-fps
+format for its existing camera when available; the HUD reports measured camera
+and submitted-display rates separately. Frame age is capture-to-render age, not
+measured motion-to-photon latency. Two in-flight GPU frames bound the submission
+queue, and the source camera aspect ratio is preserved instead of stretched.
+
+Pi/network/tracking loss pauses thermal placement while the local phone camera
+continues. Starting headset mode after disconnecting also starts a local camera
+session. This app still requires a LiDAR device. A missing camera or frame at
+least 300 ms old clears the headset image and displays a remove-headset warning;
+camera recovery restores live passthrough. Warnings stay visible with the HUD
+hidden. Background/lock suspends capture; foreground resumes it. A fatal AR
+error requires exiting and re-entering headset mode to restart capture.
+
+The native tests include actual GPU checks for identical eye images, orientation,
+round-circle aspect preservation, warp borders, a calibration cross, intermediate
+texture reuse and clearing on camera loss, plus saved-profile validation and
+frame-freshness gates. Before using the headset, physically verify camera/LiDAR
+clearance and both touch buttons; tune optics through the lenses; inspect thermal
+placement at 0.5, 1 and 2 m while turning slowly; test Wi-Fi loss and app
+background/resume; and check frame age, FPS and phone thermal state over 15 minutes.
+These physical checks cannot be established by simulator/GPU tests. Remain seated
+and remove the headset if the view stalls, double-images or feels uncomfortable.
+
 ### Native replay check
 
 `Tests/prepare_replay.py BACKEND RECORDING OUTPUT` exports identical JPEG-decoded
