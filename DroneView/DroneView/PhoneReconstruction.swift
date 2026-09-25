@@ -237,6 +237,12 @@ extension PhoneObservation {
     var points: [SIMD4<Float>]=[] { didSet { pointRevision += 1 } }
     var heatSurface:[SIMD4<Float>]=[]
     var heatObservationTime=0.0
+    func heatObservationIsFresh(at time:Double) -> Bool {
+        // Live capture ages reach 670 ms at 5 Hz; 500 ms blinked between updates.
+        // ponytail: bounded 800 ms hold; revisit if measured stream timing changes.
+        let age=time-heatObservationTime
+        return age>=0 && age<0.8
+    }
     var heatHighlight=UserDefaults.standard.object(forKey:"thermal-heat-highlight") as? Bool ?? true {
         didSet {UserDefaults.standard.set(heatHighlight,forKey:"thermal-heat-highlight")}
     }

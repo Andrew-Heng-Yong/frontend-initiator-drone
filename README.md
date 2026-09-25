@@ -104,6 +104,11 @@ changing the scale never changes stored Celsius values. Thermal values refresh
 on every accepted RGB-D frame, including when the rig is stationary. The nearest
 of eight recent thermal samples is selected by capture time, retaining the
 150 ms rejection limit.
+The filled highlight expires 800 ms after capture. A live 5 Hz check measured
+capture ages up to 669 ms between updates, so the former 500 ms limit hid otherwise
+valid heat surfaces between frames. Tracking and connection failures still hide
+the overlay immediately. This timeout change has a deterministic regression check;
+its effect on physical-device blinking still needs a post-install screen check.
 
 A 60,000-voxel map is rendered with Metal. **Show surrounding point cloud** can
 hide the mapped dots while retaining the live camera and optional filled heat
@@ -136,7 +141,7 @@ A live filled heat surface highlights samples above 20 °C by default (adjustabl
 The cutoff, visibility, point-cloud, through-wall and temperature-scale settings persist across restarts.
 Show through walls bypasses phone depth occlusion for dots and highlights; it shows
 what the rig sees, not through-wall sensing. Warm objects also qualify. Highlights
-expire after 500 ms without a fresh observation. Hot map samples are replaced each
+expire 800 ms after capture. Hot map samples are replaced each
 accepted frame, and old foreground points are removed when current depth sees
 farther surfaces, limiting trails after a person moves.
 The Pi receives both poses and diagnostics, but not the reconstructed map.

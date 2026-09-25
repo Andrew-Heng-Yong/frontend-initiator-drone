@@ -219,7 +219,7 @@ struct ARMetalView: UIViewRepresentable {
                     encoder.setVertexBuffer(buffer,offset:0,index:0)
                     encoder.drawPrimitives(type:.point,vertexStart:0,vertexCount:model.points.count)
                 }
-                if model.heatHighlight,Date().timeIntervalSince1970-model.heatObservationTime<0.5,let heatBuffer,let heatPipeline {
+                if model.heatHighlight,model.heatObservationIsFresh(at:Date().timeIntervalSince1970),let heatBuffer,let heatPipeline {
                     encoder.setRenderPipelineState(heatPipeline);encoder.setDepthStencilState(heatDepthState)
                     encoder.setVertexBuffer(heatBuffer,offset:0,index:0)
                     encoder.drawPrimitives(type:.triangle,vertexStart:0,vertexCount:model.heatSurface.count)

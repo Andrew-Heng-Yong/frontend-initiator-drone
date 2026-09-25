@@ -5,6 +5,18 @@ import ARKit
 @testable import DroneView
 
 final class SensorFrameTests:XCTestCase {
+    @MainActor func testHeatSurvivesMeasuredFrameGapsButExpiresWhenCaptureStops() {
+        let model=PhoneReconstruction()
+        model.heatObservationTime=10
+        // A valid observation can already be 400 ms old on arrival, then wait
+        // another 270 ms for the next processed frame. Keep it visible throughout.
+        for age in [0.4,0.5,0.6,0.67] {XCTAssertTrue(model.heatObservationIsFresh(at:10+age))}
+        XCTAssertFalse(model.heatObservationIsFresh(at:10.81))
+        XCTAssertFalse(model.heatObservationIsFresh(at:9))
+        XCTAssertFalse(model.heatObservationIsFresh(at:.nan))
+        model.heatObservationTime=10.4
+        XCTAssertTrue(model.heatObservationIsFresh(at:11))
+    }
     @MainActor func testThermalDisplaySettingsSurviveModelRestart() {
         let keys=["thermal-heat-highlight","thermal-show-through-walls","thermal-heat-threshold","thermal-automatic-scale","thermal-scale-lower","thermal-scale-upper"]
         let saved=keys.map{UserDefaults.standard.object(forKey:$0)}
