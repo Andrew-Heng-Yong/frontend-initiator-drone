@@ -5,17 +5,60 @@ import ARKit
 @testable import DroneView
 
 final class SensorFrameTests:XCTestCase {
-    @MainActor func testHeatSurvivesMeasuredFrameGapsButExpiresWhenCaptureStops() {
+    @MainActor func testHeatHoldsBetweenArrivalsAndExpiresWhenResultsStop() {
         let model=PhoneReconstruction()
-        model.heatObservationTime=10
-        // A valid observation can already be 400 ms old on arrival, then wait
-        // another 270 ms for the next processed frame. Keep it visible throughout.
-        for age in [0.4,0.5,0.6,0.67] {XCTAssertTrue(model.heatObservationIsFresh(at:10+age))}
-        XCTAssertFalse(model.heatObservationIsFresh(at:10.81))
+        var result=ReconstructionResult(points:[],heatSurface:[SIMD4(0,0,1,30)],worldFromMap:matrix_identity_float4x4,rigPose:matrix_identity_float4x4,valid:true,status:"Aligned",inliers:100)
+        result.heatObserved=true
+        model.phoneTrackingChanged(.normal);model.apply(result,at:10)
+        // Live results arrived up to 0.4 s apart, already ~0.25 s after capture.
+        for age in [0.0,0.4,0.7] {XCTAssertTrue(model.heatObservationIsFresh(at:10+age))}
+        XCTAssertFalse(model.heatObservationIsFresh(at:10.76))
         XCTAssertFalse(model.heatObservationIsFresh(at:9))
         XCTAssertFalse(model.heatObservationIsFresh(at:.nan))
-        model.heatObservationTime=10.4
-        XCTAssertTrue(model.heatObservationIsFresh(at:11))
+        var stale=result;stale.heatSurface=[];stale.heatObserved=false
+        model.apply(stale,at:10.5)
+        XCTAssertEqual(model.heatSurface.count,1,"A frame without fresh thermal keeps the last heat")
+        XCTAssertFalse(model.heatObservationIsFresh(at:10.8),"but does not renew it")
+        var empty=result;empty.heatSurface=[]
+        model.apply(empty,at:10.6)
+        XCTAssertTrue(model.heatSurface.isEmpty,"An observed empty surface clears heat once nothing is warm")
+        XCTAssertTrue(model.heatObservationIsFresh(at:11.3))
+    }
+    func testThermalStateLabelsAreReadable() {
+        XCTAssertEqual(PhoneReconstruction.thermalLabel(.nominal),"Nominal")
+        XCTAssertEqual(PhoneReconstruction.thermalLabel(.serious),"Serious · throttling")
+    }
+    private func thermalFrame(depth:[Float],thermal:[Float],width:Int=24,height:Int=16) throws -> SensorFrame {
+        let metadata:[String:Any]=["version":1,"session":UUID().uuidString,"sequence":1,
+            "timestamp":10.0,"depth_timestamp":10.0,"thermal_timestamp":10.0,
+            "width":width,"height":height,"thermal_width":8,"thermal_height":6,
+            "K":[20.0,0,12,0,20,8,0,0,1],"jpeg_bytes":1,"depth_bytes":width*height*4,
+            "thermal_bytes":thermal.count*4,"depth_encoding":"float32_metres","thermal_encoding":"float32_celsius"]
+        let header=try JSONSerialization.data(withJSONObject:metadata)
+        var size=UInt32(header.count).littleEndian
+        var wire=Data("DVS1".utf8);wire.append(withUnsafeBytes(of:&size){Data($0)});wire.append(header);wire.append(0)
+        wire.append(depth.withUnsafeBytes{Data($0)});wire.append(thermal.withUnsafeBytes{Data($0)})
+        return try SensorFrame(wire)
+    }
+    func testHeatBleedingBehindAWarmSilhouetteIsDropped() throws {
+        // A person at 1.25 m (x < 10) in front of a wall at 3 m. The unit alignment maps
+        // lattice columns x = 0,4,8,12,16,20 to thermal columns 1,2,3,4,4,5.
+        let depth=(0..<24*16).map {Float($0%24<10 ? 1.25:3)}
+        var a=ThermalAlignment();a.scale=1;a.stretchX=1;a.stretchY=1;a.barrel=0
+        let hot=try thermalFrame(depth:depth,thermal:[Float](repeating:30,count:48))
+        let grid=ReconstructionWorker.thermalGrid(frame:hot,temperatures:hot.thermal,alignment:a,threshold:24)
+        XCTAssertEqual(grid.width,6);XCTAssertEqual(grid.height,4)
+        for y in 0..<grid.height {
+            let row=(0..<grid.width).map {grid.samples[y*grid.width+$0]}
+            XCTAssertTrue(row[0..<3].allSatisfy{abs(($0?.z ?? 0)-1.25)<0.001},"The warm foreground keeps its heat")
+            XCTAssertTrue(row[3...4].allSatisfy{$0 == nil},"Wall heat beside the silhouette belongs to the person")
+            XCTAssertEqual(row[5]?.z,3,"A hot wall away from the silhouette is still shown")
+        }
+        let surface=ReconstructionWorker.makeHeatSurface(grid:grid,pose:matrix_identity_float4x4,threshold:24)
+        XCTAssertFalse(surface.isEmpty);XCTAssertTrue(surface.allSatisfy{abs($0.z-1.25)<0.001})
+        let cold=try thermalFrame(depth:depth,thermal:[Float](repeating:20,count:48))
+        let unchanged=ReconstructionWorker.thermalGrid(frame:cold,temperatures:cold.thermal,alignment:a,threshold:24)
+        XCTAssertTrue(unchanged.samples.allSatisfy{$0 != nil},"Cold readings are not reassigned")
     }
     @MainActor func testThermalDisplaySettingsSurviveModelRestart() {
         let keys=["thermal-heat-highlight","thermal-show-through-walls","thermal-heat-threshold","thermal-automatic-scale","thermal-scale-lower","thermal-scale-upper"]

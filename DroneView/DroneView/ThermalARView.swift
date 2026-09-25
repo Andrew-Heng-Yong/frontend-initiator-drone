@@ -121,11 +121,11 @@ struct ARMetalView: UIViewRepresentable {
                 descriptor.depthAttachmentPixelFormat=view.depthStencilPixelFormat
                 descriptor.vertexFunction=library.makeFunction(name:"arCameraVertex");descriptor.fragmentFunction=library.makeFunction(name:"arCameraFragment")
                 cameraPipeline=try device.makeRenderPipelineState(descriptor:descriptor)
+                let blend=descriptor.colorAttachments[0]!
+                blend.isBlendingEnabled=true;blend.sourceRGBBlendFactor = .sourceAlpha;blend.destinationRGBBlendFactor = .oneMinusSourceAlpha
                 descriptor.vertexFunction=library.makeFunction(name:"thermalVertex");descriptor.fragmentFunction=library.makeFunction(name:"thermalFragment")
                 pointPipeline=try device.makeRenderPipelineState(descriptor:descriptor)
                 descriptor.fragmentFunction=library.makeFunction(name:"thermalHeatFragment")
-                let blend=descriptor.colorAttachments[0]!
-                blend.isBlendingEnabled=true;blend.sourceRGBBlendFactor = .sourceAlpha;blend.destinationRGBBlendFactor = .oneMinusSourceAlpha
                 heatPipeline=try device.makeRenderPipelineState(descriptor:descriptor)
                 descriptor.vertexFunction=library.makeFunction(name:"arCameraVertex");descriptor.fragmentFunction=library.makeFunction(name:"headsetFragment")
                 descriptor.depthAttachmentPixelFormat = .invalid;blend.isBlendingEnabled=false
@@ -321,7 +321,7 @@ struct ARMetalView: UIViewRepresentable {
                     label(headset.showGrid ? "CALIBRATION · NOT LIVE":"MONO PASSTHROUGH",y:0.13,height:0.08,font:26)
                 }
                 if headset.showHUD,!headset.showGrid {
-                    label(String(format:"Camera %.0f · Display %.0f fps · Frame %.0f ms\n%@",model.cameraFPS,model.renderFPS,model.cameraAgeMS,model.thermalState),y:0.74,height:0.12,font:21)
+                    label(String(format:"Camera %.0f · Display %.0f fps · Frame %.0f ms\nPhone thermal state: %@",model.cameraFPS,model.renderFPS,model.cameraAgeMS,model.thermalState),y:0.74,height:0.12,font:21)
                 }
                 if !warning.isEmpty,!headset.showGrid {label(warning,y:0.48,height:0.23,font:25)}
                 if headset.showHUD || !warning.isEmpty {

@@ -11,6 +11,20 @@ Open `DroneView/DroneView.xcodeproj`, select **DroneView**, choose an iPhone or
 iPad simulator (or set your signing team for a physical device), and Run.
 Requires iOS 18+ and Xcode 26+; built and tested here with Xcode 27 beta.
 
+For live thermal AR on a phone, install a Release build. Debug builds run the
+per-pixel Swift loops unoptimised: replaying 38 captured live packets in the
+simulator took 25 ms to decode and 62 ms to process per frame in Debug versus
+2.6 ms and 17 ms in Release (excluding the once-per-second cross-camera fit and
+ARKit capture). From the command line:
+
+```bash
+xcodebuild -project DroneView/DroneView.xcodeproj -scheme DroneView -configuration Release \
+  -destination 'platform=iOS,id=DEVICE_ID' -derivedDataPath /tmp/droneview-release \
+  -allowProvisioningUpdates build
+xcrun devicectl device install app --device DEVICE_ID \
+  /tmp/droneview-release/Build/Products/Release-iphoneos/DroneView.app
+```
+
 The app opens the Thermal AR tab. It connects automatically to the
 saved address, initially `http://192.168.1.6:8080`. The floating network button
 changes the address or disconnects. Allow local-network access on a physical
@@ -104,13 +118,25 @@ changing the scale never changes stored Celsius values. Thermal values refresh
 on every accepted RGB-D frame, including when the rig is stationary. The nearest
 of eight recent thermal samples is selected by capture time, retaining the
 150 ms rejection limit.
-The filled highlight expires 800 ms after capture. A live 5 Hz check measured
-capture ages up to 669 ms between updates, so the former 500 ms limit hid otherwise
-valid heat surfaces between frames. Tracking and connection failures still hide
-the overlay immediately. This timeout change has a deterministic regression check;
-its effect on physical-device blinking still needs a post-install screen check.
+The filled highlight is held until a newer thermal observation replaces it and
+expires 750 ms after it arrived. Capture-age limits (500 ms, then 800 ms) hid valid
+heat between updates because frames already arrive about 250 ms after capture
+(116 ms of it is the Orbbec depth stream's own delay on the Pi); live results
+arrived at most about 0.4 s apart in 13 s and 20 s checks. A frame whose thermal sample is
+stale keeps, but does not renew, the previous highlight. Tracking and connection
+failures still hide the overlay immediately.
 
-A 60,000-voxel map is rendered with Metal. **Show surrounding point cloud** can
+Each thermal pixel spans several RGB pixels and its optics blur, so a warm
+silhouette bleeds onto the surface behind it; seen from the phone, that heat lands
+beside the person. Within each 3 × 3 thermal neighbourhood a hot reading is
+assigned to the nearest hot surface, and hot samples more than 0.4 m behind it are
+dropped from both the map and the highlight. On one live seated-person frame this
+removed 7% of hot samples, which lay on the wall and pantry behind the person.
+Warm background surfaces away from a warm foreground are unchanged.
+
+A 60,000-voxel map is rendered with Metal. Cold map dots are drawn at 35% opacity,
+rising to opaque at the middle of the temperature scale, so the camera image and
+warm surfaces stay legible. **Show surrounding point cloud** can
 hide the mapped dots while retaining the live camera and optional filled heat
 highlight; the choice persists across app restarts and also applies in headset
 passthrough. Show through walls applies to both dots and the filled highlight;
@@ -141,10 +167,12 @@ A live filled heat surface highlights samples above 20 °C by default (adjustabl
 The cutoff, visibility, point-cloud, through-wall and temperature-scale settings persist across restarts.
 Show through walls bypasses phone depth occlusion for dots and highlights; it shows
 what the rig sees, not through-wall sensing. Warm objects also qualify. Highlights
-expire 800 ms after capture. Hot map samples are replaced each
+expire 750 ms after their last update arrives. Hot map samples are replaced each
 accepted frame, and old foreground points are removed when current depth sees
 farther surfaces, limiting trails after a person moves.
-The Pi receives both poses and diagnostics, but not the reconstructed map.
+The Pi receives both poses and diagnostics, but not the reconstructed map. The
+diagnostics include the phone's thermal state, battery level and charging state,
+so a long session can be watched from the Pi's `/api/state` (`remote_poses`).
 
 ### MERGE headset passthrough
 

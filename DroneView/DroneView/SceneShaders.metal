@@ -78,7 +78,9 @@ fragment float4 thermalFragment(ThermalVertex in [[stage_in]],float2 point [[poi
     if(options.y<.5&&measured>0&&isfinite(measured)&&in.depth>measured+.08)discard_fragment();
     float t=clamp((in.temperature-range.x)/(range.y-range.x),0.f,1.f);
     float3 c=mix(float3(.1,.05,.4),float3(1,.2,0),min(1.f,t*2));
-    c=mix(c,float3(1,1,.5),max(0.f,t*2-1));return float4(c,1);
+    c=mix(c,float3(1,1,.5),max(0.f,t*2-1));
+    // Cold map points stay faint so the camera image and warm surfaces remain legible.
+    return float4(c,mix(.35f,1.f,smoothstep(0.f,.5f,t)));
 }
 
 fragment float4 thermalHeatFragment(ThermalVertex in [[stage_in]],texture2d<float> depth [[texture(0)]],constant float2 &range [[buffer(0)]],constant float2 &options [[buffer(1)]]) {

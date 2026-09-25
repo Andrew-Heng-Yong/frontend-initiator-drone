@@ -21,7 +21,7 @@ final class ThermalRenderTests:XCTestCase {
         let output=texture(.bgra8Unorm),zbuffer=texture(.depth32Float),foreground=texture(.r32Float)
         let depths=[Float](repeating:0.2,count:32*32)
         depths.withUnsafeBytes{foreground.replace(region:MTLRegionMake2D(0,0,32,32),mipmapLevel:0,withBytes:$0.baseAddress!,bytesPerRow:32*4)}
-        func draw(filledHeat:Bool,throughWall:Bool,temperature:Float=28)throws->Int {
+        func draw(filledHeat:Bool,throughWall:Bool,temperature:Float=28)throws->(lit:Int,peak:UInt8) {
             let pass=MTLRenderPassDescriptor()
             pass.colorAttachments[0].texture=output;pass.colorAttachments[0].loadAction = .clear;pass.colorAttachments[0].storeAction = .store
             pass.depthAttachment.texture=zbuffer;pass.depthAttachment.loadAction = .clear;pass.depthAttachment.clearDepth=1
@@ -42,12 +42,17 @@ final class ThermalRenderTests:XCTestCase {
             XCTAssertEqual(command.status,.completed,command.error?.localizedDescription ?? "GPU command failed")
             var pixels=[UInt8](repeating:0,count:32*32*4)
             pixels.withUnsafeMutableBytes{output.getBytes($0.baseAddress!,bytesPerRow:32*4,from:MTLRegionMake2D(0,0,32,32),mipmapLevel:0)}
-            return stride(from:0,to:pixels.count,by:4).filter{pixels[$0]>0 || pixels[$0+1]>0 || pixels[$0+2]>0}.count
+            let colour=stride(from:0,to:pixels.count,by:4).map{max(pixels[$0],pixels[$0+1],pixels[$0+2])}
+            return (colour.filter{$0>0}.count,colour.max() ?? 0)
         }
         for filledHeat in [false,true] {
-            XCTAssertEqual(try draw(filledHeat:filledHeat,throughWall:false),0)
-            XCTAssertGreaterThan(try draw(filledHeat:filledHeat,throughWall:true),20)
+            XCTAssertEqual(try draw(filledHeat:filledHeat,throughWall:false).lit,0)
+            XCTAssertGreaterThan(try draw(filledHeat:filledHeat,throughWall:true).lit,20)
         }
-        XCTAssertEqual(try draw(filledHeat:true,throughWall:true,temperature:20),0)
+        XCTAssertEqual(try draw(filledHeat:true,throughWall:true,temperature:20).lit,0)
+        // Opaque cold blue would peak near 102 over black; the cold map dot is kept faint.
+        let cold=try draw(filledHeat:false,throughWall:true,temperature:19)
+        XCTAssertGreaterThan(cold.lit,20);XCTAssertLessThan(cold.peak,60)
+        XCTAssertEqual(try draw(filledHeat:false,throughWall:true).peak,255,"Warm dots stay opaque")
     }
 }

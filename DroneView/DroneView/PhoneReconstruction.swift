@@ -16,6 +16,7 @@ struct PhoneObservation: Sendable {
 struct ReconstructionResult: Sendable {
     var points: [SIMD4<Float>]
     var heatSurface: [SIMD4<Float>]=[]
+    var heatObserved=false
     var worldFromMap: simd_float4x4?
     var rigPose: simd_float4x4
     var valid: Bool
@@ -112,19 +113,17 @@ actor ReconstructionWorker {
         }
         order=Array(order.dropFirst(oldest)).filter{voxels[$0] != nil};oldest=0
         if let thermal, abs(thermal.stamp-f.stamp)<0.15 {
-            for y in stride(from:0,to:f.height,by:4) { for x in stride(from:0,to:f.width,by:4) {
-                let z=f.depth[y*f.width+x]
-                guard z.isFinite,z>=0.2,z<=6,let ti=alignment.index(x:x,y:y,frame:f),ti<thermal.values.count else { continue }
-                let temperature=thermal.values[ti];guard temperature.isFinite else { continue }
-                let p=pose*SIMD4(Float((Double(x)-f.k[2])/f.k[0])*z,Float((Double(y)-f.k[5])/f.k[4])*z,z,1)
+            let grid=Self.thermalGrid(frame:f,temperatures:thermal.values,alignment:alignment,threshold:heatThreshold)
+            for case let s? in grid.samples {
+                let p=pose*SIMD4(s.x,s.y,s.z,1)
                 let key=SIMD3<Int32>(Int32(floor(p.x/0.04)),Int32(floor(p.y/0.04)),Int32(floor(p.z/0.04)))
                 if voxels[key] == nil {
                     if voxels.count>=60_000 { voxels.removeValue(forKey:order[oldest]);oldest += 1 }
                     order.append(key)
                 }
-                voxels[key]=SIMD4(p.x,p.y,p.z,temperature)
-            }}
-            result.heatSurface=Self.makeHeatSurface(frame:f,temperatures:thermal.values,alignment:alignment,pose:pose,threshold:heatThreshold)
+                voxels[key]=SIMD4(p.x,p.y,p.z,s.w)
+            }
+            result.heatSurface=Self.makeHeatSurface(grid:grid,pose:pose,threshold:heatThreshold);result.heatObserved=true
             if oldest>60_000 { order.removeFirst(oldest);oldest=0 }
         } else { result.status="Aligned · thermal frame stale" }
         result.points=Array(voxels.values);return result
@@ -132,14 +131,40 @@ actor ReconstructionWorker {
     static func isObservedFreeSpace(pointDepth:Float,measuredDepth:Float) -> Bool {
         measuredDepth.isFinite && measuredDepth>=0.2 && measuredDepth<=6 && pointDepth<measuredDepth-0.12
     }
-    static func makeHeatSurface(frame f:SensorFrame,temperatures:[Float],alignment:ThermalAlignment,pose:simd_float4x4,threshold:Float) -> [SIMD4<Float>] {
-        let step=4,w=(f.width+step-1)/step,h=(f.height+step-1)/step
-        var grid=[SIMD4<Float>?](repeating:nil,count:w*h),surface=[SIMD4<Float>]()
+    /// Camera-frame XYZ and °C on the 4-pixel lattice shared by the voxel map and the heat surface.
+    struct ThermalGrid {let width:Int,height:Int;var samples:[SIMD4<Float>?]}
+    static func thermalGrid(frame f:SensorFrame,temperatures:[Float],alignment:ThermalAlignment,threshold:Float) -> ThermalGrid {
+        let step=4,w=(f.width+step-1)/step,h=(f.height+step-1)/step,tw=f.thermalWidth,th=f.thermalHeight
+        var grid=ThermalGrid(width:w,height:h,samples:[SIMD4<Float>?](repeating:nil,count:w*h))
+        var pixel=[Int](repeating:0,count:w*h),nearest=[Float](repeating:.infinity,count:tw*th)
         for y in 0..<h {for x in 0..<w {
             let u=x*step,v=y*step,z=f.depth[v*f.width+u]
             guard z.isFinite,z>=0.2,z<=6,let i=alignment.index(x:u,y:v,frame:f),i<temperatures.count,temperatures[i].isFinite else{continue}
-            grid[y*w+x]=SIMD4(Float((Double(u)-f.k[2])/f.k[0])*z,Float((Double(v)-f.k[5])/f.k[4])*z,z,temperatures[i])
+            grid.samples[y*w+x]=SIMD4(Float((Double(u)-f.k[2])/f.k[0])*z,Float((Double(v)-f.k[5])/f.k[4])*z,z,temperatures[i])
+            pixel[y*w+x]=i
+            if temperatures[i]>=threshold {nearest[i]=min(nearest[i],z)}
         }}
+        // One thermal pixel spans several RGB pixels and its optics blur, so a warm
+        // silhouette bleeds onto the surface behind it; seen from the phone that heat
+        // lands beside the person. Within each 3×3 thermal neighbourhood a hot reading
+        // belongs to the nearest hot surface, so hot samples well behind it are dropped.
+        var front=nearest
+        for ty in 0..<th {for tx in 0..<tw {
+            var z=Float.infinity
+            for yy in max(0,ty-1)...min(th-1,ty+1) {for xx in max(0,tx-1)...min(tw-1,tx+1) {z=min(z,nearest[yy*tw+xx])}}
+            front[ty*tw+tx]=z
+        }}
+        for n in grid.samples.indices {
+            if let s=grid.samples[n],s.w>=threshold,s.z>front[pixel[n]]+0.4 {grid.samples[n]=nil}
+        }
+        return grid
+    }
+    static func makeHeatSurface(frame f:SensorFrame,temperatures:[Float],alignment:ThermalAlignment,pose:simd_float4x4,threshold:Float) -> [SIMD4<Float>] {
+        makeHeatSurface(grid:thermalGrid(frame:f,temperatures:temperatures,alignment:alignment,threshold:threshold),pose:pose,threshold:threshold)
+    }
+    static func makeHeatSurface(grid g:ThermalGrid,pose:simd_float4x4,threshold:Float) -> [SIMD4<Float>] {
+        let w=g.width,h=g.height,grid=g.samples
+        var surface=[SIMD4<Float>]()
         guard w>1,h>1 else{return []}
         for y in 0..<h-1 {for x in 0..<w-1 {
             let a=y*w+x,b=a+1,c=a+w,d=c+1
@@ -238,10 +263,11 @@ extension PhoneObservation {
     var heatSurface:[SIMD4<Float>]=[]
     var heatObservationTime=0.0
     func heatObservationIsFresh(at time:Double) -> Bool {
-        // Live capture ages reach 670 ms at 5 Hz; 500 ms blinked between updates.
-        // ponytail: bounded 800 ms hold; revisit if measured stream timing changes.
+        // Measured from arrival, not capture: frames already arrive ~0.25 s after
+        // capture, so capture-age limits hid valid heat between updates. Results
+        // arrived at most 0.4 s apart live; a stalled stream still clears the heat.
         let age=time-heatObservationTime
-        return age>=0 && age<0.8
+        return age>=0 && age<0.75
     }
     var heatHighlight=UserDefaults.standard.object(forKey:"thermal-heat-highlight") as? Bool ?? true {
         didSet {UserDefaults.standard.set(heatHighlight,forKey:"thermal-heat-highlight")}
@@ -289,6 +315,15 @@ extension PhoneObservation {
     var dropped=0
     var inliers=0
     var thermalState="Nominal"
+    nonisolated static func thermalLabel(_ state:ProcessInfo.ThermalState)->String {
+        switch state {
+        case .nominal: "Nominal"
+        case .fair: "Fair"
+        case .serious: "Serious · throttling"
+        case .critical: "Critical · throttling"
+        @unknown default: "Unknown"
+        }
+    }
     @ObservationIgnored let arSession=ARSession()
     @ObservationIgnored private let worker=ReconstructionWorker()
     @ObservationIgnored private var observations: [PhoneObservation]=[]
@@ -307,7 +342,7 @@ extension PhoneObservation {
         let now=ProcessInfo.processInfo.systemUptime
         if now-cameraStart>=1 {
             cameraFPS=Double(cameraFrames)/(now-cameraStart);cameraFrames=0;cameraStart=now
-            thermalState=String(describing:ProcessInfo.processInfo.thermalState)
+            thermalState=Self.thermalLabel(ProcessInfo.processInfo.thermalState)
         }
         guard processingEnabled,!observationBusy,frame.timestamp-lastObservation>=0.045 else {return}
         observationBusy=true;lastObservation=frame.timestamp
@@ -326,7 +361,7 @@ extension PhoneObservation {
         guard ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) else {status="A LiDAR iPhone or iPad is required";return}
         log.write("scan_start",["app_version":Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "unknown",
                                 "system":ProcessInfo.processInfo.operatingSystemVersionString])
-        arSession.delegate=self;arSession.delegateQueue = .main
+        arSession.delegate=self;arSession.delegateQueue = .main;UIDevice.current.isBatteryMonitoringEnabled=true
         cameraWarning="";renderingError="";running=true;processingEnabled=endpoint != nil
         cameraFrames=0;cameraStart=ProcessInfo.processInfo.systemUptime;lastObservation=0
         status=endpoint == nil ? "Local camera only · connect the Pi for thermal AR" : "Connecting to Pi · show both cameras the same scene"
@@ -388,12 +423,14 @@ extension PhoneObservation {
         } else if age<0.3,!cameraWarning.isEmpty {cameraWarning="";log.write("camera_resumed")}
     }
     func cameraError(_ message:String) {log.write("ar_error",["message":message])}
-    func apply(_ result:ReconstructionResult) {
+    func apply(_ result:ReconstructionResult,at time:Double=Date().timeIntervalSince1970) {
         alignmentEstablished=result.worldFromMap != nil
         // A capture-time result can arrive after the live phone tracking has degraded.
         aligned=result.valid && phoneTrackingNormal && cameraWarning.isEmpty
         worldFromMap=result.worldFromMap ?? matrix_identity_float4x4
-        points=result.points;heatSurface=result.heatSurface;inliers=result.inliers
+        // A frame without a fresh thermal sample keeps the last heat until it expires.
+        if result.heatObserved {heatSurface=result.heatSurface;heatObservationTime=time}
+        points=result.points;inliers=result.inliers
         status=phoneTrackingNormal ? result.status : "Phone tracking paused · \(phoneTrackingReason)"
         alignmentDiagnostics=result.alignmentDiagnostics
     }
@@ -458,15 +495,18 @@ extension PhoneObservation {
                 }
                 guard !Task.isCancelled,generation==id else {return}
                 guard revision==alignmentRevision else {continue}
-                apply(result);heatObservationTime=frame.stamp-offset
+                apply(result)
                 if alignmentEstablished {rigPreview=nil}
                 else if frame.stamp-lastPreview>=0.5 {rigPreview=UIImage(data:frame.jpeg);lastPreview=frame.stamp}
                 let depthPercent=100*Double(frame.depth.lazy.filter{$0.isFinite && $0>=0.2 && $0<=6}.count)/Double(frame.depth.count)
                 if !aligned,depthPercent<5 {status=String(format:"Rig depth mostly missing · %.1f%% usable",depthPercent)}
                 count += 1;let elapsed=Date().timeIntervalSince(lastTime)
                 if elapsed>=1 {fps=Double(count)/elapsed;count=0;lastTime=Date()}
-                thermalState=String(describing:ProcessInfo.processInfo.thermalState)
+                thermalState=Self.thermalLabel(ProcessInfo.processInfo.thermalState)
+                let battery=UIDevice.current.batteryLevel
                 let body:[String:Any]=["session":frame.session,"timestamp":frame.stamp,"valid":aligned,
+                                       "phone_thermal_state":thermalState,"phone_battery_percent":battery<0 ? -1:Int((battery*100).rounded()),
+                                       "phone_charging":[.charging,.full].contains(UIDevice.current.batteryState),
                                        "alignment_saved":alignmentEstablished,"phone_tracking":phoneTrackingReason,"rig_tracking":result.rigTrackingState,"rig_keyframes":result.keyframes,
                                        "heat_triangles":heatSurface.count/3,"heat_threshold_c":heatThreshold,"show_point_cloud":showPointCloud,"show_through_walls":showHeatThroughWalls,"thermal_delta_ms":result.thermalDeltaMS,"temperature_range":[lowerTemperature,upperTemperature],"rig_depth_valid_percent":depthPercent,"alignment":result.alignmentDiagnostics,"camera_fps":cameraFPS,"camera_age_ms":cameraAgeMS,"clock_rtt_ms":bestRTT*1000,"phone_delta_ms":phone.map{abs($0.unixTime+offset-frame.stamp)*1000} ?? -1,
                                        "fps":fps,"render_fps":renderFPS,"latency_ms":latencyMS,"dropped":dropped,"inliers":inliers,"points":points.count,"status":status,
