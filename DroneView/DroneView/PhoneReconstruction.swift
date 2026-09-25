@@ -26,6 +26,8 @@ struct ReconstructionResult: Sendable {
     var keyframes = 0
     var alignmentDiagnostics: [String:Int] = [:]
     var thermalDeltaMS = -1.0
+    /// Angle between the rig accelerometer's down, carried through the accepted alignment, and ARKit gravity.
+    var gravityErrorDeg = -1.0
 }
 
 actor ReconstructionWorker {
@@ -41,8 +43,15 @@ actor ReconstructionWorker {
     private var order: [SIMD3<Int32>]=[]
     private var oldest=0
     private var thermalHistory: [(stamp:Double,values:[Float])]=[]
+    private var candidateGravityError: Float?
     func reset() { bridge.reset();session="";sequence=0;thermalCalibration="";trackingLostSince=nil;invalidate();voxels.removeAll();order.removeAll();oldest=0;thermalHistory=[] }
-    func invalidate() { worldFromMap=nil;alignmentSamples=[];confirmations=0;attemptTime=0 }
+    func invalidate() { worldFromMap=nil;alignmentSamples=[];confirmations=0;attemptTime=0;candidateGravityError=nil }
+    /// A cross-camera fit whose tilt disagrees this much with both accelerometers is a mismatch.
+    static let gravityGateDegrees:Float=10
+    static func gravityErrorDegrees(worldFromMap:simd_float4x4,rigPose:simd_float4x4,rigGravity:SIMD3<Float>) -> Float {
+        let down=simd_normalize(simd_make_float3(worldFromMap*rigPose*SIMD4(rigGravity,0)))
+        return acos(min(1,max(-1,-down.y)))*180 / .pi  // ARKit world gravity is -Y.
+    }
     func process(_ f: SensorFrame, phone: PhoneObservation?, alignment: ThermalAlignment, heatThreshold:Float=24) -> ReconstructionResult {
         let signature=f.k.description+"\(f.width)x\(f.height)"
         if session != f.session || calibration != signature { reset();session=f.session;calibration=signature }
@@ -67,7 +76,9 @@ actor ReconstructionWorker {
             if trackingLostSince == nil {trackingLostSince=f.stamp}
             if worldFromMap == nil,let since=trackingLostSince,f.stamp-since>=1 {
                 reset();result.status="Restarting rig tracking · hold a textured view"
-            } else {result.status=worldFromMap == nil ? "Rig tracking paused · hold a textured view" : "Rig tracking lost · alignment saved · return to a previously seen area"}
+            } else if worldFromMap == nil {result.status="Rig tracking paused · hold a textured view"}
+            else if output["status"] as? String == "coasting" {result.status="Rig camera view lost · gyro holding orientation · placement paused"}
+            else {result.status="Rig tracking lost · alignment saved · return to a previously seen area"}
             return result
         }
         trackingLostSince=nil
@@ -77,11 +88,16 @@ actor ReconstructionWorker {
             attemptTime=f.stamp
             if let data=bridge.alignGray(phone.gray,width:phone.w,height:phone.h,depth:phone.depth,intrinsics:phone.k.map(NSNumber.init)),let phoneToRig=poseMatrix(data) {
                 let transform=phone.pose * opticalToAR * phoneToRig.inverse * pose.inverse
-                confirmAlignment(transform,at:f.stamp)
-            } else { confirmAlignment(nil,at:f.stamp) }
+                candidateGravityError=f.gravity.map {Self.gravityErrorDegrees(worldFromMap:transform,rigPose:pose,rigGravity:$0)}
+                confirmAlignment((candidateGravityError ?? 0)>Self.gravityGateDegrees ? nil:transform,at:f.stamp)
+            } else { candidateGravityError=nil;confirmAlignment(nil,at:f.stamp) }
         }
         for (key,value) in bridge.alignmentDiagnostics {
             if let key=key as? String,let value=value as? NSNumber {result.alignmentDiagnostics[key]=value.intValue}
+        }
+        if let error=candidateGravityError {
+            result.alignmentDiagnostics["gravity_error_deg"]=Int(error.rounded())
+            if error>Self.gravityGateDegrees {result.alignmentDiagnostics["rejection"]=11;result.alignmentDiagnostics["accepted"]=0}
         }
         result.alignmentDiagnostics["confirmations"]=confirmations
         guard let transform=currentAlignment() else {
@@ -93,6 +109,7 @@ actor ReconstructionWorker {
             case 2: result.status="Alignment · rig depth missing at shared features; aim 1–2 m away"
             case 3: result.status="Alignment · include more of the shared scene"
             case 4,5,10: result.status="Alignment · show both cameras the same textured area"
+            case 11: result.status="Alignment · match disagrees with gravity; hold both cameras on the same scene"
             default: result.status="Alignment · hold both cameras steady on the same scene"
             }
             if confirmations>0 {result.status="Aligning · \(confirmations)/3 consistent views · keep the same scene visible"}
@@ -100,6 +117,7 @@ actor ReconstructionWorker {
         }
         result.worldFromMap=transform;result.rigPose=transform*pose*opticalToAR;result.valid=true
         result.status="Aligned · approximate thermal mapping"
+        if let g=f.gravity {result.gravityErrorDeg=Double(Self.gravityErrorDegrees(worldFromMap:transform,rigPose:pose,rigGravity:g))}
         // Hot observations are live, not permanent landmarks.
         let cameraFromMap=pose.inverse
         voxels=voxels.filter {_,v in
@@ -507,6 +525,7 @@ extension PhoneObservation {
                 let body:[String:Any]=["session":frame.session,"timestamp":frame.stamp,"valid":aligned,
                                        "phone_thermal_state":thermalState,"phone_battery_percent":battery<0 ? -1:Int((battery*100).rounded()),
                                        "phone_charging":[.charging,.full].contains(UIDevice.current.batteryState),
+                                       "gravity_error_deg":result.gravityErrorDeg,
                                        "alignment_saved":alignmentEstablished,"phone_tracking":phoneTrackingReason,"rig_tracking":result.rigTrackingState,"rig_keyframes":result.keyframes,
                                        "heat_triangles":heatSurface.count/3,"heat_threshold_c":heatThreshold,"show_point_cloud":showPointCloud,"show_through_walls":showHeatThroughWalls,"thermal_delta_ms":result.thermalDeltaMS,"temperature_range":[lowerTemperature,upperTemperature],"rig_depth_valid_percent":depthPercent,"alignment":result.alignmentDiagnostics,"camera_fps":cameraFPS,"camera_age_ms":cameraAgeMS,"clock_rtt_ms":bestRTT*1000,"phone_delta_ms":phone.map{abs($0.unixTime+offset-frame.stamp)*1000} ?? -1,
                                        "fps":fps,"render_fps":renderFPS,"latency_ms":latencyMS,"dropped":dropped,"inliers":inliers,"points":points.count,"status":status,

@@ -50,6 +50,8 @@ struct TrackingState: Decodable, Sendable {
         let state: String?
         let calibrated: Bool?
         let fusionReady: Bool?
+        /// Accelerometer angle from the camera's level (+Y down) axis; nil until trusted.
+        let tiltDeg: Double?
     }
 
     var isDemo: Bool { mode == "demo" }

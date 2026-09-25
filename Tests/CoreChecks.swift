@@ -27,9 +27,9 @@ private final class StubProtocol: URLProtocol, @unchecked Sendable {
         for invalid in ["", "http://", "ws://camera:9090", "file:///tmp", "http://a b", "http://user:pass@camera", "http://camera/api/state", "http://camera?x=1", "http://camera#x", "http://camera:0", "http://camera:65536"] {
             precondition(TrackingAPI.address(invalid) == nil, invalid)
         }
-        let sample = Data(#"{"status":"tracking","reason":"RGB-D tracking","mode":"demo","pose":[[1,0,0,1],[0,1,0,2],[0,0,1,3],[0,0,0,1]],"trajectory":[[1,2,3]],"frame":1,"map_version":2,"points":1,"age":0.1,"metrics":{"inliers":10,"matches":12,"gyro_prior":true,"processing_ms":12.5},"images":{"rgb":0.1},"gyro":{"state":"ready","calibrated":true,"fusion_ready":true},"recording":false,"recorded_frames":0}"#.utf8)
+        let sample = Data(#"{"status":"tracking","reason":"RGB-D tracking","mode":"demo","pose":[[1,0,0,1],[0,1,0,2],[0,0,1,3],[0,0,0,1]],"trajectory":[[1,2,3]],"frame":1,"map_version":2,"points":1,"age":0.1,"metrics":{"inliers":10,"matches":12,"gyro_prior":true,"processing_ms":12.5},"images":{"rgb":0.1},"gyro":{"state":"ready","calibrated":true,"fusion_ready":true,"tilt_deg":1.5},"recording":false,"recorded_frames":0}"#.utf8)
         let state = try TrackingState.decode(sample)
-        precondition(state.position == SIMD3(1,2,3) && state.gyroLabel == "Assisting" && state.isDemo)
+        precondition(state.position == SIMD3(1,2,3) && state.gyroLabel == "Assisting" && state.isDemo && state.gyro.tiltDeg == 1.5)
         precondition(state.metrics.processingMs == 12.5 && state.mapVersion == 2)
         var object = try JSONSerialization.jsonObject(with: sample) as! [String: Any]
         object["pose"] = [[1,2]]

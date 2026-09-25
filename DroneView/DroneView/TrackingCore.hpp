@@ -142,9 +142,19 @@ inline Fit fit(const Frame &ref,const Frame &cur,const cv::Matx33d *prior=nullpt
 }
 class Tracker {
 public:
-    Frame active,origin,recovery,current;M pose=M::eye();double lastGood=0,last=0;bool initialized=false,activeOrigin=true;int status=0;
+    // status: 0 initializing, 1 tracking, 2 lost, 3 coasting (vision rejected, gyro orientation).
+    Frame active,origin,recovery,current;M pose=M::eye(),held=M::eye();double lastGood=0,last=0;bool initialized=false,activeOrigin=true,coasted=false;int status=0;
     std::vector<Frame> keyframes;
     size_t recoveryCursor=0;
+    // Only accepted visual poses anchor later frames; the held pose is what is reported.
+    M reported() const {return coasted&&status!=1?held:pose;}
+    void lose(const cv::Matx33d *increment) {
+        status=2;if(!increment)return;
+        // The increment spans the last accepted visual pose; position cannot be sensed.
+        held=pose;cv::Matx33d r=rotation(pose)*(*increment);
+        for(int y=0;y<3;y++)for(int x=0;x<3;x++)held(y,x)=r(y,x);
+        status=3;coasted=true;
+    }
     Fit update(Frame f,const cv::Matx33d *increment=nullptr) {
         Fit result;
         if(!std::isfinite(f.stamp)||f.stamp<=last)return result;last=f.stamp;current=f;
@@ -159,16 +169,24 @@ public:
         }
         if(!result.valid&&!activeOrigin){result=fit(origin,f);if(result.valid){base=origin.pose;recovered=true;}}
         // ponytail: 24 recent keyframes, four checks per lost frame; place indexing if room-scale history is needed.
+        // With a gyro orientation, try the keyframes that faced it first instead of cycling.
+        std::vector<size_t> order;
+        if(increment&&!keyframes.empty()) {
+            cv::Matx33d predicted=rotation(pose)*(*increment);
+            for(size_t i=0;i<keyframes.size();i++)order.push_back(i);
+            std::stable_sort(order.begin(),order.end(),[&](size_t a,size_t b){
+                return angle(rotation(keyframes[a].pose).t()*predicted)<angle(rotation(keyframes[b].pose).t()*predicted);});
+        }
         for(size_t i=0;!result.valid&&i<std::min(size_t(4),keyframes.size());i++) {
-            auto &reference=keyframes[keyframes.size()-1-(recoveryCursor++%keyframes.size())];
+            auto &reference=order.empty()?keyframes[keyframes.size()-1-(recoveryCursor++%keyframes.size())]:keyframes[order[i]];
             result=fit(reference,f,nullptr,true);
             if(result.inliers<50)result.valid=false;
             if(result.valid){base=reference.pose;recovered=true;}
         }
-        if(!result.valid){status=2;return result;}
+        if(!result.valid){lose(increment);return result;}
         M next=base*result.pose;double dt=f.stamp-lastGood;
-        if(dt<=0||cv::norm(translation(next)-translation(pose))/dt>5||angle(rotation(pose).t()*rotation(next))/dt>3){result.valid=false;status=2;return result;}
-        pose=next;f.pose=pose;current.pose=pose;lastGood=f.stamp;status=1;
+        if(dt<=0||cv::norm(translation(next)-translation(pose))/dt>5||angle(rotation(pose).t()*rotation(next))/dt>3){result.valid=false;lose(increment);return result;}
+        pose=next;f.pose=pose;current.pose=pose;lastGood=f.stamp;status=1;coasted=false;
         if(recovered||cv::norm(translation(result.pose))>=.2||angle(rotation(result.pose))>=CV_PI/12){
             if(!activeOrigin){keyframes.push_back(active);if(keyframes.size()>24)keyframes.erase(keyframes.begin());}
             active=f;activeOrigin=false;recoveryCursor=0;

@@ -192,6 +192,7 @@ private struct TrackingView: View {
                     LabeledContent("RGB/depth timing", value: measurement(model.state?.metrics.syncMs, unit: "ms"))
                     LabeledContent("Valid depth", value: measurement(model.state?.metrics.validDepthPercent, unit: "%"))
                     LabeledContent("Gyroscope", value: model.isConnected(at: context.date) ? model.state?.gyroLabel ?? "Waiting" : "Unavailable")
+                    LabeledContent("Tilt from level", value: measurement(model.state?.gyro.tiltDeg, unit: "°"))
                     LabeledContent("Mapped points", value: (model.state?.points ?? 0).formatted())
                 }
                 Section("Map & recording") {

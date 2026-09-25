@@ -39,7 +39,7 @@ phone. The module must run `bash scripts/run.sh --host 0.0.0.0` on the same netw
 - Cameras switches among RGB, registered depth (0–6 m colour scale), and
   independent thermal imagery. Old frames are dimmed and marked stale.
 - Tracking shows optical-frame position, inliers, frame processing, image timing,
-  valid depth and gyro status. It also starts/stops module recordings (300-frame
+  valid depth, gyro status and the accelerometer's tilt from level. It also starts/stops module recordings (300-frame
   limit), exports a PLY map to Files, and requests a new map after confirmation.
 
 A recording belongs to the module and continues if the app disconnects. A new
@@ -94,6 +94,10 @@ Start the Pi with `--processing phone`, connect to its port 8080, then select
 both cameras at the same well-lit textured area with geometry at different depths.
 Three consistent RGB/depth fits within a four-second window establish the shared
 frame; missed fits do not erase good candidates. The accepted poses are averaged.
+When the Pi sends the rig accelerometer's gravity (`gyro.gravity` in DVS1), a fit
+whose implied rig "down" is more than 10° from ARKit's gravity is rejected as a
+mismatch. The accepted alignment's disagreement is posted as `gravity_error_deg`;
+live with the rig still it was 0.4–1.3° (median 1.0°, 73 samples).
 SIFT matches the two cameras during alignment; continuous rig tracking still uses
 ORB. The 30-inlier and geometric/depth checks remain required. A rig-camera inset
 and shared-feature/progress counts guide startup. Both cameras need an overlapping
@@ -151,8 +155,15 @@ in the same maps. Temporary phone tracking loss, camera stalls and AR interrupti
 preserve alignment while hiding the overlay. ARKit attempts relocalization after
 an interruption. The UI distinguishes saved alignment from a usable live pose;
 a late good result cannot override the phone's current limited-tracking state.
+When the Pi's gyro is fusion-ready and spans the gap from the last accepted rig
+pose (at most one second), a visually rejected rig frame is `coasting`: its
+orientation follows the gyro with position held, and thermal placement stays
+paused. Afterwards the last coasted pose is held; only accepted visual poses anchor
+later frames. The status reads "Rig camera view lost · gyro holding orientation".
 Rig recovery searches up to four older keyframes per lost frame from a bounded
-24-keyframe history, requiring at least 50 inliers and consistent depth. This is
+24-keyframe history, requiring at least 50 inliers and consistent depth. While the
+gyro orientation is available, the keyframes whose orientation is closest to it
+are tried first instead of cycling through the history. This is
 local recovery, not global SLAM or persistent room mapping. Return to a previously
 seen area if tracking is lost. New coordinate maps, a restarted scan, and **Realign**
 require another shared view. **Realign** also restarts rig tracking; before initial alignment, a

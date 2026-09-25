@@ -51,6 +51,12 @@ struct SensorFrame: @unchecked Sendable {
         depthData=try numeric(data.subdata(in:offset..<offset+nd),count:w*h*4);offset += nd
         depth=Self.floats(depthData);thermal=Self.floats(try numeric(data.subdata(in:offset..<data.count),count:tw*th*4))
     }
+    /// Rig accelerometer "down" in the rig's optical frame at capture, when the Pi trusts it.
+    var gravity: SIMD3<Float>? {
+        guard let g=(metadata["gyro"] as? [String:Any])?["gravity"] as? [Double],g.count==3,g.allSatisfy(\.isFinite) else {return nil}
+        let v=SIMD3<Float>(Float(g[0]),Float(g[1]),Float(g[2])),n=simd_length(v)
+        return n>0.5 && n<1.5 ? v/n : nil
+    }
     static func temperatureRange(_ values:[Float]) -> (Double,Double)? {
         let sorted=values.filter(\.isFinite).sorted()
         guard !sorted.isEmpty else{return nil}

@@ -232,6 +232,40 @@ final class SensorFrameTests:XCTestCase {
         wire.append([Float](repeating:22,count:48).withUnsafeBytes{Data($0)})
         return try SensorFrame(wire)
     }
+    func testRigCoastsOnGyroThroughAVisualGapThenHoldsAndRecovers() throws {
+        let textured=try trackingFrame(sequence:1),bridge=TrackingBridge()
+        let blank=testImage(width:320,height:240).jpegData(compressionQuality:0.9)!
+        func metadata(_ time:Double,gyroUntil end:Double?=nil)->[String:Any] {
+            var m=textured.metadata;m["timestamp"]=time
+            // 1 rad/s about the camera Z axis, sampled every 0.1 s from t = 1.
+            if let end {m["gyro"]=["ready":true,"bias":[0.0,0,0],"rotation":[[1.0,0,0],[0,1,0],[0,0,1]],
+                                   "samples":stride(from:1.0,through:end+0.001,by:0.1).map{[$0,0,0,1]}]}
+            return m
+        }
+        func pose(_ output:[AnyHashable:Any])->simd_float4x4 {poseMatrix(output["pose"] as! Data)!}
+        _=bridge.processJPEG(textured.jpeg,depth:textured.depthData,metadata:metadata(1))
+        let tracked=bridge.processJPEG(textured.jpeg,depth:textured.depthData,metadata:metadata(1.1))
+        XCTAssertEqual(tracked["status"] as? String,"tracking")
+        let coasting=bridge.processJPEG(blank,depth:textured.depthData,metadata:metadata(1.3,gyroUntil:1.4))
+        XCTAssertEqual(coasting["status"] as? String,"coasting")
+        // Orientation = last visual orientation x gyro turn (0.2 rad); position held.
+        let p=pose(tracked),turn=simd_float3x3(simd_quatf(angle:0.2,axis:SIMD3(0,0,1)))
+        let r=simd_float3x3(columns:(simd_make_float3(p.columns.0),simd_make_float3(p.columns.1),simd_make_float3(p.columns.2)))*turn
+        let expected=simd_float4x4(columns:(SIMD4(r.columns.0,0),SIMD4(r.columns.1,0),SIMD4(r.columns.2,0),p.columns.3))
+        for c in 0..<4 {for row in 0..<4 {XCTAssertEqual(pose(coasting)[c][row],expected[c][row],accuracy:1e-5)}}
+        let held=bridge.processJPEG(blank,depth:textured.depthData,metadata:metadata(2.5,gyroUntil:2.6))
+        XCTAssertEqual(held["status"] as? String,"lost","The gyro gap from the last visual pose exceeds 1 s")
+        XCTAssertEqual(pose(held),pose(coasting))
+        let recovered=bridge.processJPEG(textured.jpeg,depth:textured.depthData,metadata:metadata(2.7))
+        XCTAssertEqual(recovered["status"] as? String,"tracking")
+        XCTAssertEqual(simd_quatf(pose(recovered)).angle,simd_quatf(pose(tracked)).angle,accuracy:0.01,"Vision, not the held pose, anchors recovery")
+    }
+    func testGravityErrorComparesRigDownWithARKitGravity() {
+        let level=ReconstructionWorker.gravityErrorDegrees(worldFromMap:matrix_identity_float4x4,rigPose:simd_float4x4(diagonal:SIMD4(1,-1,-1,1)),rigGravity:SIMD3(0,1,0))
+        XCTAssertEqual(level,0,accuracy:1e-4,"Optical +Y down maps to ARKit -Y")
+        let tilted=simd_float4x4(simd_quatf(angle:.pi/18,axis:SIMD3(1,0,0)))
+        XCTAssertEqual(ReconstructionWorker.gravityErrorDegrees(worldFromMap:tilted,rigPose:simd_float4x4(diagonal:SIMD4(1,-1,-1,1)),rigGravity:SIMD3(0,1,0)),10,accuracy:1e-3)
+    }
     func testPhoneTrackingDipKeepsAlignmentAndResumesWithoutSharedView() async throws {
         let worker=ReconstructionWorker()
         _=await worker.process(try trackingFrame(sequence:1),phone:nil,alignment:ThermalAlignment())
