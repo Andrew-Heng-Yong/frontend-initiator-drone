@@ -72,7 +72,8 @@ private final class StubProtocol: URLProtocol, @unchecked Sendable {
             let api = TrackingAPI(origin: url)
             let live = try await api.state()
             let cloud = try await api.cloud()
-            precondition(cloud.count > 0)
+            // Phone mode streams sensors; its map lives on the phone.
+            precondition(live.processing == "phone" || cloud.count > 0)
             for feed in CameraFeed.allCases {
                 let jpeg = try await api.data("api/image/" + feed.rawValue)
                 precondition(jpeg.starts(with: [0xff, 0xd8]), "JPEG signature")

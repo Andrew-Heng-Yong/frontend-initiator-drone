@@ -23,6 +23,7 @@ struct TrackingState: Decodable, Sendable {
     let status: String
     let reason: String
     let mode: String
+    let processing: String?
     let pose: [[Float]]
     let trajectory: [[Float]]
     let frame: Int
@@ -45,6 +46,7 @@ struct TrackingState: Decodable, Sendable {
         let validDepthPercent: Double?
     }
     struct Gyro: Decodable, Sendable {
+        let transport: String?
         let state: String?
         let calibrated: Bool?
         let fusionReady: Bool?
